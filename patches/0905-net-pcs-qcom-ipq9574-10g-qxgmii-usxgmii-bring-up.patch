@@ -1,0 +1,78 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: pcs: qcom-ipq9574: give 10G-QXGMII the USXGMII UNIPHY bring-up
+
+Patches 0356-0361 (OpenWrt main, from the Askey SBE1V1K work) bring the
+UNIPHY up the way the vendor SSDK does, but only for USXGMII: MISC2 mode
+0x7, no loss of signal from an SFP, and the whole PLL reset register
+written instead of one bit. SSDK uses the same sequence for UQXGMII
+(__adpt_hppe_uniphy_usxgmii_mode_set(), U-Boot ppe_uniphy_uqxgmii_mode_set()),
+and on 10G-QXGMII those registers were left at their power-on values.
+
+On some Xiaomi BE7000 boards the QCA8084 never locks to the SoC's
+10GBASE-R stream and no port receives a frame, while other boards work.
+Apply the three steps to 10G-QXGMII as well. The port clock hold-off from
+0361 stays USXGMII only: with four channels the first port opened is not
+necessarily MII 0, whose clocks may not be enabled yet.
+
+Also log when the 10GBASE-R link is up before USXG_EN, so a board that
+works can be told apart from one that does not in the kernel log.
+---
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+index 6dfd74f..ada15aa 100644
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -305,6 +305,17 @@ static void ipq_pcs_get_state_10gbaser(struct ipq_pcs *qpcs,
+ 	state->pause |= MLO_PAUSE_TXRX_MASK;
+ }
+ 
++/* USXGMII and 10G-QXGMII share the vendor SDK UNIPHY bring-up (SSDK
++ * __adpt_hppe_uniphy_usxgmii_mode_set(), U-Boot ppe_uniphy_uqxgmii_mode_set()):
++ * MISC2, no SFP loss of signal, full PLL reset. QXGMII was left at power-on
++ * values here, which worked only where something else had set them.
++ */
++static bool ipq_pcs_usxg_family(phy_interface_t interface)
++{
++	return interface == PHY_INTERFACE_MODE_USXGMII ||
++	       interface == PHY_INTERFACE_MODE_10G_QXGMII;
++}
++
+ /* Re-enable the port clocks held off across a USXGMII reconfiguration */
+ static int ipq_pcs_restore_port_clks(struct ipq_pcs *qpcs,
+ 				     phy_interface_t interface)
+@@ -387,7 +398,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+ 			goto err_clk;
+ 	}
+ 
+-	if (interface == PHY_INTERFACE_MODE_USXGMII)
++	if (ipq_pcs_usxg_family(interface))
+ 		misc2 = PCS_MISC2_MODE_USXGMII;
+ 
+ 	if (misc2) {
+@@ -399,7 +410,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+ 	}
+ 
+ 	/* Link detection is in-band; there is no SFP LOS input here */
+-	if (interface == PHY_INTERFACE_MODE_USXGMII) {
++	if (ipq_pcs_usxg_family(interface)) {
+ 		ret = regmap_update_bits(qpcs->regmap, PCS_LINK_DETECT,
+ 					 PCS_DETECT_LOS_FROM_SFP, 0);
+ 		if (ret)
+@@ -419,7 +430,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+ 	}
+ 
+ 	/* PCS PLL reset */
+-	if (interface == PHY_INTERFACE_MODE_USXGMII) {
++	if (ipq_pcs_usxg_family(interface)) {
+ 		/* Program the whole register: the analog enables must not
+ 		 * be left at their power-on state.
+ 		 */
+@@ -558,6 +569,9 @@ static int ipq_pcs_config_usxgmii(struct ipq_pcs *qpcs,
+ 		if (ret)
+ 			dev_warn(qpcs->dev,
+ 				 "10GBASE-R link not up before USXG_EN\n");
++		else
++			dev_info(qpcs->dev, "%s: 10GBASE-R link up before USXG_EN\n",
++				 phy_modes(interface));
+ 
+ 		ret = regmap_set_bits(qpcs->regmap, XPCS_DIG_CTRL, XPCS_USXG_EN);
+ 		if (ret)
