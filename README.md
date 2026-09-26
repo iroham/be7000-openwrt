@@ -4,7 +4,7 @@
 
 За основу взят порт kravasuper (ветка xiaomi_be7000, коммит 790d036a). К нему добавлены три исправления в драйвер Ethernet, без которых на моей плате система не доходила до сети, и набор служб, которые делают жизнь в двух слотах с заводским загрузчиком предсказуемой.
 
-Текущая версия **1.2.7**. Образы лежат в [Releases](../../releases), суммы в sha256sums.txt. Пошаговая инструкция для тех, кто ставит впервые, в [docs/instruction.txt](docs/instruction.txt).
+Текущая версия **1.2.7**. Образы лежат в [Releases](../../releases), суммы в sha256sums.txt. Инструкция в [docs/instruction](docs/instruction): [установка со стока](docs/instruction/1-install.txt), [обновление](docs/instruction/2-update.txt), [откат и проблемы](docs/instruction/3-rollback-and-problems.txt), [возможности](docs/instruction/4-features.txt). В архиве релиза те же файлы.
 
 ## Содержание
 
