@@ -1,0 +1,195 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: pcs: qcom-ipq9574: set the XPCS up again once 10GBASE-R locks
+
+Log of a failing Xiaomi BE7000 with 0905 (fufliks862, 4PDA): at port open
+the SoC PCS sees no 10GBASE-R lock from the QCA8084 ("not locked (0xc)"),
+four seconds later the QCA8084 locks to the SoC and sets its XPCS up again
+(patch 0903), links come up at 2.5G and 100M, and the MAC still receives
+nothing on any port. The SoC side did USXG_EN, the QXGMII mode and the
+XPCS soft reset while nothing locked came in, the mirror image of what
+0903 fixes on the PHY side.
+
+Remember that the 10GBASE-R link was not up when the XPCS was set up, and
+on the first link up wait up to a second for it and redo the XPCS part:
+USXG_EN, QXGMII mode, AM interval, soft reset, then the per-channel setup,
+and replay the speed of channels that were already up. Boards where the
+link is up at port open do not change.
+---
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+index ada15aa..a577ae8 100644
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -6,6 +6,7 @@
+ #include <linux/clk.h>
+ #include <linux/clk-provider.h>
+ #include <linux/device.h>
++#include <linux/mutex.h>
+ #include <linux/of.h>
+ #include <linux/of_platform.h>
+ #include <linux/pcs/pcs-qcom-ipq9574.h>
+@@ -149,6 +150,9 @@ struct ipq_pcs_mii {
+ 	struct clk *rx_clk;
+ 	/* TX clock from NSSCC to PCS MII */
+ 	struct clk *tx_clk;
++
++	/* Speed of the last link up, 0 if none; replayed after an XPCS redo */
++	int speed;
+ };
+ 
+ /* PCS private data */
+@@ -167,6 +171,12 @@ struct ipq_pcs {
+ 	struct reset_control *xpcs_rstc;
+ 	struct reset_control *sys_rstc;
+ 	struct reset_control *soft_rstc;
++
++	/* The XPCS was set up before the 10GBASE-R stream from the PHY
++	 * locked; set it up again once it has (see ipq_pcs_xpcs_redo()).
++	 */
++	bool xpcs_redo;
++	struct mutex redo_lock;
+ };
+ 
+ #define phylink_pcs_to_qpcs_mii(_pcs)	\
+@@ -566,9 +576,10 @@ static int ipq_pcs_config_usxgmii(struct ipq_pcs *qpcs,
+ 		ret = regmap_read_poll_timeout(qpcs->regmap, XPCS_KR_STS,
+ 					       val, val & XPCS_KR_LINK_STS,
+ 					       1000, 100000);
++		qpcs->xpcs_redo = !!ret;
+ 		if (ret)
+ 			dev_warn(qpcs->dev,
+-				 "10GBASE-R link not up before USXG_EN\n");
++				 "10GBASE-R link not up before USXG_EN, will set the XPCS up again on first link up\n");
+ 		else
+ 			dev_info(qpcs->dev, "%s: 10GBASE-R link up before USXG_EN\n",
+ 				 phy_modes(interface));
+@@ -893,6 +904,110 @@ static void ipq_pcs_an_restart(struct phylink_pcs *pcs)
+ 	/* Currently not used */
+ }
+ 
++/* Program the XPCS part of the USXGMII/QXGMII setup, as done in
++ * ipq_pcs_config_usxgmii() once the mode is set.
++ */
++static int ipq_pcs_xpcs_setup(struct ipq_pcs *qpcs, phy_interface_t interface)
++{
++	unsigned int val;
++	int ret;
++
++	ret = regmap_set_bits(qpcs->regmap, XPCS_DIG_CTRL, XPCS_USXG_EN);
++	if (ret)
++		return ret;
++
++	if (interface != PHY_INTERFACE_MODE_10G_QXGMII)
++		return 0;
++
++	ret = regmap_update_bits(qpcs->regmap, XPCS_KR_CTRL,
++				 XPCS_USXG_MODE_MASK, XPCS_10G_QXGMII_MODE);
++	if (ret)
++		return ret;
++
++	ret = regmap_update_bits(qpcs->regmap, XPCS_DIG_STS,
++				 XPCS_DIG_STS_AM_COUNT, 0x6018);
++	if (ret)
++		return ret;
++
++	ret = regmap_set_bits(qpcs->regmap, XPCS_DIG_CTRL, XPCS_SOFT_RESET);
++	if (ret)
++		return ret;
++
++	return regmap_read_poll_timeout(qpcs->regmap, XPCS_DIG_CTRL, val,
++					!(val & XPCS_SOFT_RESET),
++					1000, 100000);
++}
++
++/* Set the XPCS up again once 10GBASE-R from the PHY has locked.
++ *
++ * ipq_pcs_config_usxgmii() runs when the first port is opened. On some
++ * Xiaomi BE7000 boards the QCA8084 only starts sending a 10GBASE-R stream
++ * the SoC can lock to after its own XPCS is set up again on first link up
++ * (patch 0903), seconds later. USXG_EN, the QXGMII mode and the XPCS soft
++ * reset done before that lock leave the PHY to MAC direction dead: every
++ * port links, the MAC receives nothing. Called on link up, before the
++ * per-channel speed is programmed.
++ */
++static void ipq_pcs_xpcs_redo(struct ipq_pcs *qpcs, int index,
++			      phy_interface_t interface)
++{
++	unsigned int val;
++	int ret, i;
++
++	mutex_lock(&qpcs->redo_lock);
++	if (!qpcs->xpcs_redo)
++		goto out;
++
++	ret = regmap_read_poll_timeout(qpcs->regmap, XPCS_KR_STS, val,
++				       val & XPCS_KR_LINK_STS,
++				       10000, 1000000);
++	if (ret) {
++		dev_warn(qpcs->dev,
++			 "%s: 10GBASE-R from PHY still not locked (0x%x), nothing will be received yet\n",
++			 phy_modes(interface), val);
++		goto out;
++	}
++
++	ret = ipq_pcs_xpcs_setup(qpcs, interface);
++	if (ret) {
++		dev_err(qpcs->dev, "XPCS setup again failed: %d\n", ret);
++		goto out;
++	}
++
++	/* The soft reset cleared the per-channel setup */
++	for (i = 0; i < PCS_MAX_MII_NRS; i++) {
++		struct ipq_pcs_mii *mii = qpcs->qpcs_mii[i];
++		unsigned int reg;
++
++		if (!mii)
++			continue;
++
++		if (interface == PHY_INTERFACE_MODE_10G_QXGMII) {
++			reg = (i == 0) ? XPCS_XAUI_MODE_CTRL : XPCS_MII1_XAUI_MODE_CTRL(i);
++			regmap_set_bits(qpcs->regmap, reg, XPCS_TX_IPG_CHECK_DIS);
++		}
++
++		reg = (i == 0) ? XPCS_MII_AN_CTRL : XPCS_MII1_AN_CTRL(i);
++		regmap_set_bits(qpcs->regmap, reg,
++				XPCS_MII_AN_8BIT | XPCS_MII_AN_INTR_EN);
++
++		reg = (i == 0) ? XPCS_MII_CTRL : XPCS_MII1_CTRL(i);
++		regmap_update_bits(qpcs->regmap, reg,
++				   XPCS_MII_AN_EN | XPCS_SPEED_MASK | XPCS_DUPLEX_FULL,
++				   XPCS_MII_AN_EN | XPCS_SPEED_10000 | XPCS_DUPLEX_FULL);
++
++		/* Ports that were already up get their speed back */
++		if (i != index && mii->speed)
++			ipq_pcs_link_up_config_usxgmii(qpcs, i, mii->speed);
++	}
++
++	qpcs->xpcs_redo = false;
++	dev_info(qpcs->dev, "%s: 10GBASE-R from PHY locked, XPCS set up again\n",
++		 phy_modes(interface));
++out:
++	mutex_unlock(&qpcs->redo_lock);
++}
++
+ static void ipq_pcs_link_up(struct phylink_pcs *pcs,
+ 			    unsigned int neg_mode,
+ 			    phy_interface_t interface,
+@@ -916,7 +1031,10 @@ static void ipq_pcs_link_up(struct phylink_pcs *pcs,
+ 		break;
+ 	case PHY_INTERFACE_MODE_USXGMII:
+ 	case PHY_INTERFACE_MODE_10G_QXGMII:
++		ipq_pcs_xpcs_redo(qpcs, index, interface);
+ 		ret = ipq_pcs_link_up_config_usxgmii(qpcs, index, speed);
++		if (!ret)
++			qpcs_mii->speed = speed;
+ 		break;
+ 	case PHY_INTERFACE_MODE_10GBASER:
+ 		/* Nothing to do here */
+@@ -1192,6 +1310,8 @@ static int ipq9574_pcs_probe(struct platform_device *pdev)
+ 		return dev_err_probe(dev, PTR_ERR(qpcs->sys_rstc),
+ 				     "Failed to get uniphy sys reset\n");
+ 
++	mutex_init(&qpcs->redo_lock);
++
+ 	qpcs->soft_rstc = devm_reset_control_get_optional_exclusive(dev, "soft");
+ 	if (IS_ERR(qpcs->soft_rstc))
+ 		return dev_err_probe(dev, PTR_ERR(qpcs->soft_rstc),
