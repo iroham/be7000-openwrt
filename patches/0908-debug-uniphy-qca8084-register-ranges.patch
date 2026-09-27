@@ -1,0 +1,165 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: pcs/phy: debug register range dumps for the BE7000 UNIPHY <-> QCA8084 link
+
+Test builds only. A failing board under stock firmware (Denchik777, 4PDA)
+shows exactly the same values as a working board under OpenWrt in every
+register 0907 dumps, so the difference is in registers the driver never
+touches. Add read-only debugfs files with wide, safe ranges, in the format
+of scripts/stock-regs-full.sh, so one board can be compared between stock
+and OpenWrt line by line:
+
+- /sys/kernel/debug/ipq_pcs0_regs: UNIPHY0 direct window 0x000-0x7fc and
+  the XPCS MMD1/MMD3 and per-channel registers through the indirect window;
+- /sys/kernel/debug/qca8084_regs: QCA8084 SerDes (MDIO 6) Clause 22 and
+  MMD1 0x000-0x1ff, XPCS (MDIO 7) MMD3/MMD1 and per-channel registers.
+---
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+index 380ed53..51135c0 100644
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -6,6 +6,7 @@
+ #include <linux/clk.h>
+ #include <linux/clk-provider.h>
+ #include <linux/debugfs.h>
++#include <linux/seq_file.h>
+ #include <linux/uaccess.h>
+ #include <linux/device.h>
+ #include <linux/mutex.h>
+@@ -1104,6 +1105,41 @@ static ssize_t ipq_pcs_dbg_write(struct file *file, const char __user *ubuf,
+ 	return len;
+ }
+ 
++/* Debug: cat /sys/kernel/debug/ipq_pcs0_regs dumps wide, safe ranges of
++ * UNIPHY0 (direct window 0x000-0x7fc) and XPCS (indirect), in the format of
++ * scripts/stock-regs-full.sh so a board can be compared with stock.
++ */
++static int ipq_pcs_regs_show(struct seq_file *s, void *unused)
++{
++	static const struct {
++		u32 from, to, step;
++	} ranges[] = {
++		{ 0x0, 0x7fc, 4 },
++		{ 0x10000, 0x1001f, 1 }, { 0x18000, 0x1807f, 1 },
++		{ 0x30000, 0x3003f, 1 }, { 0x38000, 0x3803f, 1 },
++		{ 0x1f0000, 0x1f0007, 1 }, { 0x1f8000, 0x1f8007, 1 },
++		{ 0x1a0000, 0x1a0007, 1 }, { 0x1a8000, 0x1a8007, 1 },
++		{ 0x1b0000, 0x1b0007, 1 }, { 0x1b8000, 0x1b8007, 1 },
++		{ 0x1c0000, 0x1c0007, 1 }, { 0x1c8000, 0x1c8007, 1 },
++	};
++	struct ipq_pcs *qpcs = ipq_pcs_dbg;
++	unsigned int v;
++	u32 a;
++	int i;
++
++	if (!qpcs)
++		return -ENODEV;
++
++	for (i = 0; i < ARRAY_SIZE(ranges); i++)
++		for (a = ranges[i].from; a <= ranges[i].to; a += ranges[i].step) {
++			v = 0;
++			regmap_read(qpcs->regmap, a, &v);
++			seq_printf(s, "U 0x%06x 0x%08x\n", a, v);
++		}
++	return 0;
++}
++DEFINE_SHOW_ATTRIBUTE(ipq_pcs_regs);
++
+ static const struct file_operations ipq_pcs_dbg_fops = {
+ 	.owner	= THIS_MODULE,
+ 	.open	= simple_open,
+@@ -1432,6 +1468,8 @@ static int ipq9574_pcs_probe(struct platform_device *pdev)
+ 		ipq_pcs_dbg = qpcs;
+ 		debugfs_create_file("ipq_pcs0_ctl", 0200, NULL, NULL,
+ 				    &ipq_pcs_dbg_fops);
++		debugfs_create_file("ipq_pcs0_regs", 0400, NULL, NULL,
++				    &ipq_pcs_regs_fops);
+ 	}
+ 
+ 	platform_set_drvdata(pdev, qpcs);
+diff --git a/drivers/net/phy/qcom/qca808x.c b/drivers/net/phy/qcom/qca808x.c
+index 2b2b76b..4b3d138 100644
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -6,6 +6,7 @@
+ #include <linux/reset.h>
+ #include <linux/clk.h>
+ #include <linux/debugfs.h>
++#include <linux/seq_file.h>
+ #include <linux/uaccess.h>
+ #include <dt-bindings/net/qcom,qca808x.h>
+ 
+@@ -249,6 +250,7 @@ static struct qca808x_shared_priv *qca8084_dbg_shared;
+ static struct phy_device *qca8084_dbg_phy[4];
+ static struct dentry *qca8084_dbg_dentry;
+ static const struct file_operations qca8084_dbg_fops;
++static const struct file_operations qca8084_regs_fops;
+ 
+ /* Testing only: redo the XPCS setup on the first link up even when BaseR
+  * was already locked at attach time.
+@@ -1105,10 +1107,13 @@ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
+ 		shared_priv->xpcs_redo = force_xpcs_redo ||
+ 			!qca8084_qxgmii_baser_up(shared_priv->mdiodev[1]);
+ 		qca8084_dbg_shared = shared_priv;
+-		if (!qca8084_dbg_dentry)
++		if (!qca8084_dbg_dentry) {
+ 			qca8084_dbg_dentry = debugfs_create_file("qca8084_ctl", 0200,
+ 								 NULL, NULL,
+ 								 &qca8084_dbg_fops);
++			debugfs_create_file("qca8084_regs", 0400, NULL, NULL,
++					    &qca8084_regs_fops);
++		}
+ 		if (shared_priv->xpcs_redo)
+ 			phydev_info(phydev, "QXGMII XPCS set up without BaseR lock, will redo it on first link up\n");
+ 	}
+@@ -1489,6 +1494,51 @@ static ssize_t qca8084_dbg_write(struct file *file, const char __user *ubuf,
+ 	return len;
+ }
+ 
++/* Debug: cat /sys/kernel/debug/qca8084_regs dumps the SerDes (MDIO 6) and
++ * XPCS (MDIO 7) register ranges, in the format of scripts/stock-regs-full.sh.
++ */
++static void qca8084_regs_range(struct seq_file *s, struct mdio_device *md,
++			       int addr, const char *tag, int mmd, int from, int to)
++{
++	int r, v;
++
++	for (r = from; r <= to; r++) {
++		v = mmd ? mdiodev_c45_read(md, mmd, r) : mdiodev_read(md, r);
++		if (v < 0)
++			seq_printf(s, "P%d %s 0x%04x ?\n", addr, tag, r);
++		else
++			seq_printf(s, "P%d %s 0x%04x 0x%04x\n", addr, tag, r, v);
++	}
++}
++
++static int qca8084_regs_show(struct seq_file *s, void *unused)
++{
++	static const int ch_mmd[] = { 31, 26, 27, 28 };
++	struct qca808x_shared_priv *sp = qca8084_dbg_shared;
++	struct mdio_device *pcs, *xpcs;
++	char tag[8];
++	int i;
++
++	if (!sp)
++		return -ENODEV;
++	pcs = sp->mdiodev[0];
++	xpcs = sp->mdiodev[1];
++
++	qca8084_regs_range(s, pcs, 6, "c22", 0, 0x0, 0x1f);
++	qca8084_regs_range(s, pcs, 6, "m1", 1, 0x0, 0x1ff);
++	qca8084_regs_range(s, xpcs, 7, "m3", 3, 0x0, 0x3f);
++	qca8084_regs_range(s, xpcs, 7, "m3", 3, 0x8000, 0x803f);
++	qca8084_regs_range(s, xpcs, 7, "m1", 1, 0x0, 0x1f);
++	qca8084_regs_range(s, xpcs, 7, "m1", 1, 0x8000, 0x807f);
++	for (i = 0; i < ARRAY_SIZE(ch_mmd); i++) {
++		snprintf(tag, sizeof(tag), "m%d", ch_mmd[i]);
++		qca8084_regs_range(s, xpcs, 7, tag, ch_mmd[i], 0x0, 0x7);
++		qca8084_regs_range(s, xpcs, 7, tag, ch_mmd[i], 0x8000, 0x8007);
++	}
++	return 0;
++}
++DEFINE_SHOW_ATTRIBUTE(qca8084_regs);
++
+ static const struct file_operations qca8084_dbg_fops = {
+ 	.owner	= THIS_MODULE,
+ 	.open	= simple_open,
