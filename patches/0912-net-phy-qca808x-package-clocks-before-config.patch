@@ -1,0 +1,52 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: phy: qca808x: enable the QCA8084 package clocks before touching its config registers
+
+qca8084_phy_package_config_init_once() writes WORK_MODE_CFG and
+EPHY_CFG, both in the chip's security-control block, and only then
+enables the package clocks, among them nss_cc_sec_ctrl_ahb_clk that
+feeds that block. Nothing else holds that clock, so clk_disable_unused()
+gates it at about 2 s, long before the PHY package is configured at
+about 12 s, and the two writes go nowhere.
+
+Seen on a Xiaomi BE7000 whose QCA8084 never brings the 10GBASE-R link
+to the SoC up: hours after boot WORK_MODE_CFG still read 0x3f, the reset
+default with the switch-mode bit set, instead of the 0x2f the driver had
+written, and the EPHY_CFG efuse-load bits were still set.
+
+Enable the package clocks first.
+
+diff --git a/drivers/net/phy/qcom/qca808x.c b/drivers/net/phy/qcom/qca808x.c
+index 57034f7..c766173 100644
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -1126,6 +1126,18 @@ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
+ 	int ret, mode;
+ 
+ 	shared_priv = phy_package_get_priv(phydev);
++
++	/* The work mode and EPHY_CFG registers below sit in the security
++	 * control block, clocked by nss_cc_sec_ctrl_ahb_clk. Nothing holds
++	 * that clock before this point, so clk_disable_unused() has gated it
++	 * by the time we get here and the writes are dropped: on a failing
++	 * BE7000 the work mode still read the reset default (0x3f, switch
++	 * bit set) long after this ran. Enable the package clocks first.
++	 */
++	ret = qca8084_package_clock_init(shared_priv);
++	if (ret)
++		return ret;
++
+ 	switch (shared_priv->package_mode) {
+ 	case QCA808X_PCS1_10G_QXGMII_PCS0_UNUNSED:
+ 		mode = QCA8084_WORK_MODE_QXGMII;
+@@ -1182,10 +1194,7 @@ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
+ 			phydev_info(phydev, "QXGMII XPCS set up without BaseR lock, will redo it on first link up\n");
+ 	}
+ 
+-	/* Initialize the PHY package clock and reset, which is the
+-	 * necessary config sequence after GPIO reset on the PHY package.
+-	 */
+-	return qca8084_package_clock_init(shared_priv);
++	return 0;
+ }
+ 
+ static int qca8084_config_init(struct phy_device *phydev)
