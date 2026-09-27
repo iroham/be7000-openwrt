@@ -20,7 +20,22 @@ WINDOW=0.2       # seconds between the clearing read and the counting read
 
 [ -w $PCS ] && [ -w $PHY ] || { echo "no $PCS / $PHY: needs a debug build (uniphy7 or newer)"; exit 1; }
 
-log() { echo "$(date +%T) $*" | tee -a $LOG; }
+# Detach from the SSH session: the sweep must finish and write its log even
+# when the connection drops (a plain nohup does not survive that here).
+if [ -z "$PRBS_BG" ] && [ -z "$DRY" ]; then
+	cp "$0" /tmp/.prbs-sweep.run.sh
+	if PRBS_BG=1 start-stop-daemon -S -b -x /bin/sh -- /tmp/.prbs-sweep.run.sh 2>/dev/null; then
+		:
+	else
+		PRBS_BG=1 setsid sh /tmp/.prbs-sweep.run.sh >/dev/null 2>&1 < /dev/null &
+	fi
+	echo "started in the background, it keeps running if this session drops"
+	echo "follow it with:  tail -f $LOG"
+	echo "when it prints RESULT it is done; send $LOG"
+	exit 0
+fi
+
+log() { echo "$(date +%T) $*" >> $LOG; [ -n "$DRY" ] && echo "$(date +%T) $*"; }
 run() { [ -n "$DRY" ] && { echo "DRY: $*" >&2; return 0; }; "$@"; }
 
 # every read goes through dmesg; remember where the log ended before the
@@ -89,7 +104,7 @@ undo() {
 	if [ "$1" = S ]; then soc_w $2 $OLD; else chip_w $2 $3 $4 $OLD; fi
 }
 
-: > $LOG
+: > $LOG; rm -f $LOG.kept $LOG.done
 log "start, PRBS31 both directions, window ${WINDOW}s, clean <= $GOOD errors"
 prbs_on
 sleep 1
