@@ -3,7 +3,7 @@
 		"description": "Move /overlay onto a disk",
 		"read": {
 			"ubus": {
-				"be7000-storage": [ "status", "list" ]
+				"be7000-storage": [ "status", "list", "job" ]
 			}
 		},
 		"write": {

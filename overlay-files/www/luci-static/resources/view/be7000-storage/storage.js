@@ -8,6 +8,24 @@ var callStatus = rpc.declare({ object: 'be7000-storage', method: 'status' });
 var callList = rpc.declare({ object: 'be7000-storage', method: 'list' });
 var callUse = rpc.declare({ object: 'be7000-storage', method: 'use', params: ['device'] });
 var callRevert = rpc.declare({ object: 'be7000-storage', method: 'revert' });
+var callJob = rpc.declare({ object: 'be7000-storage', method: 'job' });
+
+// "use" only starts the job; wait for it here, polling every 2 s.
+function waitJob() {
+	return new Promise(function(resolve) {
+		var tick = function() {
+			callJob().then(function(res) {
+				if (res && res.done)
+					resolve(res);
+				else
+					window.setTimeout(tick, 2000);
+			}).catch(function() {
+				window.setTimeout(tick, 2000);
+			});
+		};
+		window.setTimeout(tick, 2000);
+	});
+}
 
 function mb(kb) {
 	if (!kb)
@@ -55,6 +73,8 @@ return view.extend({
 					'click': function() {
 						ui.showModal(_('Переношу'), [E('p', { 'class': 'spinning' }, _('Форматирование и копирование, это может занять минуту'))]);
 						callUse(dev).then(function(res) {
+							return (res && res.started) ? waitJob() : res;
+						}).then(function(res) {
 							ui.hideModal();
 							if (res && res.ok) {
 								ui.addNotification(null, E('p', {}, _('Готово. Перезагрузите роутер, чтобы /overlay переехал.')), 'info');

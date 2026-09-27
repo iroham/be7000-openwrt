@@ -1,8 +1,10 @@
 'use strict';
 
-import { popen, access } from 'fs';
+import { popen, access, readfile, unlink } from 'fs';
 
 const BIN = '/usr/sbin/be7000-extroot';
+const JOB_LOG = '/tmp/be7000-extroot.log';
+const JOB_RC = '/tmp/be7000-extroot.rc';
 
 function shellquote(s) {
 	return `'${replace(s, "'", "'\\''")}'`;
@@ -55,8 +57,29 @@ return {
 				let dev = req.args?.device ?? '';
 				if (!length(dev))
 					return { ok: false, output: 'device is required' };
-				let res = run(['use', dev, '--yes']);
-				return { ok: res.ok, output: res.output };
+				if (access(BIN) != true)
+					return { ok: false, output: 'be7000-extroot not found' };
+				if (access(JOB_LOG) && !access(JOB_RC))
+					return { ok: false, output: 'already running' };
+				unlink(JOB_RC);
+				// Formatting and copying outlast the LuCI request timeout, so
+				// the job runs detached and the page polls "job" for the result.
+				let cmd = `${shellquote(BIN)} use ${shellquote(dev)} --yes`;
+				let fd = popen(`(${cmd} >${JOB_LOG} 2>&1; echo $? >${JOB_RC}) </dev/null >/dev/null 2>&1 &`, 'r');
+				if (fd)
+					fd.close();
+				return { ok: true, started: true };
+			}
+		},
+		job: {
+			call: function() {
+				let rc = readfile(JOB_RC);
+				return {
+					running: rc == null && access(JOB_LOG) == true,
+					done: rc != null,
+					ok: rc != null && int(trim(rc)) == 0,
+					output: trim(readfile(JOB_LOG) ?? '')
+				};
 			}
 		},
 		revert: {
