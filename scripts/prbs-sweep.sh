@@ -15,8 +15,8 @@
 LOG=/tmp/prbs-sweep.log
 PCS=/sys/kernel/debug/ipq_pcs0_ctl
 PHY=/sys/kernel/debug/qca8084_ctl
-GOOD=50          # errors per window that count as "clean"
-WINDOW=0.2       # seconds between the clearing read and the counting read
+GOOD=200         # errors per window that count as "clean"
+WINDOW=1         # seconds between the clearing read and the counting read (busybox sleep takes whole seconds only)
 
 [ -w $PCS ] && [ -w $PHY ] || { echo "no $PCS / $PHY: needs a debug build (uniphy7 or newer)"; exit 1; }
 
@@ -112,7 +112,7 @@ measure; log "baseline: soc_err=$ERR_SOC chip_err=$ERR_CHIP"
 BASE_SOC=$ERR_SOC; BASE_CHIP=$ERR_CHIP
 if clean; then log "lane already clean, nothing to sweep"; prbs_off; exit 0; fi
 
-echo "$CANDIDATES" | grep -v '^\s*$' | while read -r line; do
+echo "$CANDIDATES" | grep -v '^[[:space:]]*$' | while read -r line; do
 	apply "$line"
 	measure
 	log "try [$line] (was $OLD): soc_err=$ERR_SOC chip_err=$ERR_CHIP"
@@ -132,7 +132,7 @@ done
 
 if [ ! -e $LOG.done ]; then
 	log "no single value cleaned the lane, applying all stock values together"
-	echo "$CANDIDATES" | grep -v '^\s*$' | while read -r line; do apply "$line"; done
+	echo "$CANDIDATES" | grep -v '^[[:space:]]*$' | while read -r line; do apply "$line"; done
 	measure; log "all together: soc_err=$ERR_SOC chip_err=$ERR_CHIP"
 	if clean; then log "CLEAN with all stock values together"; touch $LOG.done; fi
 fi
