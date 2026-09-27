@@ -1,0 +1,91 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] clk: qcom: nsscc-qca8k: optional vendor preinit right after the GPIO reset
+
+The vendor firmware's MDIO driver (QSDK mdio-qca.c) does more than the
+GPIO reset before it lets anything talk to the QCA8084: it enables the
+SerDes system clocks and pulses their resets for 20 ms, parks the GEPHY
+GMII clocks, enables the ePHY system clocks and pulses their resets, and
+releases the ePHY/DSP resets in GCC_GEPHY_MISC. Mainline only de-asserts
+those resets later, from the PHY and SerDes drivers, which is a no-op
+when the lines were never asserted.
+
+Do the same sequence in the clock controller probe, right after its GPIO
+reset and before the clocks are registered, when the chip's AHB still
+runs from XO. Doing it any later is not possible: once the AHB source is
+the SerDes clock, a SerDes reset takes the register bus down (observed:
+all SerDes registers read 0xffff until reboot). Gated on a DT property
+so other boards are not affected.
+
+diff --git a/drivers/clk/qcom/nsscc-qca8k.c b/drivers/clk/qcom/nsscc-qca8k.c
+index 5c8324e..dca2420 100644
+--- a/drivers/clk/qcom/nsscc-qca8k.c
++++ b/drivers/clk/qcom/nsscc-qca8k.c
+@@ -7,6 +7,8 @@
+ #include <linux/kernel.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
++#include <linux/property.h>
++#include <linux/delay.h>
+ #include <linux/regmap.h>
+ #include <linux/phy.h>
+ #include <linux/mdio.h>
+@@ -2185,6 +2187,50 @@ static int nss_cc_qca8k_clock_enable_and_reset(struct device *dev)
+ 	return 0;
+ }
+ 
++/* What the vendor firmware does right after the GPIO reset, before anything
++ * else touches the chip (QSDK mdio-qca.c, qca_mht_clock_init): enable the
++ * SerDes system clocks and pulse their resets, park the GEPHY GMII clocks,
++ * enable the ePHY system clocks and pulse their resets, release the DSP.
++ * It has to happen here, while the chip's AHB still runs from XO: once the
++ * AHB source has been moved to the SerDes clock, a SerDes reset takes the
++ * register bus down with it.
++ */
++#define QCA8K_CBCR_ENABLE	BIT(0)
++#define QCA8K_CBCR_ARES		BIT(2)
++
++static void nss_cc_qca8k_cbcr_pulse(struct regmap *regmap, unsigned int reg)
++{
++	regmap_set_bits(regmap, reg, QCA8K_CBCR_ENABLE);
++	regmap_set_bits(regmap, reg, QCA8K_CBCR_ARES);
++	usleep_range(20000, 21000);
++	regmap_clear_bits(regmap, reg, QCA8K_CBCR_ARES);
++}
++
++static void nss_cc_qca8k_preinit(struct device *dev, struct regmap *regmap)
++{
++	static const unsigned int srds[] = { 0x1a8, 0x1ac };
++	static const unsigned int ephy[] = { 0x1b0, 0x1b4, 0x1b8, 0x1bc };
++	unsigned int val = 0;
++	int i;
++
++	if (!device_property_read_bool(dev, "qcom,vendor-preinit"))
++		return;
++
++	for (i = 0; i < ARRAY_SIZE(srds); i++)
++		nss_cc_qca8k_cbcr_pulse(regmap, srds[i]);
++	/* GEPHY0..3 RX/TX GMII clocks, 0x58 + n * 0x20 */
++	for (i = 0; i < 8; i++)
++		regmap_clear_bits(regmap, 0x58 + i * 0x20, QCA8K_CBCR_ENABLE);
++	for (i = 0; i < ARRAY_SIZE(ephy); i++)
++		nss_cc_qca8k_cbcr_pulse(regmap, ephy[i]);
++	/* GCC_GEPHY_MISC: release the four ePHY resets and the DSP */
++	regmap_clear_bits(regmap, 0x304, GENMASK(4, 0));
++	usleep_range(10000, 11000);
++
++	regmap_read(regmap, 0x1ac, &val);
++	dev_info(dev, "vendor preinit done, SRDS1_SYS_CBCR 0x%08x\n", val);
++}
++
+ static int nss_cc_qca8k_probe(struct mdio_device *mdiodev)
+ {
+ 	struct regmap *regmap;
+@@ -2198,6 +2244,8 @@ static int nss_cc_qca8k_probe(struct mdio_device *mdiodev)
+ 	if (IS_ERR(regmap))
+ 		return dev_err_probe(&mdiodev->dev, PTR_ERR(regmap), "Failed to init regmap\n");
+ 
++	nss_cc_qca8k_preinit(&mdiodev->dev, regmap);
++
+ 	return qcom_cc_really_probe(&mdiodev->dev, &nss_cc_qca8k_desc, regmap);
+ }
+ 

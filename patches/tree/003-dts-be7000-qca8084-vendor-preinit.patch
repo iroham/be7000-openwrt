@@ -1,0 +1,12 @@
+Ask the QCA8084 clock controller to run the vendor preinit (SerDes and
+ePHY reset pulses) right after its GPIO reset.
+--- a/target/linux/qualcommbe/dts/ipq9574-be7000.dts
++++ b/target/linux/qualcommbe/dts/ipq9574-be7000.dts
+@@ -627,6 +627,7 @@
+ 		compatible = "qcom,qca8084-nsscc";
+ 		reg = <0x18>;
+ 		reset-gpios = <&tlmm 60 GPIO_ACTIVE_LOW>;
++		qcom,vendor-preinit;
+ 		clocks = <&cmn_pll ETH0_50MHZ_CLK>,
+ 			 <0>,
+ 			 <0>,
