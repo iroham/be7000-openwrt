@@ -1,0 +1,14 @@
+The stock firmware holds the QCA8084 in reset for 100 ms and waits
+another 100 ms before touching it (QSDK mdio-qca.c qca_phy_gpio_set).
+The MDIO core default is a 10 us pulse and no wait.
+--- a/target/linux/qualcommbe/dts/ipq9574-be7000.dts
++++ b/target/linux/qualcommbe/dts/ipq9574-be7000.dts
+@@ -615,6 +615,8 @@
+ &mdio {
+ 	status = "okay";
+ 	clock-frequency = <6250000>;
+ 	reset-gpios = <&tlmm 60 GPIO_ACTIVE_LOW>;
++	reset-delay-us = <100000>;
++	reset-post-delay-us = <100000>;
+ 
+ 	qca8k_nsscc: clock-controller@18 {

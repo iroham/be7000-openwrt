@@ -1,0 +1,178 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: pcs/phy: debug access to QCA8084 switch-core registers and the TCSR LDO bit
+
+Test builds only. The stock mdio driver (QSDK mdio-qca.c) brings the
+QCA8084 up in a way OpenWrt does not: TCSR "ethernet LDO ready" bit,
+100 ms GPIO reset with 100 ms after it, then a pulse on the SerDes and
+ePHY system clock resets, DSP reset release and, on ES silicon, a
+manual load of the LDO/ICC calibration fuses. Give testers a view of
+that side of the chip:
+
+- /sys/kernel/debug/qca8084_ctl: "sw r <reg>" and "sw w <reg> <val>"
+  for 32-bit switch-core registers (fuses 0xc9xxxxx, clocks 0xc8xxxxx).
+- the automatic and manual dumps add the fuse rows (PTE row tells ES
+  silicon), SerDes/ePHY clock branches, GEPHY misc, EPHY_CFG and the
+  work mode.
+- /sys/kernel/debug/ipq_pcs0_ctl: "tcsr" reads TCSR 0x19475c4,
+  "tcsr 1" / "tcsr 0" sets or clears its bit 0.
+
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+index 7c38b03..066de84 100644
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -6,6 +6,8 @@
+ #include <linux/clk.h>
+ #include <linux/clk-provider.h>
+ #include <linux/debugfs.h>
++#include <linux/delay.h>
++#include <linux/io.h>
+ #include <linux/seq_file.h>
+ #include <linux/uaccess.h>
+ #include <linux/device.h>
+@@ -1114,6 +1116,30 @@ static ssize_t ipq_pcs_dbg_write(struct file *file, const char __user *ubuf,
+ 		return len;
+ 	}
+ 
++	/* "tcsr", "tcsr 1", "tcsr 0": the TCSR "ethernet LDO ready" bit the
++	 * stock mdio driver sets before it resets the PHY (mdio-qca.c
++	 * qca_tcsr_ldo_rdy_set, 0x19475c4 bit 0). Never written by the
++	 * mdio-ipq4019 driver here unless the DT gives it that register.
++	 */
++	if (!strncmp(buf, "tcsr", 4)) {
++		void __iomem *tcsr = ioremap(0x19475c4, 4);
++		int set = -1;
++
++		if (!tcsr)
++			return -ENOMEM;
++		sscanf(buf, "tcsr %d", &set);
++		val = readl(tcsr);
++		dev_info(qpcs->dev, "debug: TCSR 0x19475c4 = 0x%08x\n", val);
++		if (set == 0 || set == 1) {
++			writel(set ? val | BIT(0) : val & ~BIT(0), tcsr);
++			msleep(100);
++			dev_info(qpcs->dev, "debug: TCSR 0x19475c4 -> 0x%08x\n",
++				 readl(tcsr));
++		}
++		iounmap(tcsr);
++		return len;
++	}
++
+ 	interface = qpcs->interface;
+ 	if (sysfs_streq(buf, "dump")) {
+ 		ipq_pcs_dump(qpcs, "manual");
+diff --git a/drivers/net/phy/qcom/qca808x.c b/drivers/net/phy/qcom/qca808x.c
+index 43f2734..57034f7 100644
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -343,6 +343,70 @@ qca8084_mii_modify_exit:
+ 	return ret;
+ };
+ 
++/* Debug: one switch-core register of the QCA8084 (32-bit, paged MDIO
++ * access), the same addresses the stock mdio-qca.c uses.
++ */
++static int qca8084_dbg_sw_rw(struct mii_bus *bus, u32 regaddr, bool write,
++			     u32 *val)
++{
++	u16 reg = FIELD_GET(QCA8084_MII_REG_MASK, regaddr);
++	u16 addr = FIELD_GET(QCA8084_MII_PHY_ADDR_MASK, regaddr);
++	u16 page = FIELD_GET(QCA8084_MII_PAGE_MASK, regaddr);
++	u16 sw_addr = FIELD_GET(QCA8084_MII_SW_ADDR_MASK, regaddr);
++	int ret;
++
++	mutex_lock(&bus->mdio_lock);
++	ret = __qca8084_set_page(bus, sw_addr, page);
++	if (ret >= 0) {
++		if (write)
++			ret = __qca8084_mii_write(bus, QCA8084_LOW_ADDR_PREFIX | addr,
++						  reg, *val);
++		else
++			ret = __qca8084_mii_read(bus, QCA8084_LOW_ADDR_PREFIX | addr,
++						 reg, val);
++	}
++	mutex_unlock(&bus->mdio_lock);
++	return ret < 0 ? ret : 0;
++}
++
++/* Debug: what the stock mdio-qca.c preinit touches right after the GPIO
++ * reset, plus the fuse rows it reads: chip PTE (ES silicon when bits 23:16
++ * are 1 or 2), per-PHY LDO/ICC calibration rows, SerDes and ePHY system
++ * clock branches (bit 0 enable, bit 2 reset), GEPHY misc (DSP/PHY resets),
++ * EPHY_CFG (addresses, bits 21:20 LDO efuse load) and the work mode.
++ */
++static void qca8084_dbg_sw_dump(struct mii_bus *bus)
++{
++	static const struct { u32 reg; const char *name; } regs[] = {
++		{ 0xc900014, "QFPROM_RAW_PTE_ROW2_MSB" },
++		{ 0xc900048, "QFPROM_RAW_CALIBRATION_ROW4_LSB" },
++		{ 0xc90005c, "QFPROM_RAW_CALIBRATION_ROW6_MSB" },
++		{ 0xc900060, "QFPROM_RAW_CALIBRATION_ROW7_LSB" },
++		{ 0xc900068, "QFPROM_RAW_CALIBRATION_ROW8_LSB" },
++		{ 0xc8001a8, "SRDS0_SYS_CBCR" },
++		{ 0xc8001ac, "SRDS1_SYS_CBCR" },
++		{ 0xc8001b0, "EPHY0_SYS_CBCR" },
++		{ 0xc8001b4, "EPHY1_SYS_CBCR" },
++		{ 0xc8001b8, "EPHY2_SYS_CBCR" },
++		{ 0xc8001bc, "EPHY3_SYS_CBCR" },
++		{ 0xc800304, "GCC_GEPHY_MISC" },
++		{ 0xc90f014, "UNIPHY_CFG" },
++		{ 0xc90f018, "EPHY_CFG" },
++		{ 0xc90f030, "WORK_MODE_CFG" },
++	};
++	u32 val;
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(regs); i++) {
++		if (qca8084_dbg_sw_rw(bus, regs[i].reg, false, &val))
++			dev_info(&bus->dev, "  SW 0x%08x %s: read failed\n",
++				 regs[i].reg, regs[i].name);
++		else
++			dev_info(&bus->dev, "  SW 0x%08x 0x%08x %s\n",
++				 regs[i].reg, val, regs[i].name);
++	}
++}
++
+ static int qca8084_led_pinmux_set(struct phy_device *phydev, u8 index)
+ {
+ 	struct qca808x_priv *priv = phydev->priv;
+@@ -1230,6 +1294,7 @@ static void qca8084_link_change_notify(struct phy_device *phydev)
+ 				qca8084_qxgmii_dump(shared_priv->mdiodev[1],
+ 						    shared_priv->mdiodev[0],
+ 						    "BaseR still not locked");
++				qca8084_dbg_sw_dump(phydev->mdio.bus);
+ 			} else {
+ 				shared_priv->xpcs_redo = false;
+ 				phydev_info(phydev, "QXGMII BaseR locked, XPCS set up again\n");
+@@ -1483,9 +1548,32 @@ static ssize_t qca8084_dbg_write(struct file *file, const char __user *ubuf,
+ 
+ 	if (sysfs_streq(buf, "dump")) {
+ 		qca8084_qxgmii_dump(sp->mdiodev[1], sp->mdiodev[0], "manual");
++		qca8084_dbg_sw_dump(sp->mdiodev[1]->bus);
+ 		return len;
+ 	}
+ 
++	/* "sw r <reg>" and "sw w <reg> <val>": a 32-bit switch-core register
++	 * of the QCA8084 (0xc8xxxxx clocks, 0xc9xxxxx fuses and config), hex.
++	 */
++	if (sscanf(buf, "sw w %x %x", &reg, &wval) == 2 ||
++	    sscanf(buf, "sw r %x", &reg) == 1) {
++		struct mii_bus *bus = sp->mdiodev[1]->bus;
++		bool write = buf[3] == 'w';
++		u32 v = 0;
++
++		ret = qca8084_dbg_sw_rw(bus, reg, false, &v);
++		if (!ret && write) {
++			dev_info(&bus->dev, "debug: sw w 0x%08x 0x%08x -> 0x%08x\n",
++				 reg, v, wval);
++			v = wval;
++			ret = qca8084_dbg_sw_rw(bus, reg, true, &v);
++			if (!ret)
++				ret = qca8084_dbg_sw_rw(bus, reg, false, &v);
++		}
++		dev_info(&bus->dev, "debug: sw r 0x%08x = 0x%08x (%d)\n", reg, v, ret);
++		return ret ? ret : len;
++	}
++
+ 	if (sysfs_streq(buf, "ephy")) {
+ 		for (i = 0; i < ARRAY_SIZE(qca8084_dbg_phy); i++) {
+ 			struct phy_device *phydev = qca8084_dbg_phy[i];

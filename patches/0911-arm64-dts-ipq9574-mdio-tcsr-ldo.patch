@@ -1,0 +1,23 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] arm64: dts: qcom: ipq9574: give the MDIO controller the TCSR ethernet LDO register
+
+The stock firmware sets the TCSR "ethernet LDO ready" bit (0x19475c4
+bit 0) before it resets the PHY package. mdio-ipq4019 does the same,
+but only when the device tree hands it that register as the second
+reg entry (as the IPQ50xx trees do). The IPQ9574 tree never did, so
+OpenWrt never set the bit.
+
+diff --git a/arch/arm64/boot/dts/qcom/ipq9574.dtsi b/arch/arm64/boot/dts/qcom/ipq9574.dtsi
+index 1cc3479..d57ce8e 100644
+--- a/arch/arm64/boot/dts/qcom/ipq9574.dtsi
++++ b/arch/arm64/boot/dts/qcom/ipq9574.dtsi
+@@ -296,7 +296,8 @@
+ 
+ 		mdio: mdio@90000 {
+ 			compatible = "qcom,ipq9574-mdio", "qcom,ipq4019-mdio";
+-			reg = <0x00090000 0x64>;
++			reg = <0x00090000 0x64>,
++			      <0x019475c4 0x4>;
+ 			pinctrl-0 = <&mdio_pins>;
+ 			pinctrl-names = "default";
+ 			#address-cells = <1>;
