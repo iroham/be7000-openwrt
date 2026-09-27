@@ -280,6 +280,7 @@ jobs:
              ../repo/scripts/rollback-to-stock.sh ../repo/docs/instruction/*.txt sha256sums.txt zip/
           # the index's first line carries the version
           sed -i "1s/версия [0-9][0-9.]*/версия $VER/" zip/instruction.txt
+          sed -i "1s/version [0-9][0-9.]*/version $VER/" zip/instruction-en.txt
           (cd zip && zip -q -X "../$ZIP" ./*)
           sha256sum "$ZIP"
           echo "VER=$VER" >> "$GITHUB_ENV"

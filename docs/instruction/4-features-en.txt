@@ -1,0 +1,35 @@
+What the firmware can do
+
+Packages
+They install out of the box with apk. The official mirror builds this chipset for a different CPU type, so its generic feeds do not work here. The image points to its own feed with more than 600 packages, including nano, htop, tcpdump, modemmanager and USB modem drivers.
+
+Wi-Fi
+On 5 GHz, Wi-Fi 6 and Wi-Fi 7 (EHT80 mode) work, and so does automatic channel selection. For stability without pauses use channel 36 or 149 at 80 MHz, there is no radar check there. 160 MHz is only possible on channels with a radar check, so 5 GHz goes away for about a minute on every Wi-Fi restart.
+With country RU the radio firmware forbids Wi-Fi 7 and an access point in EHT mode will not come up, use HE mode then.
+
+USB storage
+The be7000-extroot command moves /overlay to a USB disk as a whole, with all the checks. In the web interface it is System, "Накопитель" (Storage).
+
+be7000-extroot list
+be7000-extroot use /dev/sda1 --yes
+be7000-extroot status
+be7000-extroot revert --yes
+
+How the space for settings is organized is described in more detail in docs/storage.en.md in the repository.
+
+Docker
+It is set up with one command that finds the connected disk and puts the data there. By default Docker writes to /opt/docker, that is the internal flash, and the first image fills it up.
+
+be7000-docker status
+be7000-docker setup --yes
+be7000-docker setup --data-root /mnt/usb/docker --yes
+
+Without arguments it looks for a mounted disk with at least a gigabyte free and sets data-root there. I have not yet run Docker live on this board.
+
+Containers, images, networks and volumes are under Services, Dockerman. docker-compose stacks, one-click presets and cleanup are under Services, "Docker: стеки" (Docker stacks). Ready stacks: Portainer, AdGuard Home, Uptime Kuma, Vaultwarden, qBittorrent, Nginx Proxy Manager, Home Assistant, Watchtower.
+
+Also in the image
+The Nimbus LuCI theme (the old one can be restored under System, System, Language and Style), UPnP (Services, UPnP IGD and PCP, off by default) and kernel modules for transparent proxying.
+
+What has been tested
+The gigabit port does about 940 Mbit/s both ways without errors. Wi-Fi 7 on 5 GHz with a laptop, 945 Mbit/s. PPPoE on a live line, updating with sysupgrade. The 2.5 Gbit/s ports were tested by another owner, tens of gigabytes without errors.

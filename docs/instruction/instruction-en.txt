@@ -1,0 +1,29 @@
+BE7000, native OpenWrt (kernel 6.18), version 1.2.7
+
+The instructions are split into parts. Read the one that matches your case.
+
+1-install-en.txt
+First install, the router runs Xiaomi stock firmware now. Backup, installation, first login.
+
+2-update-en.txt
+OpenWrt is already installed and you want a newer version. Updating from the web interface or by hand, and what to know if you run a very old version (1.0 to 1.2.2).
+
+3-rollback-and-problems-en.txt
+The router does not answer, does not boot, has no wired network, or you want to go back to stock. How to collect a log and what to post.
+
+4-features-en.txt
+What the firmware can do: packages, Wi-Fi, USB storage, Docker, what has been tested.
+
+What is in the archive
+openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi is the image for installing from stock.
+install-from-stock.sh writes the image into the free slot and switches the boot slot.
+rollback-to-stock.sh goes back to stock from a running OpenWrt.
+sha256sums.txt has the checksums.
+The file for updating an existing OpenWrt (sysupgrade.bin) is a separate download in the same release, it is not in the archive.
+
+Never do this
+Do not write anything to the bootloader partitions (APPSBL and APPSBL_1). That is the only way to brick the board for good.
+The UART on the board is 1.8 V. Do not transmit into the console with a 3.3 V adapter.
+
+Sources, patches and a detailed description
+https://github.com/timofey-maykov/be7000-openwrt
