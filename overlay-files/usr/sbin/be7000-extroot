@@ -83,7 +83,7 @@ cmd_status() {
 	echo "configured in fstab:"
 	if uci -q get fstab.extroot >/dev/null; then
 		local where
-		where="$(uci -q get fstab.extroot.device)"
+		where="$(uci -q get fstab.extroot.device || true)"
 		[ -n "$where" ] || where="UUID $(uci -q get fstab.extroot.uuid)"
 		echo "  $where"
 		echo "  enabled $(uci -q get fstab.extroot.enabled)"
@@ -139,8 +139,8 @@ cmd_status_json() {
 	dev="$(current_overlay_device)"
 	set -- $(df -k /overlay | tail -1)
 	total="$2"; avail="$4"
-	uuid="$(uci -q get fstab.extroot.uuid)"
-	enabled="$(uci -q get fstab.extroot.enabled)"
+	uuid="$(uci -q get fstab.extroot.uuid || true)"
+	enabled="$(uci -q get fstab.extroot.enabled || true)"
 	[ -n "$enabled" ] || enabled=""
 	printf '{"device":"%s","total_kb":%s,"available_kb":%s,"extroot_uuid":"%s","extroot_enabled":"%s"}\n' \
 		"${dev:-}" "${total:-0}" "${avail:-0}" "$uuid" "$enabled"
@@ -216,7 +216,7 @@ cmd_use() {
 	EOT
 
 	echo "Done. The change takes effect on the next boot."
-	[ "$do_reboot" = 1 ] && { sync; reboot; }
+	if [ "$do_reboot" = 1 ]; then sync; reboot; fi
 }
 
 cmd_revert() {
@@ -231,7 +231,7 @@ cmd_revert() {
 	uci -q commit fstab
 	printf 'delete fstab.extroot\ncommit fstab\n' | with_rootfs_data || die "could not remove the extroot entry from rootfs_data"
 	echo "Removed. The change takes effect on the next boot."
-	[ "$do_reboot" = 1 ] && { sync; reboot; }
+	if [ "$do_reboot" = 1 ]; then sync; reboot; fi
 }
 
 YES=0
