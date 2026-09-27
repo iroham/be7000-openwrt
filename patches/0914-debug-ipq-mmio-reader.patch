@@ -1,0 +1,110 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: pcs: qcom-ipq9574: debug MMIO reader for the clock trees
+
+Test builds only. /sys/kernel/debug/ipq_mmio: write "<phys addr> [count]",
+read back "0x<addr> 0x<value>" lines. Used by be7000-clk-regs to dump the
+NSSCC port/UNIPHY clocks and the GCC NSS/UNIPHY blocks for a stock vs
+OpenWrt comparison. Reading the whole GCC or NSSCC regmap from debugfs
+hits unmapped holes and reboots the board, so only asked-for words are
+read.
+
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+index 50f34ac..4cfb20e 100644
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -8,6 +8,7 @@
+ #include <linux/debugfs.h>
+ #include <linux/delay.h>
+ #include <linux/io.h>
++#include <linux/slab.h>
+ #include <linux/seq_file.h>
+ #include <linux/uaccess.h>
+ #include <linux/device.h>
+@@ -1241,6 +1242,78 @@ static const struct file_operations ipq_pcs_dbg_fops = {
+ 	.llseek	= noop_llseek,
+ };
+ 
++/* Debug: /sys/kernel/debug/ipq_mmio reads a run of 32-bit MMIO words.
++ * Write "<phys addr> [count]" (hex address, up to 1024 words), then read
++ * "0x<addr> 0x<value>" lines. For the clock trees (NSSCC, GCC): reading
++ * their whole regmap files from debugfs hits unmapped holes and reboots
++ * the board, this reads only what it is asked for.
++ */
++static DEFINE_MUTEX(ipq_mmio_lock);
++static u32 ipq_mmio_addr;
++static u32 ipq_mmio_count = 1;
++
++static ssize_t ipq_mmio_write(struct file *file, const char __user *ubuf,
++			      size_t len, loff_t *ppos)
++{
++	char buf[40];
++	size_t n = min(len, sizeof(buf) - 1);
++	u32 addr, count = 1;
++
++	if (copy_from_user(buf, ubuf, n))
++		return -EFAULT;
++	buf[n] = 0;
++	if (sscanf(buf, "%x %u", &addr, &count) < 1)
++		return -EINVAL;
++	if ((addr & 3) || !count || count > 1024)
++		return -EINVAL;
++	mutex_lock(&ipq_mmio_lock);
++	ipq_mmio_addr = addr;
++	ipq_mmio_count = count;
++	mutex_unlock(&ipq_mmio_lock);
++	return len;
++}
++
++static ssize_t ipq_mmio_read(struct file *file, char __user *ubuf,
++			     size_t len, loff_t *ppos)
++{
++	void __iomem *base;
++	char *out;
++	u32 addr, count, first, span, i;
++	size_t pos = 0;
++	ssize_t ret;
++
++	mutex_lock(&ipq_mmio_lock);
++	addr = ipq_mmio_addr;
++	count = ipq_mmio_count;
++	mutex_unlock(&ipq_mmio_lock);
++
++	out = kmalloc(count * 24 + 1, GFP_KERNEL);
++	if (!out)
++		return -ENOMEM;
++	first = addr & PAGE_MASK;
++	span = PAGE_ALIGN(addr + count * 4 - first);
++	base = ioremap(first, span);
++	if (!base) {
++		kfree(out);
++		return -ENOMEM;
++	}
++	for (i = 0; i < count; i++)
++		pos += scnprintf(out + pos, count * 24 + 1 - pos, "0x%08x 0x%08x\n",
++				 addr + i * 4, readl(base + (addr - first) + i * 4));
++	iounmap(base);
++	ret = simple_read_from_buffer(ubuf, len, ppos, out, pos);
++	kfree(out);
++	return ret;
++}
++
++static const struct file_operations ipq_mmio_fops = {
++	.owner	= THIS_MODULE,
++	.open	= simple_open,
++	.write	= ipq_mmio_write,
++	.read	= ipq_mmio_read,
++	.llseek	= default_llseek,
++};
++
+ static void ipq_pcs_link_up(struct phylink_pcs *pcs,
+ 			    unsigned int neg_mode,
+ 			    phy_interface_t interface,
+@@ -1562,6 +1635,8 @@ static int ipq9574_pcs_probe(struct platform_device *pdev)
+ 		ipq_pcs_dbg = qpcs;
+ 		debugfs_create_file("ipq_pcs0_ctl", 0200, NULL, NULL,
+ 				    &ipq_pcs_dbg_fops);
++		debugfs_create_file("ipq_mmio", 0600, NULL, NULL,
++				    &ipq_mmio_fops);
+ 		debugfs_create_file("ipq_pcs0_regs", 0400, NULL, NULL,
+ 				    &ipq_pcs_regs_fops);
+ 	}
