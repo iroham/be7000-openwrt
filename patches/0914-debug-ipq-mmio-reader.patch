@@ -1,26 +1,20 @@
 From: be7000-openwrt <noreply@example.com>
 Subject: [PATCH] net: pcs: qcom-ipq9574: debug MMIO reader for the clock trees
 
-Test builds only. /sys/kernel/debug/ipq_mmio: write "<phys addr> [count]",
-read back "0x<addr> 0x<value>" lines. Used by be7000-clk-regs to dump the
-NSSCC port/UNIPHY clocks and the GCC NSS/UNIPHY blocks for a stock vs
-OpenWrt comparison. Reading the whole GCC or NSSCC regmap from debugfs
-hits unmapped holes and reboots the board, so only asked-for words are
-read.
-
 diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
-index 50f34ac..4cfb20e 100644
+index 50f34ac..f500c9a 100644
 --- a/drivers/net/pcs/pcs-qcom-ipq9574.c
 +++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
-@@ -8,6 +8,7 @@
+@@ -8,6 +8,8 @@
  #include <linux/debugfs.h>
  #include <linux/delay.h>
  #include <linux/io.h>
++#include <linux/mm.h>
 +#include <linux/slab.h>
  #include <linux/seq_file.h>
  #include <linux/uaccess.h>
  #include <linux/device.h>
-@@ -1241,6 +1242,78 @@ static const struct file_operations ipq_pcs_dbg_fops = {
+@@ -1241,6 +1243,78 @@ static const struct file_operations ipq_pcs_dbg_fops = {
  	.llseek	= noop_llseek,
  };
  
@@ -99,7 +93,7 @@ index 50f34ac..4cfb20e 100644
  static void ipq_pcs_link_up(struct phylink_pcs *pcs,
  			    unsigned int neg_mode,
  			    phy_interface_t interface,
-@@ -1562,6 +1635,8 @@ static int ipq9574_pcs_probe(struct platform_device *pdev)
+@@ -1562,6 +1636,8 @@ static int ipq9574_pcs_probe(struct platform_device *pdev)
  		ipq_pcs_dbg = qpcs;
  		debugfs_create_file("ipq_pcs0_ctl", 0200, NULL, NULL,
  				    &ipq_pcs_dbg_fops);
