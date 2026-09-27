@@ -5,6 +5,9 @@
 # measure the error counters, keep what helps, undo what does not, and stop
 # as soon as the lane is clean. Everything goes to /tmp/prbs-sweep.log.
 #
+# NOT VALIDATED YET: run the PRBS31 pattern on stock first and make sure the
+# counters read zero there; otherwise the "clean" criterion is meaningless.
+#
 # Candidates are the registers that differ between stock and OpenWrt on the
 # same failing board (zerc00l's dumps), set to their stock values. Nothing
 # here touches flash; a reboot undoes everything.
@@ -54,8 +57,10 @@ chip_r() {	# chip_r <mdio> <mmd> <reg> -> hex value
 	newlines | sed -n "s/.*debug: r $1 m$2 $(printf 0x%04x $(($3))) = \(0x[0-9a-f]*\).*/\1/p" | tail -1
 }
 
-# PRBS31: chip transmits, SoC checks; SoC transmits, chip checks. Both at once.
-prbs_on()  { chip_w 7 3 0x2a 0x0030; soc_w 0x3002a 0x0030; }
+# PRBS31 both ways at once: test-pattern TX/RX enable (bits 2, 3) plus the
+# PRBS31 TX/RX selects (bits 4, 5). With bits 4 and 5 alone the counters read
+# 0xffff even on stock where the link works, so that variant measures nothing.
+prbs_on()  { chip_w 7 3 0x2a 0x003c; soc_w 0x3002a 0x003c; }
 prbs_off() { chip_w 7 3 0x2a 0x0000; soc_w 0x3002a 0x0000; }
 
 # measure -> sets ERR_SOC ERR_CHIP (errors in one window, clear-on-read)
