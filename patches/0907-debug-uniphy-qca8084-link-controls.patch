@@ -1,0 +1,421 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: pcs/phy: debug controls for the BE7000 UNIPHY <-> QCA8084 link
+
+Test builds only. On failing BE7000 boards the QCA8084 now locks to the
+SoC's 10GBASE-R stream, but the SoC never gets even block lock on the
+stream coming back (XPCS_KR_STS 0xc). To compare a failing board with a
+working one and try setup variants without reflashing:
+
+- when a side stays unlocked, its registers are dumped to the kernel log
+  (UNIPHY mode/MISC2/LOS/PLL/calibration and XPCS status/control on the
+  SoC; SerDes PLL/CDR/calibration/mode and XPCS status/control/channels
+  on the QCA8084);
+- /sys/kernel/debug/ipq_pcs0_ctl takes "dump", "xpcs" (redo the XPCS part
+  without waiting for lock) and "mode" (redo the whole UNIPHY mode setup);
+- /sys/kernel/debug/qca8084_ctl takes "dump", "xpcs", "full" (whole
+  SerDes + XPCS setup) and "ephy" (soft reset of the four copper PHYs, a
+  step SSDK does after releasing the XPCS that the driver skips).
+
+Only registers known to exist are read, the direct UNIPHY window is
+0x10000 bytes.
+---
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+index a577ae8..380ed53 100644
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -5,6 +5,8 @@
+ 
+ #include <linux/clk.h>
+ #include <linux/clk-provider.h>
++#include <linux/debugfs.h>
++#include <linux/uaccess.h>
+ #include <linux/device.h>
+ #include <linux/mutex.h>
+ #include <linux/of.h>
+@@ -904,6 +906,52 @@ static void ipq_pcs_an_restart(struct phylink_pcs *pcs)
+ 	/* Currently not used */
+ }
+ 
++/* Debug: log the UNIPHY and XPCS registers the USXGMII/QXGMII bring-up
++ * touches. Only registers known to exist are read: the direct window is
++ * 0x10000 bytes, and the XPCS ones go through the indirect window.
++ */
++static void ipq_pcs_dump(struct ipq_pcs *qpcs, const char *why)
++{
++	static const struct {
++		const char *name;
++		unsigned int reg;
++	} regs[] = {
++		{ "MODE_CTRL",	PCS_MODE_CTRL },
++		{ "MISC2",	PCS_MISC2 },
++		{ "LINK_DETECT", PCS_LINK_DETECT },
++		{ "PLL_RESET",	PCS_PLL_RESET },
++		{ "CALIBRATION", PCS_CALIBRATION },
++		{ "QP_USXG_OPT", PCS_QP_USXG_OPTION },
++		{ "CLKOUT_50M",	PCS_CLKOUT_50M_CTRL },
++		{ "XPCS_STS1",	0x30001 },
++		{ "XPCS_KR_STS1", XPCS_KR_STS },
++		{ "XPCS_KR_STS2", 0x30021 },
++		{ "XPCS_DIG_CTRL1", XPCS_DIG_CTRL },
++		{ "XPCS_KR_CTRL", XPCS_KR_CTRL },
++		{ "XPCS_DIG_STS", XPCS_DIG_STS },
++	};
++	unsigned int val, c, a, st, x;
++	int i;
++
++	dev_info(qpcs->dev, "register dump (%s), interface %s\n", why,
++		 phy_modes(qpcs->interface));
++	for (i = 0; i < ARRAY_SIZE(regs); i++) {
++		val = 0;
++		regmap_read(qpcs->regmap, regs[i].reg, &val);
++		dev_info(qpcs->dev, "  %-15s 0x%06x=0x%08x\n", regs[i].name,
++			 regs[i].reg, val);
++	}
++	for (i = 0; i < 4; i++) {
++		c = a = st = x = 0;
++		regmap_read(qpcs->regmap, i ? XPCS_MII1_CTRL(i) : XPCS_MII_CTRL, &c);
++		regmap_read(qpcs->regmap, i ? XPCS_MII1_AN_CTRL(i) : XPCS_MII_AN_CTRL, &a);
++		regmap_read(qpcs->regmap, i ? XPCS_MII1_AN_INTR_STS(i) : XPCS_MII_AN_INTR_STS, &st);
++		regmap_read(qpcs->regmap, i ? XPCS_MII1_XAUI_MODE_CTRL(i) : XPCS_XAUI_MODE_CTRL, &x);
++		dev_info(qpcs->dev, "  MII%d CTRL=0x%04x AN_CTRL=0x%04x AN_STS=0x%04x XAUI=0x%04x\n",
++			 i, c, a, st, x);
++	}
++}
++
+ /* Program the XPCS part of the USXGMII/QXGMII setup, as done in
+  * ipq_pcs_config_usxgmii() once the mode is set.
+  */
+@@ -949,23 +997,26 @@ static int ipq_pcs_xpcs_setup(struct ipq_pcs *qpcs, phy_interface_t interface)
+  * per-channel speed is programmed.
+  */
+ static void ipq_pcs_xpcs_redo(struct ipq_pcs *qpcs, int index,
+-			      phy_interface_t interface)
++			      phy_interface_t interface, bool force)
+ {
+ 	unsigned int val;
+ 	int ret, i;
+ 
+ 	mutex_lock(&qpcs->redo_lock);
+-	if (!qpcs->xpcs_redo)
++	if (!qpcs->xpcs_redo && !force)
+ 		goto out;
+ 
+-	ret = regmap_read_poll_timeout(qpcs->regmap, XPCS_KR_STS, val,
+-				       val & XPCS_KR_LINK_STS,
+-				       10000, 1000000);
+-	if (ret) {
+-		dev_warn(qpcs->dev,
+-			 "%s: 10GBASE-R from PHY still not locked (0x%x), nothing will be received yet\n",
+-			 phy_modes(interface), val);
+-		goto out;
++	if (!force) {
++		ret = regmap_read_poll_timeout(qpcs->regmap, XPCS_KR_STS, val,
++					       val & XPCS_KR_LINK_STS,
++					       10000, 1000000);
++		if (ret) {
++			dev_warn(qpcs->dev,
++				 "%s: 10GBASE-R from PHY still not locked (0x%x), nothing will be received yet\n",
++				 phy_modes(interface), val);
++			ipq_pcs_dump(qpcs, "10GBASE-R not locked");
++			goto out;
++		}
+ 	}
+ 
+ 	ret = ipq_pcs_xpcs_setup(qpcs, interface);
+@@ -1008,6 +1059,58 @@ out:
+ 	mutex_unlock(&qpcs->redo_lock);
+ }
+ 
++/* Debug: echo dump|xpcs|mode > /sys/kernel/debug/ipq_pcs0_ctl
++ * dump  log the UNIPHY and XPCS registers
++ * xpcs  redo the XPCS part and the per-channel setup, no lock wait
++ * mode  redo the whole UNIPHY mode setup (resets, PLL, calibration), then xpcs
++ * Results go to the kernel log.
++ */
++static struct ipq_pcs *ipq_pcs_dbg;
++
++static ssize_t ipq_pcs_dbg_write(struct file *file, const char __user *ubuf,
++				 size_t len, loff_t *ppos)
++{
++	struct ipq_pcs *qpcs = ipq_pcs_dbg;
++	phy_interface_t interface;
++	unsigned int val = 0;
++	char buf[16];
++	size_t n = min(len, sizeof(buf) - 1);
++	int ret = 0;
++
++	if (!qpcs)
++		return -ENODEV;
++	if (copy_from_user(buf, ubuf, n))
++		return -EFAULT;
++	buf[n] = 0;
++
++	interface = qpcs->interface;
++	if (sysfs_streq(buf, "dump")) {
++		ipq_pcs_dump(qpcs, "manual");
++		return len;
++	} else if (sysfs_streq(buf, "xpcs")) {
++		ipq_pcs_xpcs_redo(qpcs, -1, interface, true);
++	} else if (sysfs_streq(buf, "mode")) {
++		ret = ipq_pcs_config_mode(qpcs, interface);
++		dev_info(qpcs->dev, "debug: mode setup again: %d\n", ret);
++		ipq_pcs_xpcs_redo(qpcs, -1, interface, true);
++	} else {
++		return -EINVAL;
++	}
++
++	regmap_read(qpcs->regmap, XPCS_KR_STS, &val);
++	dev_info(qpcs->dev, "debug: %s done, 10GBASE-R from PHY %s (0x%x)\n", buf,
++		 (val & XPCS_KR_LINK_STS) ? "locked" : "not locked", val);
++	ipq_pcs_dump(qpcs, buf);
++	return len;
++}
++
++static const struct file_operations ipq_pcs_dbg_fops = {
++	.owner	= THIS_MODULE,
++	.open	= simple_open,
++	.write	= ipq_pcs_dbg_write,
++	.llseek	= noop_llseek,
++};
++
+ static void ipq_pcs_link_up(struct phylink_pcs *pcs,
+ 			    unsigned int neg_mode,
+ 			    phy_interface_t interface,
+@@ -1031,7 +1134,7 @@ static void ipq_pcs_link_up(struct phylink_pcs *pcs,
+ 		break;
+ 	case PHY_INTERFACE_MODE_USXGMII:
+ 	case PHY_INTERFACE_MODE_10G_QXGMII:
+-		ipq_pcs_xpcs_redo(qpcs, index, interface);
++		ipq_pcs_xpcs_redo(qpcs, index, interface, false);
+ 		ret = ipq_pcs_link_up_config_usxgmii(qpcs, index, speed);
+ 		if (!ret)
+ 			qpcs_mii->speed = speed;
+@@ -1325,6 +1428,12 @@ static int ipq9574_pcs_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		return ret;
+ 
++	if (!ipq_pcs_dbg) {
++		ipq_pcs_dbg = qpcs;
++		debugfs_create_file("ipq_pcs0_ctl", 0200, NULL, NULL,
++				    &ipq_pcs_dbg_fops);
++	}
++
+ 	platform_set_drvdata(pdev, qpcs);
+ 
+ 	return 0;
+diff --git a/drivers/net/phy/qcom/qca8084_serdes.c b/drivers/net/phy/qcom/qca8084_serdes.c
+index d4b9013..9cfbc29 100644
+--- a/drivers/net/phy/qcom/qca8084_serdes.c
++++ b/drivers/net/phy/qcom/qca8084_serdes.c
+@@ -661,6 +661,48 @@ int qca8084_qxgmii_xpcs_redo(struct mdio_device *xpcs_mdiodev)
+ 	return qca8084_xpcs_set_mode(xpcs_mdiodev);
+ }
+ 
++/* Debug: run the XPCS part of the setup without waiting for BaseR. */
++int qca8084_qxgmii_xpcs_setup(struct mdio_device *xpcs_mdiodev)
++{
++	return qca8084_xpcs_set_mode(xpcs_mdiodev);
++}
++
++/* Debug: log the SerDes (PCS) and XPCS registers that the 10G-QXGMII
++ * bring-up touches, so a failing board can be compared with a working one.
++ */
++void qca8084_qxgmii_dump(struct mdio_device *xpcs_mdiodev,
++			 struct mdio_device *pcs_mdiodev, const char *why)
++{
++	static const u16 pcs_mmd1[] = { 0x20, 0x78, 0x11b, 0x180, 0x189, 0x18c };
++	static const u16 xpcs_mmd3[] = { 0x1, 0x7, 0x20, 0x21, 0x8000, 0x8007, 0x800a };
++	int i, ch;
++
++	dev_info(&xpcs_mdiodev->dev, "QCA8084 register dump (%s)\n", why);
++	dev_info(&pcs_mdiodev->dev, "  PCS c22 0x00=0x%04x 0x06=0x%04x\n",
++		 mdiodev_read(pcs_mdiodev, 0) & 0xffff,
++		 mdiodev_read(pcs_mdiodev, 6) & 0xffff);
++	for (i = 0; i < ARRAY_SIZE(pcs_mmd1); i++)
++		dev_info(&pcs_mdiodev->dev, "  PCS mmd1 0x%04x=0x%04x\n", pcs_mmd1[i],
++			 mdiodev_c45_read(pcs_mdiodev, MDIO_MMD_PMAPMD,
++					  pcs_mmd1[i]) & 0xffff);
++	for (i = 0; i < ARRAY_SIZE(xpcs_mmd3); i++)
++		dev_info(&xpcs_mdiodev->dev, "  XPCS mmd3 0x%04x=0x%04x\n", xpcs_mmd3[i],
++			 mdiodev_c45_read(xpcs_mdiodev, MDIO_MMD_PCS,
++					  xpcs_mmd3[i]) & 0xffff);
++	for (ch = 0; ch < QCA8084_CHANNEL_MAX; ch++) {
++		int mmd = qca8084_xpcs_ch_mmd[ch];
++
++		dev_info(&xpcs_mdiodev->dev,
++			 "  XPCS ch%d 0x0=0x%04x 0x1=0x%04x 0x8001=0x%04x 0x8002=0x%04x 0x8004=0x%04x\n",
++			 ch,
++			 mdiodev_c45_read(xpcs_mdiodev, mmd, 0x0) & 0xffff,
++			 mdiodev_c45_read(xpcs_mdiodev, mmd, 0x1) & 0xffff,
++			 mdiodev_c45_read(xpcs_mdiodev, mmd, 0x8001) & 0xffff,
++			 mdiodev_c45_read(xpcs_mdiodev, mmd, 0x8002) & 0xffff,
++			 mdiodev_c45_read(xpcs_mdiodev, mmd, 0x8004) & 0xffff);
++	}
++}
++
+ int qca8084_qxgmii_set_mode(struct mdio_device *xpcs_mdiodev,
+ 			    struct mdio_device *pcs_mdiodev)
+ {
+diff --git a/drivers/net/phy/qcom/qca8084_serdes.h b/drivers/net/phy/qcom/qca8084_serdes.h
+index efaa83b..2fcc22d 100644
+--- a/drivers/net/phy/qcom/qca8084_serdes.h
++++ b/drivers/net/phy/qcom/qca8084_serdes.h
+@@ -19,6 +19,9 @@ int qca8084_qxgmii_set_mode(struct mdio_device *xpcs_mdiodev,
+ 			    struct mdio_device *pcs_mdiodev);
+ bool qca8084_qxgmii_baser_up(struct mdio_device *xpcs_mdiodev);
+ int qca8084_qxgmii_xpcs_redo(struct mdio_device *xpcs_mdiodev);
++int qca8084_qxgmii_xpcs_setup(struct mdio_device *xpcs_mdiodev);
++void qca8084_qxgmii_dump(struct mdio_device *xpcs_mdiodev,
++			 struct mdio_device *pcs_mdiodev, const char *why);
+ void qca8084_qxgmii_set_speed(struct mdio_device *xpcs_mdiodev,
+ 			      struct mdio_device *pcs_mdiodev,
+ 			      int channel, int speed);
+diff --git a/drivers/net/phy/qcom/qca808x.c b/drivers/net/phy/qcom/qca808x.c
+index f63cff6..2b2b76b 100644
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -5,6 +5,8 @@
+ #include <linux/of.h>
+ #include <linux/reset.h>
+ #include <linux/clk.h>
++#include <linux/debugfs.h>
++#include <linux/uaccess.h>
+ #include <dt-bindings/net/qcom,qca808x.h>
+ 
+ #include "../phylib.h"
+@@ -242,6 +244,12 @@ struct qca808x_shared_priv {
+ /* Serialises the XPCS redo between the four PHYs of a package. */
+ static DEFINE_MUTEX(qca8084_xpcs_redo_lock);
+ 
++/* Debug access to the one QCA8084 package on the board, see qca8084_ctl */
++static struct qca808x_shared_priv *qca8084_dbg_shared;
++static struct phy_device *qca8084_dbg_phy[4];
++static struct dentry *qca8084_dbg_dentry;
++static const struct file_operations qca8084_dbg_fops;
++
+ /* Testing only: redo the XPCS setup on the first link up even when BaseR
+  * was already locked at attach time.
+  */
+@@ -1096,6 +1104,11 @@ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
+ 
+ 		shared_priv->xpcs_redo = force_xpcs_redo ||
+ 			!qca8084_qxgmii_baser_up(shared_priv->mdiodev[1]);
++		qca8084_dbg_shared = shared_priv;
++		if (!qca8084_dbg_dentry)
++			qca8084_dbg_dentry = debugfs_create_file("qca8084_ctl", 0200,
++								 NULL, NULL,
++								 &qca8084_dbg_fops);
+ 		if (shared_priv->xpcs_redo)
+ 			phydev_info(phydev, "QXGMII XPCS set up without BaseR lock, will redo it on first link up\n");
+ 	}
+@@ -1108,8 +1121,13 @@ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
+ 
+ static int qca8084_config_init(struct phy_device *phydev)
+ {
++	struct qca808x_priv *dbg_priv = phydev->priv;
+ 	int ret;
+ 
++	if (dbg_priv && dbg_priv->has_channel_id &&
++	    dbg_priv->channel_id >= 0 && dbg_priv->channel_id < 4)
++		qca8084_dbg_phy[dbg_priv->channel_id] = phydev;
++
+ 	if (phy_package_init_once(phydev)) {
+ 		ret = qca8084_phy_package_config_init_once(phydev);
+ 		if (ret)
+@@ -1204,6 +1222,9 @@ static void qca8084_link_change_notify(struct phy_device *phydev)
+ 			if (ret) {
+ 				phydev_warn(phydev, "QXGMII BaseR still not locked (%d), nothing will be received on this package yet\n",
+ 					    ret);
++				qca8084_qxgmii_dump(shared_priv->mdiodev[1],
++						    shared_priv->mdiodev[0],
++						    "BaseR still not locked");
+ 			} else {
+ 				shared_priv->xpcs_redo = false;
+ 				phydev_info(phydev, "QXGMII BaseR locked, XPCS set up again\n");
+@@ -1395,6 +1416,86 @@ static void qca8084_remove(struct phy_device *phydev)
+ 		qca8084_phy_package_remove_once(phydev);
+ }
+ 
++/* Debug: echo dump|xpcs|full|ephy > /sys/kernel/debug/qca8084_ctl
++ * dump  log the SerDes and XPCS registers
++ * xpcs  run the XPCS part of the 10G-QXGMII setup again (no BaseR wait)
++ * full  run the whole package SerDes + XPCS setup again
++ * ephy  soft reset the four copper PHYs, as SSDK does after XPCS release
++ * Results go to the kernel log.
++ */
++static void qca8084_dbg_restore_speeds(struct qca808x_shared_priv *sp)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(sp->ch_speed); i++)
++		if (sp->ch_speed[i] != SPEED_UNKNOWN)
++			qca8084_qxgmii_set_speed(sp->mdiodev[1], sp->mdiodev[0],
++						 i, sp->ch_speed[i]);
++}
++
++static ssize_t qca8084_dbg_write(struct file *file, const char __user *ubuf,
++				 size_t len, loff_t *ppos)
++{
++	struct qca808x_shared_priv *sp = qca8084_dbg_shared;
++	char buf[16];
++	size_t n = min(len, sizeof(buf) - 1);
++	int ret = 0, i;
++
++	if (!sp)
++		return -ENODEV;
++	if (copy_from_user(buf, ubuf, n))
++		return -EFAULT;
++	buf[n] = 0;
++
++	if (sysfs_streq(buf, "dump")) {
++		qca8084_qxgmii_dump(sp->mdiodev[1], sp->mdiodev[0], "manual");
++		return len;
++	}
++
++	if (sysfs_streq(buf, "ephy")) {
++		for (i = 0; i < ARRAY_SIZE(qca8084_dbg_phy); i++) {
++			struct phy_device *phydev = qca8084_dbg_phy[i];
++
++			if (!phydev)
++				continue;
++			mutex_lock(&phydev->lock);
++			ret = genphy_soft_reset(phydev);
++			if (!ret && phydev->drv->config_init)
++				ret = phydev->drv->config_init(phydev);
++			mutex_unlock(&phydev->lock);
++			phydev_info(phydev, "debug: copper PHY soft reset: %d\n", ret);
++			phy_start_aneg(phydev);
++		}
++		return len;
++	}
++
++	mutex_lock(&qca8084_xpcs_redo_lock);
++	if (sysfs_streq(buf, "xpcs"))
++		ret = qca8084_qxgmii_xpcs_setup(sp->mdiodev[1]);
++	else if (sysfs_streq(buf, "full"))
++		ret = qca8084_qxgmii_set_mode(sp->mdiodev[1], sp->mdiodev[0]);
++	else
++		ret = -EINVAL;
++	if (ret != -EINVAL)
++		qca8084_dbg_restore_speeds(sp);
++	mutex_unlock(&qca8084_xpcs_redo_lock);
++
++	if (ret == -EINVAL)
++		return -EINVAL;
++
++	dev_info(&sp->mdiodev[1]->dev, "debug: %s setup again: %d, BaseR %s\n",
++		 buf, ret, qca8084_qxgmii_baser_up(sp->mdiodev[1]) ? "locked" : "not locked");
++	qca8084_qxgmii_dump(sp->mdiodev[1], sp->mdiodev[0], buf);
++	return len;
++}
++
++static const struct file_operations qca8084_dbg_fops = {
++	.owner	= THIS_MODULE,
++	.open	= simple_open,
++	.write	= qca8084_dbg_write,
++	.llseek	= noop_llseek,
++};
++
+ static struct phy_driver qca808x_driver[] = {
+ {
+ 	/* Qualcomm QCA8081 */
