@@ -37,6 +37,8 @@ env:
   OWRT_BRANCH: xiaomi_be7000
   OWRT_COMMIT: 790d036a
   VERSION_STRING: r20260623-790d036a
+  # The toolchain cache takes ~5 GB of the 10 GB Actions cache quota.
+  CCACHE_MAXSIZE: 2G
   ARCH: aarch64_cortex-a73
   TARGET: qualcommbe/ipq95xx
   DEVICE: openwrt-qualcommbe-ipq95xx-xiaomi_be7000
@@ -142,7 +144,10 @@ jobs:
           cp ../repo/config.buildinfo .config
           echo "CONFIG_SIGNED_PACKAGES=y" >> .config
           echo "CONFIG_SIGNATURE_CHECK=y" >> .config
-          # compiler cache between runs, see the ccache step below
+          # compiler cache between runs, see the ccache step below. CCACHE
+          # only exists under DEVEL ("Use ccache" if DEVEL); without it
+          # defconfig silently drops the option and nothing is ever cached.
+          echo "CONFIG_DEVEL=y" >> .config
           echo "CONFIG_CCACHE=y" >> .config
           case "${{ github.ref_name }}:${{ inputs.warm }}" in
             debug-*|*:true) echo "CONFIG_PACKAGE_tcpdump-mini=y" >> .config ;;
@@ -162,6 +167,7 @@ jobs:
               ;;
           esac
           echo "packages as modules: $(grep -c '=m$' .config)"
+          grep -q '^CONFIG_CCACHE=y' .config || { echo "::error::CONFIG_CCACHE did not survive defconfig"; exit 1; }
 
       # The toolchain and the kernel do not change between runs while the port
       # commit is pinned, so keep them. This is the difference between three
