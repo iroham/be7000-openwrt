@@ -24,6 +24,11 @@ name: Build
 
 on:
   workflow_dispatch:
+    inputs:
+      warm:
+        description: "Only warm the compiler cache for debug-* builds (image as a debug build does, no feed, no release)"
+        type: boolean
+        default: false
   push:
     tags: ["v*", "debug-*"]
 
@@ -39,8 +44,12 @@ env:
 permissions:
   contents: write
 
+# Caches saved by a tag run are visible to that tag only, so every debug-*
+# tag used to start with an empty ccache and rebuild the kernel from scratch.
+# A warm run on main saves one every ref can restore; it publishes nothing,
+# so it does not have to queue behind feed and release runs.
 concurrency:
-  group: build
+  group: build-${{ inputs.warm && 'warm' || 'publish' }}
   cancel-in-progress: false
 
 jobs:
@@ -135,8 +144,8 @@ jobs:
           echo "CONFIG_SIGNATURE_CHECK=y" >> .config
           # compiler cache between runs, see the ccache step below
           echo "CONFIG_CCACHE=y" >> .config
-          case "${{ github.ref_name }}" in
-            debug-*) echo "CONFIG_PACKAGE_tcpdump-mini=y" >> .config ;;
+          case "${{ github.ref_name }}:${{ inputs.warm }}" in
+            debug-*|*:true) echo "CONFIG_PACKAGE_tcpdump-mini=y" >> .config ;;
           esac
           make defconfig
           # A debug-* build only has to produce the image: nothing it builds
@@ -146,8 +155,8 @@ jobs:
           # kmod-* stay =m: selected kmods feed the kernel config, so dropping
           # them would change the kernel hash (vermagic) and the debug image
           # could no longer install modules from the release feed.
-          case "${{ github.ref_name }}" in
-            debug-*)
+          case "${{ github.ref_name }}:${{ inputs.warm }}" in
+            debug-*|*:true)
               sed -i '/^CONFIG_PACKAGE_kmod-/!s/^\(CONFIG_PACKAGE_[^=]*\)=m$/# \1 is not set/' .config
               make defconfig
               ;;
@@ -237,7 +246,7 @@ jobs:
           test -L build_dir/target-*/root-qualcommbe/etc/rc.d/S99be7000-bootconfirm
 
       - name: Publish the feed
-        if: "!startsWith(github.ref, 'refs/tags/debug-')"
+        if: "!startsWith(github.ref, 'refs/tags/debug-') && !inputs.warm"
         run: |
           git clone --branch gh-pages --single-branch \
             "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" pages
