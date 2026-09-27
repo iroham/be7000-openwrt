@@ -1,0 +1,32 @@
+Move the QCA8084 reset GPIO from the MDIO bus node to the chip's clock
+controller node, where the binding (qcom,qca8k-nsscc.yaml) requires it.
+On &mdio the MDIO core pulses the line for 10 us before the bus scan,
+before the ETH0_50MHZ reference clock is enabled, and the nsscc driver,
+which enables that clock and then holds the reset for 100 ms ("the
+reference clock of QCA8k NSSCC needs to be enabled to make sure the GPIO
+reset taking effect"), finds no GPIO and does nothing. The stock firmware
+resets the chip with the reference clock running, and the Alta Labs
+Route10 (same IPQ9574 + QCA8084) carries the same comment about a chip
+left half-initialized when the reset sits on &mdio.
+--- a/target/linux/qualcommbe/dts/ipq9574-be7000.dts
++++ b/target/linux/qualcommbe/dts/ipq9574-be7000.dts
+@@ -615,11 +615,18 @@
+ &mdio {
+ 	status = "okay";
+ 	clock-frequency = <6250000>;
+-	reset-gpios = <&tlmm 60 GPIO_ACTIVE_LOW>;
+ 
++	/*
++	 * The QCA8084 reset lives here, not on &mdio: the nsscc driver
++	 * enables the ETH0_50MHZ reference clock and then holds the reset
++	 * for 100 ms, which is what makes the chip's internal reset take
++	 * effect. On &mdio the line is only pulsed for 10 us before the
++	 * bus scan, with the reference clock still off.
++	 */
+ 	qca8k_nsscc: clock-controller@18 {
+ 		compatible = "qcom,qca8084-nsscc";
+ 		reg = <0x18>;
++		reset-gpios = <&tlmm 60 GPIO_ACTIVE_LOW>;
+ 		clocks = <&cmn_pll ETH0_50MHZ_CLK>,
+ 			 <0>,
+ 			 <0>,
