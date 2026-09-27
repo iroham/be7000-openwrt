@@ -34,6 +34,18 @@ function stack_dir(name) {
 	return `${STACKS}/${name}`;
 }
 
+// mkdir -p: fs.mkdir() makes one level and /etc/be7000-docker does not
+// exist on a fresh system, so the first stack used to end up nowhere.
+function ensure_dir(path) {
+	let cur = '';
+	for (let part in split(path, '/')) {
+		if (!length(part)) continue;
+		cur += '/' + part;
+		if (!stat(cur)) mkdir(cur, 0o755);
+	}
+	return stat(cur) != null;
+}
+
 function compose(name, verb) {
 	let dir = stack_dir(name);
 	if (!dir) return { ok: false, output: 'bad stack name' };
@@ -120,9 +132,10 @@ function method_stack_write() {
 			let name = req.args?.name ?? '';
 			let dir = stack_dir(name);
 			if (!dir) return { ok: false, output: 'bad stack name' };
-			mkdir(STACKS, 0o755);
-			mkdir(dir, 0o755);
-			writefile(`${dir}/docker-compose.yml`, req.args?.compose ?? '');
+			if (!ensure_dir(dir))
+				return { ok: false, output: `cannot create ${dir}` };
+			if (writefile(`${dir}/docker-compose.yml`, req.args?.compose ?? '') == null)
+				return { ok: false, output: `cannot write ${dir}/docker-compose.yml` };
 			return { ok: true, output: `saved ${name}` };
 		}
 	};
