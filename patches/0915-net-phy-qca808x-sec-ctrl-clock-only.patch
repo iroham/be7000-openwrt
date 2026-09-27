@@ -1,0 +1,49 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: phy: qca808x: only the security-control clock ahead of the config writes
+
+0912 enabled all package clocks before the work mode write. That does
+not work: nss_cc_apb_bridge_clk runs from the switch core source, which
+is fed by the QCA8084 SerDes clock, and the SerDes is only set up later
+in the same function. The enable fails with "status stuck at 'off'",
+config_init returns -EBUSY and the PPE driver never probes (BE7000 test
+build uniphy9: no Ethernet at all).
+
+Keep the original order and turn on just nss_cc_sec_ctrl_ahb_clk, which
+runs from the AHB source that the critical AHB branches already keep
+up, before the WORK_MODE_CFG and EPHY_CFG writes; the package clock
+init at the end stays as it was.
+
+diff --git a/drivers/net/phy/qcom/qca808x.c b/drivers/net/phy/qcom/qca808x.c
+index c766173..3601bfd 100644
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -1130,11 +1130,14 @@ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
+ 	/* The work mode and EPHY_CFG registers below sit in the security
+ 	 * control block, clocked by nss_cc_sec_ctrl_ahb_clk. Nothing holds
+ 	 * that clock before this point, so clk_disable_unused() has gated it
+-	 * by the time we get here and the writes are dropped: on a failing
++	 * by the time we get here and the writes were dropped: on a failing
+ 	 * BE7000 the work mode still read the reset default (0x3f, switch
+-	 * bit set) long after this ran. Enable the package clocks first.
++	 * bit set) long after this ran. Only this clock is turned on early:
++	 * it runs from the AHB source that is already up, while the rest of
++	 * the package clocks (APB bridge, switch core) hang off the SerDes
++	 * clock and cannot be enabled before the SerDes is set up below.
+ 	 */
+-	ret = qca8084_package_clock_init(shared_priv);
++	ret = clk_prepare_enable(shared_priv->clk[SEC_CTRL_AHB_CLK]);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -1194,7 +1197,10 @@ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
+ 			phydev_info(phydev, "QXGMII XPCS set up without BaseR lock, will redo it on first link up\n");
+ 	}
+ 
+-	return 0;
++	/* Initialize the PHY package clock and reset, which is the
++	 * necessary config sequence after GPIO reset on the PHY package.
++	 */
++	return qca8084_package_clock_init(shared_priv);
+ }
+ 
+ static int qca8084_config_init(struct phy_device *phydev)
