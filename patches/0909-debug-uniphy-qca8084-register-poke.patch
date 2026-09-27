@@ -1,0 +1,133 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: pcs/phy: debug register read/write for the BE7000 UNIPHY <-> QCA8084 link
+
+Test builds only. Stock and OpenWrt configure the same registers on a
+failing board; what differs are calibration results and the EEE timers
+only stock sets. Let testers try stock values by hand, without a new
+build per attempt:
+
+- /sys/kernel/debug/ipq_pcs0_ctl: "r <reg>" and "w <reg> <val>" (hex),
+  UNIPHY below 0x8000, XPCS from 0x10000, same addresses as
+  ipq_pcs0_regs prints. Logs the old and new value and the 10GBASE-R
+  lock state.
+- /sys/kernel/debug/qca8084_ctl: "r <mdio> <mmd> <reg>" and
+  "w <mdio> <mmd> <reg> <val>", mdio 6 = SerDes, 7 = XPCS, mmd 0 =
+  Clause 22, same as qca8084_regs prints.
+
+Also stop the forced XPCS redo from claiming "10GBASE-R from PHY locked"
+when it was only forced.
+
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+index 51135c0..7c38b03 100644
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -1054,8 +1054,12 @@ static void ipq_pcs_xpcs_redo(struct ipq_pcs *qpcs, int index,
+ 	}
+ 
+ 	qpcs->xpcs_redo = false;
+-	dev_info(qpcs->dev, "%s: 10GBASE-R from PHY locked, XPCS set up again\n",
+-		 phy_modes(interface));
++	if (force)
++		dev_info(qpcs->dev, "%s: XPCS set up again (forced)\n",
++			 phy_modes(interface));
++	else
++		dev_info(qpcs->dev, "%s: 10GBASE-R from PHY locked, XPCS set up again\n",
++			 phy_modes(interface));
+ out:
+ 	mutex_unlock(&qpcs->redo_lock);
+ }
+@@ -1074,8 +1078,9 @@ static ssize_t ipq_pcs_dbg_write(struct file *file, const char __user *ubuf,
+ 	struct ipq_pcs *qpcs = ipq_pcs_dbg;
+ 	phy_interface_t interface;
+ 	unsigned int val = 0;
+-	char buf[16];
++	char buf[64];
+ 	size_t n = min(len, sizeof(buf) - 1);
++	unsigned int reg, wval;
+ 	int ret = 0;
+ 
+ 	if (!qpcs)
+@@ -1084,6 +1089,31 @@ static ssize_t ipq_pcs_dbg_write(struct file *file, const char __user *ubuf,
+ 		return -EFAULT;
+ 	buf[n] = 0;
+ 
++	/* "r <reg>" and "w <reg> <val>", hex, as ipq_pcs0_regs prints them:
++	 * UNIPHY registers below 0x8000 (32-bit aligned), XPCS registers from
++	 * 0x10000 up through the indirect window. 0x8000-0xffff would land in
++	 * the window with no valid XPCS address, so it is refused.
++	 */
++	if (sscanf(buf, "w %x %x", &reg, &wval) == 2 ||
++	    sscanf(buf, "r %x", &reg) == 1) {
++		bool write = buf[0] == 'w';
++
++		if (reg < 0x8000 ? (reg & 3) : reg < 0x10000)
++			return -EINVAL;
++		if (write) {
++			regmap_read(qpcs->regmap, reg, &val);
++			regmap_write(qpcs->regmap, reg, wval);
++			dev_info(qpcs->dev, "debug: w 0x%06x 0x%08x -> 0x%08x\n",
++				 reg, val, wval);
++		}
++		regmap_read(qpcs->regmap, reg, &val);
++		dev_info(qpcs->dev, "debug: r 0x%06x = 0x%08x\n", reg, val);
++		regmap_read(qpcs->regmap, XPCS_KR_STS, &val);
++		dev_info(qpcs->dev, "debug: 10GBASE-R from PHY %s (0x%x)\n",
++			 (val & XPCS_KR_LINK_STS) ? "locked" : "not locked", val);
++		return len;
++	}
++
+ 	interface = qpcs->interface;
+ 	if (sysfs_streq(buf, "dump")) {
+ 		ipq_pcs_dump(qpcs, "manual");
+diff --git a/drivers/net/phy/qcom/qca808x.c b/drivers/net/phy/qcom/qca808x.c
+index 4b3d138..43f2734 100644
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -1442,9 +1442,10 @@ static ssize_t qca8084_dbg_write(struct file *file, const char __user *ubuf,
+ 				 size_t len, loff_t *ppos)
+ {
+ 	struct qca808x_shared_priv *sp = qca8084_dbg_shared;
+-	char buf[16];
++	char buf[64];
+ 	size_t n = min(len, sizeof(buf) - 1);
+-	int ret = 0, i;
++	int ret = 0, i, addr, mmd;
++	unsigned int reg, wval;
+ 
+ 	if (!sp)
+ 		return -ENODEV;
+@@ -1452,6 +1453,34 @@ static ssize_t qca8084_dbg_write(struct file *file, const char __user *ubuf,
+ 		return -EFAULT;
+ 	buf[n] = 0;
+ 
++	/* "r <mdio> <mmd> <reg>" and "w <mdio> <mmd> <reg> <val>": mdio 6 is
++	 * the SerDes (PCS), 7 the XPCS; mmd 0 means Clause 22. Hex reg/val,
++	 * as qca8084_regs prints them.
++	 */
++	if (sscanf(buf, "w %d %d %x %x", &addr, &mmd, &reg, &wval) == 4 ||
++	    sscanf(buf, "r %d %d %x", &addr, &mmd, &reg) == 3) {
++		struct mdio_device *md = addr == 6 ? sp->mdiodev[0] :
++					 addr == 7 ? sp->mdiodev[1] : NULL;
++		bool write = buf[0] == 'w';
++		int v;
++
++		if (!md || mmd < 0 || mmd > 31 || reg > 0xffff ||
++		    (!mmd && reg > 0x1f) || (write && wval > 0xffff))
++			return -EINVAL;
++		v = mmd ? mdiodev_c45_read(md, mmd, reg) : mdiodev_read(md, reg);
++		if (write) {
++			ret = mmd ? mdiodev_c45_write(md, mmd, reg, wval) :
++				    mdiodev_write(md, reg, wval);
++			dev_info(&md->dev, "debug: w %d m%d 0x%04x 0x%04x -> 0x%04x: %d\n",
++				 addr, mmd, reg, v & 0xffff, wval, ret);
++			v = mmd ? mdiodev_c45_read(md, mmd, reg) : mdiodev_read(md, reg);
++		}
++		dev_info(&md->dev, "debug: r %d m%d 0x%04x = 0x%04x, BaseR %s\n",
++			 addr, mmd, reg, v & 0xffff,
++			 qca8084_qxgmii_baser_up(sp->mdiodev[1]) ? "locked" : "not locked");
++		return len;
++	}
++
+ 	if (sysfs_streq(buf, "dump")) {
+ 		qca8084_qxgmii_dump(sp->mdiodev[1], sp->mdiodev[0], "manual");
+ 		return len;
