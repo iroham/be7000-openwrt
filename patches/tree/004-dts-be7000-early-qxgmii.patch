@@ -1,0 +1,15 @@
+Bring UNIPHY0 up for 10G-QXGMII at PCS probe, before the QCA8084 package
+is configured, the order the vendor SSDK uses.
+--- a/target/linux/qualcommbe/dts/ipq9574-be7000.dts
++++ b/target/linux/qualcommbe/dts/ipq9574-be7000.dts
+@@ -985,6 +985,10 @@
+ 	status = "disabled";
+ };
+ 
++&pcs0 {
++	qcom,early-10g-qxgmii;
++};
++
+ &pcs2 {
+ 	status = "disabled";
+ };

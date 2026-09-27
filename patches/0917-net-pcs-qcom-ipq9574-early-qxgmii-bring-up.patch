@@ -1,0 +1,44 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: pcs: qcom-ipq9574: optional early 10G-QXGMII bring-up before the PHY package
+
+The vendor SSDK brings the SoC UNIPHY up first and configures the QCA8084
+package afterwards, when the SoC side already transmits. Two of its own
+commits (3c58ee12 "initialize manhattan after enabling miami uniphy",
+b729483c "configure mht uqxgmii when exit erp") describe the opposite
+order as "mht serdes 10g link up and xpcs uniphy autoneg timeout", which
+is what the failing BE7000 boards log: the QCA8084 locks, the SoC never
+does and its in-band AN times out. In this tree the PHY package is
+configured at PHY attach (about 12 s), the PCS only when phylink starts
+the port (about 23 s). A board that works had the UNIPHY still running
+from the previous boot at attach time.
+
+When the DT node carries qcom,early-10g-qxgmii, configure UNIPHY0 for
+10G-QXGMII at probe, so it transmits before the package is set up. The
+later phylink config sees the interface already set and only does the
+per-channel part.
+
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+index f500c9a..54cfdfe 100644
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -1642,6 +1642,20 @@ static int ipq9574_pcs_probe(struct platform_device *pdev)
+ 				    &ipq_pcs_regs_fops);
+ 	}
+ 
++	/* Vendor order. The SSDK brings the SoC UNIPHY up first and configures
++	 * the QCA8084 package only when the SoC side already transmits; its
++	 * own commits say the other way round "will see mht serdes 10g link up
++	 * and xpcs uniphy autoneg timeout", which is exactly what the failing
++	 * BE7000 boards log. Here the PHY package is configured at PHY attach,
++	 * long before phylink configures this PCS, so when the DT asks for it
++	 * bring UNIPHY0 up for 10G-QXGMII right away. phylink's later config
++	 * finds the interface already set and only does the per-channel part.
++	 */
++	if (of_property_read_bool(dev->of_node, "qcom,early-10g-qxgmii")) {
++		ret = ipq_pcs_config_usxgmii(qpcs, 0, PHY_INTERFACE_MODE_10G_QXGMII);
++		dev_info(dev, "early 10G-QXGMII bring-up before the PHY package: %d\n", ret);
++	}
++
+ 	platform_set_drvdata(pdev, qpcs);
+ 
+ 	return 0;
