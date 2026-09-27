@@ -1,0 +1,37 @@
+Going back to stock, and when something goes wrong
+
+Rollback from a running OpenWrt
+Copy rollback-to-stock.sh to the router, run it and reboot:
+
+scp -O rollback-to-stock.sh root@192.168.1.1:/tmp/
+ssh root@192.168.1.1 "sh /tmp/rollback-to-stock.sh && reboot"
+
+The script flashes nothing, it switches the boot slot to the other slot where stock is. OpenWrt stays in its slot. Stock comes up with its own settings. This works over Wi-Fi too.
+If stock came up with empty settings after going back (web interface without settings, SSH does not start, xmir-patcher says "dropbear is found, but it cannot run"), a version from 1.2 to 1.2.5 was installed before, those formatted the stock settings partition. A normal factory reset fixes it: hold the reset button for about ten seconds, or over telnet: nvram set restore_defaults=1 && nvram commit && reboot -f.
+MIWIFIRepairTool also brings stock back, nothing is lost with it either.
+
+If OpenWrt does not boot
+The installer from 1.2.3 on hands the slot over the same way a normal Xiaomi update does, and if OpenWrt did not come up, the very next power-on brings stock back.
+With older versions the bootloader switches the slot only on the seventh power-on in a row. Power off and on, and wait about thirty seconds after each power-on.
+Power cycling does not help once OpenWrt has booted successfully: it has confirmed its slot. Use the rollback script above.
+
+The router booted but does not answer
+First check the computer's address: 192.168.1.2 for OpenWrt, 192.168.31.2 for stock, mask 255.255.255.0, empty gateway. A common mistake is giving the computer the same address as the router.
+No wired network but Wi-Fi works: on some boards Ethernet does not work after flashing, this is being worked on. Connect over Wi-Fi (network OpenWrt-BE7000, password be7000openwrt), collect the output and post it in the thread or in a GitHub issue:
+
+dmesg | grep -i -E "10gbase-r|baser|xpcs|qca8084|link is"
+
+Failsafe mode: while the white LED blinks, press reset several times, the router comes up at 192.168.1.1 without settings and without a password. From there you can collect a log (logread, ip addr, dmesg).
+If you compared the partition with the image using mtd verify and the hashes differ, that is normal, ubiformat writes its own structure, the partition never matches the file byte for byte.
+
+Boot log in flash
+Since 1.2.4 the image writes its boot log to flash by itself: dmesg to the crash_syslog partition (mtd27), and if the kernel crashes, the last 64 KB of its output to crash (mtd26). Both can be read from stock. Back on stock, run over SSH or telnet
+
+dd if=/dev/mtd27 bs=64k 2>/dev/null | strings > /tmp/bootlog.txt
+dd if=/dev/mtd26 bs=64k 2>/dev/null | strings > /tmp/oops.txt
+
+and send these files. If the first one is empty, the system did not even reach preinit.
+
+Never do this
+Do not write anything to the bootloader partitions (APPSBL and APPSBL_1).
+The UART on the board is 1.8 V. Do not transmit into the console with a 3.3 V adapter. Reading is fine if you connect the board's TX to the adapter's RX and ground, it works most reliably with an FT232R.

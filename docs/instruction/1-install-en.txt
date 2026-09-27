@@ -1,0 +1,45 @@
+Installing from stock
+
+What you need first
+Root SSH on the stock firmware. If you don't have it, enable it with xmir-patcher. Set the root password there too, item 8, Other functions. Without it SSH will not accept the web interface password, and people got stuck on this. On Windows 10 and newer the built-in OpenSSH is enough, the commands below run in PowerShell or the normal command prompt. On Mac and Linux the same commands work in a terminal.
+The stock version does not matter. Installs worked from 1.1.16 and from 1.1.38, there is no need to update stock first.
+The stock address is 192.168.31.1, connect the computer by cable to a LAN port.
+
+About space for settings
+There is little room inside the slot, so on first boot OpenWrt keeps its settings and packages in the partition where stock keeps its settings, in a separate directory. That gives 19.4 MB instead of 7.4. The stock settings are not touched, after a rollback stock comes up with its own. If you want to stay at 7.4 MB, set the value in /etc/config/bigoverlay to 0 before the first boot.
+
+Step 1. Backup, do not start without it
+The most valuable partitions are ART (Wi-Fi calibration, the radios will not work without it) and bdata (MAC addresses and serial number). Save the bootloader and both slots too. First everything goes to /tmp on the router.
+
+ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.168.31.1 "for n in 17 18 19 20 25; do cat /dev/mtd$n > /tmp/mtd$n.bin; done"
+
+Then copy them to the computer one by one.
+
+scp -O -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.168.31.1:/tmp/mtd20.bin .
+
+Do the same for mtd17, mtd18, mtd19, mtd25. The slots mtd23 and mtd24 are 40 MB each. You can save them the same way, but one at a time, so /tmp has enough memory. Do not redirect ssh output straight into a file (the greater-than sign) in PowerShell, it corrupts binary data. That is why it goes through /tmp and scp.
+
+Step 2. Upload the image and the script
+
+scp -O -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi root@192.168.31.1:/tmp/openwrt.ubi
+scp -O -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa install-from-stock.sh root@192.168.31.1:/tmp/install-from-stock.sh
+
+Step 3. Check the checksum on the router
+
+ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.168.31.1 "openssl dgst -sha256 /tmp/openwrt.ubi"
+
+Compare it with sha256sums.txt. If it does not match, upload the image again and do not go further.
+
+Step 4. Install
+
+ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.168.31.1 "sh /tmp/install-from-stock.sh /tmp/openwrt.ubi reboot"
+
+The script checks which slot stock runs from, compares it with the boot flag, writes the image into the other slot and switches the boot slot. It does not touch the bootloader. If something does not add up, it stops and writes nothing. If OpenWrt does not come up, the next power-on brings stock back.
+
+Step 5. First login
+The first boot takes about a minute, at the end the LED is solid white. The router answers at 192.168.1.1, the root password is empty.
+Set the computer's address by hand: 192.168.1.2, mask 255.255.255.0, no gateway. Just not the same address as the router, then nothing works. If you leave automatic addressing on a Mac, it may send all traffic to the router, which has no internet yet.
+If it does not answer over the cable, try another LAN port or connect over Wi-Fi: network OpenWrt-BE7000, password be7000openwrt, same address.
+Open 192.168.1.1 in a browser (https works too) and change the root password right away, and the Wi-Fi password under Network, Wireless.
+
+Once the system has booted it confirms its slot to the bootloader. From then on you go back to stock with a command from OpenWrt, power cycling no longer does it. How, see 3-rollback-and-problems-en.txt.

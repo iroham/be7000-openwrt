@@ -10,11 +10,21 @@ Wi-Fi
 Накопитель на USB
 Команда be7000-extroot переносит /overlay на USB-диск целиком, со всеми проверками. В веб-интерфейсе это Система, Накопитель.
 
+be7000-extroot list
+be7000-extroot use /dev/sda1 --yes
+be7000-extroot status
+be7000-extroot revert --yes
+
+Подробнее, как устроено место под настройки, в docs/storage.md в репозитории.
+
 Docker
 Ставится одной командой, она сама найдёт подключённый диск и положит данные туда. По умолчанию докер пишет в /opt/docker, то есть во внутреннюю память, и первый же образ её забьёт.
 
 be7000-docker status
 be7000-docker setup --yes
+be7000-docker setup --data-root /mnt/usb/docker --yes
+
+Без аргументов она сама ищет смонтированный диск, где свободно хотя бы гигабайт, и прописывает data-root туда. Вживую докер на этой плате я пока не гонял.
 
 Контейнеры, образы, сети и тома в разделе Сервисы, Dockerman. Стеки docker-compose, готовые наборы в одно нажатие и уборка мусора в разделе Сервисы, Docker: стеки. Готовые стеки: Portainer, AdGuard Home, Uptime Kuma, Vaultwarden, qBittorrent, Nginx Proxy Manager, Home Assistant, Watchtower.
 
