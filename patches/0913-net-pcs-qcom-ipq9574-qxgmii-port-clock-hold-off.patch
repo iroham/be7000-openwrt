@@ -1,0 +1,150 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] net: pcs: qcom-ipq9574: hold off all channel clocks across a 10G-QXGMII reconfiguration
+
+The SSDK disables the rx/tx clocks of every channel of the UNIPHY before
+it resets and calibrates it, keeps the XPCS in reset meanwhile, and
+enables the clocks again afterwards. Upstream did the hold-off for the
+single USXGMII channel only; in 10G-QXGMII the four channel clocks kept
+running through the sys/soft reset, the PLL reset and the calibration.
+Track which channel clocks pcs_enable turned on and hold off exactly
+those, for the whole USXGMII family.
+
+Debug: the register dump decodes the CALIBRATION bits (done, PLL locked,
+CDR lock detect) and reads XPCS_KR_STS2 twice more, 100 ms apart, so the
+BER counter and errored-block count show whether the receiver sees a
+signal it cannot decode (a failing BE7000 shows 0x7f00: high BER latched,
+BER counter saturated) or nothing at all.
+
+diff --git a/drivers/net/pcs/pcs-qcom-ipq9574.c b/drivers/net/pcs/pcs-qcom-ipq9574.c
+index 066de84..50f34ac 100644
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -158,6 +158,10 @@ struct ipq_pcs_mii {
+ 
+ 	/* Speed of the last link up, 0 if none; replayed after an XPCS redo */
+ 	int speed;
++	/* rx_clk/tx_clk are on (pcs_enable ran), so a reconfiguration
++	 * has to hold them off and put them back.
++	 */
++	bool clk_on;
+ };
+ 
+ /* PCS private data */
+@@ -331,20 +335,39 @@ static bool ipq_pcs_usxg_family(phy_interface_t interface)
+ 	       interface == PHY_INTERFACE_MODE_10G_QXGMII;
+ }
+ 
+-/* Re-enable the port clocks held off across a USXGMII reconfiguration */
+-static int ipq_pcs_restore_port_clks(struct ipq_pcs *qpcs,
+-				     phy_interface_t interface)
++/* Hold off, or put back, the port clocks across a USXGMII family
++ * reconfiguration. The SSDK disables the rx/tx clocks of every channel
++ * of the UNIPHY before it resets and calibrates it and enables them again
++ * afterwards. Upstream did that for the single USXGMII channel only; with
++ * 10G-QXGMII the four channel clocks kept running through the reset.
++ */
++static int ipq_pcs_hold_port_clks(struct ipq_pcs *qpcs,
++				  phy_interface_t interface, bool hold)
+ {
+-	int ret;
++	int i, ret;
+ 
+-	if (interface != PHY_INTERFACE_MODE_USXGMII || !qpcs->qpcs_mii[0])
++	if (!ipq_pcs_usxg_family(interface))
+ 		return 0;
+ 
+-	ret = clk_prepare_enable(qpcs->qpcs_mii[0]->rx_clk);
+-	if (ret)
+-		return ret;
++	for (i = 0; i < PCS_MAX_MII_NRS; i++) {
++		struct ipq_pcs_mii *mii = qpcs->qpcs_mii[i];
++
++		if (!mii || !mii->clk_on)
++			continue;
++		if (hold) {
++			clk_disable_unprepare(mii->rx_clk);
++			clk_disable_unprepare(mii->tx_clk);
++			continue;
++		}
++		ret = clk_prepare_enable(mii->rx_clk);
++		if (ret)
++			return ret;
++		ret = clk_prepare_enable(mii->tx_clk);
++		if (ret)
++			return ret;
++	}
+ 
+-	return clk_prepare_enable(qpcs->qpcs_mii[0]->tx_clk);
++	return 0;
+ }
+ 
+ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+@@ -356,10 +379,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+ 	int ret;
+ 
+ 	/* The port clocks must be held off across the reconfiguration */
+-	if (interface == PHY_INTERFACE_MODE_USXGMII && qpcs->qpcs_mii[0]) {
+-		clk_disable_unprepare(qpcs->qpcs_mii[0]->rx_clk);
+-		clk_disable_unprepare(qpcs->qpcs_mii[0]->tx_clk);
+-	}
++	ipq_pcs_hold_port_clks(qpcs, interface, true);
+ 
+ 	/* Assert XPCS reset */
+ 	reset_control_assert(qpcs->xpcs_rstc);
+@@ -484,7 +504,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+ 	}
+ 
+ 	/* Re-enable the port clocks disabled at entry */
+-	ret = ipq_pcs_restore_port_clks(qpcs, interface);
++	ret = ipq_pcs_hold_port_clks(qpcs, interface, false);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -525,7 +545,7 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+ 
+ err_clk:
+ 	/* Best-effort restore of the clocks disabled at entry */
+-	ipq_pcs_restore_port_clks(qpcs, interface);
++	ipq_pcs_hold_port_clks(qpcs, interface, false);
+ 
+ 	return ret;
+ }
+@@ -825,6 +845,7 @@ static int ipq_pcs_enable(struct phylink_pcs *pcs)
+ 		dev_err(qpcs->dev, "Failed to enable MII %d TX clock\n", index);
+ 		return ret;
+ 	}
++	qpcs_mii->clk_on = true;
+ 
+ 	return 0;
+ }
+@@ -833,6 +854,7 @@ static void ipq_pcs_disable(struct phylink_pcs *pcs)
+ {
+ 	struct ipq_pcs_mii *qpcs_mii = phylink_pcs_to_qpcs_mii(pcs);
+ 
++	qpcs_mii->clk_on = false;
+ 	clk_disable_unprepare(qpcs_mii->rx_clk);
+ 	clk_disable_unprepare(qpcs_mii->tx_clk);
+ }
+@@ -944,6 +966,22 @@ static void ipq_pcs_dump(struct ipq_pcs *qpcs, const char *why)
+ 		dev_info(qpcs->dev, "  %-15s 0x%06x=0x%08x\n", regs[i].name,
+ 			 regs[i].reg, val);
+ 	}
++	/* CALIBRATION: bit 7 done, bit 6 PLL locked, bit 4 CDR lock detect */
++	val = 0;
++	regmap_read(qpcs->regmap, PCS_CALIBRATION, &val);
++	dev_info(qpcs->dev, "  calibration done=%u pll_locked=%u lockdet=%u\n",
++		 !!(val & BIT(7)), !!(val & BIT(6)), !!(val & BIT(4)));
++	/* KR_STS2 twice more: the first read above cleared the latched bits,
++	 * bits 13:8 are the BER counter, bits 7:0 errored blocks since then.
++	 */
++	for (i = 0; i < 2; i++) {
++		msleep(100);
++		val = 0;
++		regmap_read(qpcs->regmap, 0x30021, &val);
++		dev_info(qpcs->dev, "  XPCS_KR_STS2 after %d ms: 0x%04x (block_lock=%u high_ber=%u ber_cnt=%u err_blocks=%u)\n",
++			 (i + 1) * 100, val, !!(val & BIT(15)), !!(val & BIT(14)),
++			 (val >> 8) & 0x3f, val & 0xff);
++	}
+ 	for (i = 0; i < 4; i++) {
+ 		c = a = st = x = 0;
+ 		regmap_read(qpcs->regmap, i ? XPCS_MII1_CTRL(i) : XPCS_MII_CTRL, &c);
