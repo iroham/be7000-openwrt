@@ -18,6 +18,43 @@ MNT=/tmp/extroot.$$
 
 die() { echo "$*" >&2; exit 1; }
 
+# fstools reads the extroot entry from the fstab in the slot's own rootfs_data
+# volume, one level only. On this board /overlay normally lives on the shared
+# volume on mtd28 (bigoverlay), so a plain `uci commit fstab` lands there and
+# fstools never sees it. The entry has to go into rootfs_data as well.
+rootfs_data_dev() {
+	local n
+	for n in /sys/class/ubi/ubi*_*/name; do
+		[ -e "$n" ] || continue
+		[ "$(cat "$n")" = rootfs_data ] && { echo "/dev/$(basename "$(dirname "$n")")"; return 0; }
+	done
+	return 1
+}
+
+# Run "uci -c <dir> batch" with stdin on the config dir of rootfs_data. When
+# /overlay already is rootfs_data, that is the live /etc/config.
+with_rootfs_data() {
+	local dev dir mnt="" rc=0
+	dev="$(rootfs_data_dev)" || { echo "rootfs_data volume not found" >&2; return 1; }
+	if [ "$dev" = "$(current_overlay_device)" ]; then
+		uci -q batch
+		return $?
+	fi
+	dir="$(mount | awk -v d="$dev" '$1 == d { print $3; exit }')"
+	if [ -z "$dir" ]; then
+		mnt=/tmp/extroot-rd.$$
+		mkdir -p "$mnt"
+		mount -t ubifs "$dev" "$mnt" || { rmdir "$mnt"; echo "cannot mount $dev" >&2; return 1; }
+		dir="$mnt"
+	fi
+	mkdir -p "$dir/upper/etc/config"
+	[ -f "$dir/upper/etc/config/fstab" ] || cp /rom/etc/config/fstab "$dir/upper/etc/config/fstab" 2>/dev/null || : > "$dir/upper/etc/config/fstab"
+	uci -q -c "$dir/upper/etc/config" batch || rc=1
+	sync
+	[ -n "$mnt" ] && { umount "$mnt"; rmdir "$mnt"; }
+	return $rc
+}
+
 current_overlay_device() {
 	mount | awk '$3 == "/overlay" { print $1; exit }'
 }
@@ -134,18 +171,12 @@ cmd_use() {
 	mkdir -p "$MNT"
 	mount "$dev" "$MNT" || die "cannot mount $dev"
 
-	echo "Copying the current overlay across"
-	# /overlay holds upper/ and work/; copy the contents, not the mount point.
-	cp -a /overlay/. "$MNT"/ 2>/dev/null || true
-	mkdir -p "$MNT/upper" "$MNT/work"
-	sync
-	umount "$MNT"
-	rmdir "$MNT"
-
 	uuid="$(block info "$dev" 2>/dev/null | sed -n 's/.*UUID="\([^"]*\)".*/\1/p')"
 	[ -n "$uuid" ] || die "cannot read the UUID of $dev"
 
-	echo "Pointing /overlay at $dev (UUID $uuid)"
+	# Settings first, so the copy on the disk already has them: its fstab
+	# names the disk, and bigoverlay is off there, otherwise its boot script
+	# would reboot to "switch /overlay back" to mtd28.
 	uci -q batch <<-EOT
 		set fstab.extroot=mount
 		set fstab.extroot.target='/overlay'
@@ -155,12 +186,34 @@ cmd_use() {
 		set fstab.extroot.enabled='1'
 		commit fstab
 	EOT
-	# The built-in spare partition, if it was in use, must not win over the disk.
-	uci -q get fstab.bigoverlay >/dev/null && {
-		uci -q set fstab.bigoverlay.enabled='0'
-		uci -q commit fstab
+	# USB disks need a few seconds to show up in preinit.
+	[ "$(uci -q get fstab.@global[0].delay_root)" -ge 15 ] 2>/dev/null || {
+		uci -q set fstab.@global[0].delay_root='15' && uci -q commit fstab
 	}
 	uci -q set bigoverlay.main.enabled='0' 2>/dev/null && uci -q commit bigoverlay
+
+	echo "Copying the current overlay across"
+	# /overlay holds upper/ and work/; copy the contents, not the mount point.
+	cp -a /overlay/. "$MNT"/ 2>/dev/null || true
+	mkdir -p "$MNT/upper" "$MNT/work"
+	sync
+	umount "$MNT"
+	rmdir "$MNT"
+
+	echo "Pointing /overlay at $dev (UUID $uuid)"
+	# This is the fstab fstools actually reads at boot. The extroot entry sorts
+	# before bigoverlay (UUID against "ubi1_*"), so it wins while the disk is
+	# there; without the disk the router boots on the slot's small overlay.
+	with_rootfs_data <<-EOT || die "could not write the extroot entry into rootfs_data"
+		set fstab.extroot=mount
+		set fstab.extroot.target='/overlay'
+		set fstab.extroot.uuid='$uuid'
+		set fstab.extroot.fstype='ext4'
+		set fstab.extroot.options='rw,noatime'
+		set fstab.extroot.enabled='1'
+		set fstab.@global[0].delay_root='15'
+		commit fstab
+	EOT
 
 	echo "Done. The change takes effect on the next boot."
 	[ "$do_reboot" = 1 ] && { sync; reboot; }
@@ -176,6 +229,7 @@ cmd_revert() {
 	fi
 	uci -q delete fstab.extroot
 	uci -q commit fstab
+	printf 'delete fstab.extroot\ncommit fstab\n' | with_rootfs_data || die "could not remove the extroot entry from rootfs_data"
 	echo "Removed. The change takes effect on the next boot."
 	[ "$do_reboot" = 1 ] && { sync; reboot; }
 }
