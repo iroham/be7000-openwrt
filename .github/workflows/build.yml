@@ -277,9 +277,10 @@ jobs:
           cp "../owrt/bin/targets/$TARGET/$DEVICE.manifest" .
           sha256sum "$DEVICE-squashfs-factory.ubi" "$DEVICE-squashfs-sysupgrade.bin" > sha256sums.txt
           cp "$DEVICE-squashfs-factory.ubi" ../repo/scripts/install-from-stock.sh \
-             ../repo/scripts/rollback-to-stock.sh ../repo/docs/instruction.txt sha256sums.txt zip/
-          # the instruction's first line carries the version
+             ../repo/scripts/rollback-to-stock.sh ../repo/docs/instruction/*.txt sha256sums.txt zip/
+          # the index's first line carries the version
           sed -i "1s/версия [0-9][0-9.]*/версия $VER/" zip/instruction.txt
+          sed -i "1s/version [0-9][0-9.]*/version $VER/" zip/instruction-en.txt
           (cd zip && zip -q -X "../$ZIP" ./*)
           sha256sum "$ZIP"
           echo "VER=$VER" >> "$GITHUB_ENV"

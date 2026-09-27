@@ -1,0 +1,26 @@
+Updating an installed OpenWrt
+
+Easiest from the web interface
+Since 1.2.6 there is a page under System called "Обновление сборки" (firmware update; these menu entries are in Russian whatever the interface language). It asks GitHub whether a newer version is out, shows what is in it, and with one button downloads the image, checks the checksum and runs the update keeping your settings. The same from the console: be7000-update check, then be7000-update apply.
+On an image that does not have this page yet, it is installed as a package from the feed: apk add luci-app-be7000-update (you need 1.2.5 or newer, it has the certificates for https). The image version is in /etc/be7000-release, an image without this file is considered self-built and does not offer itself updates.
+
+By hand
+Download openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-sysupgrade.bin from the release, put it on the router and run a normal update.
+
+scp -O openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-sysupgrade.bin root@192.168.1.1:/tmp/
+ssh root@192.168.1.1 "sysupgrade -v /tmp/openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-sysupgrade.bin"
+
+The update writes into the slot the system booted from, stock in the other slot is not touched. Settings, packages and the list of enabled services move over by themselves.
+
+If your version is older than 1.2.3
+Find your version below.
+
+1.0, 1.1, 1.2, 1.2.1, 1.2.2: the bootloader counts boots, and these versions never reset the counter. After the seventh boot since installation the router silently switches to stock. OpenWrt stays in its slot, but it looks like "the router went back to Xiaomi by itself". Reset the counters over SSH before updating:
+
+fw_setenv flag_try_sys1_failed 0 && fw_setenv flag_try_sys2_failed 0
+
+To check: fw_printenv flag_try_sys1_failed flag_try_sys2_failed, both must be 0. Since 1.2.3 the system resets the counters itself. If the router has already gone back to stock, nothing is lost: run install-from-stock.sh from stock again, as in 1-install-en.txt.
+
+1.0 and 1.1, if you run from slot 0: in these versions an update always wrote to slot 1, that is over stock. The fix only arrives with the new image, and the update itself still runs by the old rules. If you care about stock, back it up before updating, as in step 1 of 1-install-en.txt.
+
+1.2 or 1.2.1: during this one update both radios may switch off. If the radio is gone, enable it under Network, Wireless. It will not happen again.
