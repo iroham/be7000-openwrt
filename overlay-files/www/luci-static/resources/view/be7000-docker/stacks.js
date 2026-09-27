@@ -141,7 +141,11 @@ return view.extend({
 							return;
 						}
 						ui.hideModal();
-						callWrite(n, ta.value).then(function() {
+						callWrite(n, ta.value).then(function(res) {
+							if (!res || !res.ok) {
+								ui.addNotification(null, E('pre', { 'style': 'white-space:pre-wrap' }, (res && res.output) || _('Не получилось сохранить')), 'error');
+								return;
+							}
 							busy(_('Запускаю'), callUp(n), function() { self.refresh(); });
 						});
 					}
@@ -225,7 +229,11 @@ return view.extend({
 					E('button', { 'class': 'btn', 'click': function() { self.editor(t.name, t.compose, true); } }, _('Посмотреть и изменить')),
 					' ',
 					E('button', { 'class': 'btn cbi-button-action', 'click': function() {
-						callWrite(t.name, t.compose).then(function() {
+						callWrite(t.name, t.compose).then(function(res) {
+							if (!res || !res.ok) {
+								ui.addNotification(null, E('pre', { 'style': 'white-space:pre-wrap' }, (res && res.output) || _('Не получилось сохранить')), 'error');
+								return;
+							}
 							busy(_('Разворачиваю %s').format(t.title), callUp(t.name), function() { self.refresh(); });
 						});
 					} }, _('Развернуть'))
