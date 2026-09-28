@@ -1,0 +1,174 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] debug: reset the CMN block as the stock SSDK does, SSDK-order UNIPHY bring-up at boot
+
+The stock qca-ssdk.ko (ssdk_gcc_appe_clock_init) and the stock U-Boot
+reset the CMN block, which also holds the SerDes bandgap, LDOs and RX
+termination supply, right before the PPE and UNIPHY bring-up; Linux here
+never touches it because the PLL rate is already set, and runtime PM gates
+its AHB/SYS clocks. ipq-cmn-pll now does the stock sequence at probe and
+keeps the clocks on (stock_cmn, default on). The PCS brings USXGMII and
+10G-QXGMII UNIPHYs up in the SSDK order at boot too (vendor_order,
+default on), with the SSDK PLL holds (10 ms UQXGMII, 100 ms USXGMII).
+The SoC recalibration after chip lock (0921) is off by default now, and
+PHY_MODE_CTRL_EN (0920) only with phy_mode_ctrl=1: the Xiaomi stock SSDK
+does neither.
+
+--- a/drivers/clk/qcom/ipq-cmn-pll.c
++++ b/drivers/clk/qcom/ipq-cmn-pll.c
+@@ -284,6 +284,42 @@
+ 	.set_rate = clk_cmn_pll_set_rate,
+ };
+ 
++/* Experiment (BE7000 dead RX): the stock qca-ssdk.ko (ssdk_gcc_appe_clock_init)
++ * and the stock U-Boot reset the whole CMN block right before the PPE and
++ * UNIPHY bring-up: reference index 7, then POWER_ON_AND_RESET bit 6 pulsed,
++ * 0xbf, 0xff, 1 ms apart. The block also holds the SerDes bandgap, LDOs and
++ * the RX termination supply shared by the UNIPHYs. Here the rate is already
++ * 12 GHz from the bootloader, so the mainline set_rate path never runs and
++ * Linux never touches the block; the AHB/SYS clocks are also gated by
++ * runtime PM after probe, where stock keeps them on.
++ */
++static bool stock_cmn = true;
++module_param(stock_cmn, bool, 0444);
++MODULE_PARM_DESC(stock_cmn, "reset the CMN block and keep its clocks on, as the stock SSDK does");
++
++static void ipq_cmn_pll_stock_reset(struct device *dev, struct regmap *regmap)
++{
++	unsigned int cfg = 0, pwr = 0, lock = 0;
++
++	regmap_update_bits(regmap, CMN_PLL_REFCLK_CONFIG,
++			   CMN_PLL_REFCLK_EXTERNAL | CMN_PLL_REFCLK_INDEX,
++			   FIELD_PREP(CMN_PLL_REFCLK_INDEX, 7));
++	regmap_read(regmap, CMN_PLL_POWER_ON_AND_RESET, &pwr);
++	regmap_write(regmap, CMN_PLL_POWER_ON_AND_RESET, pwr | BIT(6));
++	msleep(1);
++	regmap_write(regmap, CMN_PLL_POWER_ON_AND_RESET, pwr & ~BIT(6));
++	msleep(1);
++	regmap_write(regmap, CMN_PLL_POWER_ON_AND_RESET, 0xbf);
++	msleep(1);
++	regmap_write(regmap, CMN_PLL_POWER_ON_AND_RESET, 0xff);
++	msleep(1);
++	regmap_read(regmap, CMN_PLL_REFCLK_CONFIG, &cfg);
++	regmap_read_poll_timeout(regmap, CMN_PLL_LOCKED, lock,
++				 lock & CMN_PLL_CLKS_LOCKED, 100, 100000);
++	dev_info(dev, "CMN block reset as the stock SSDK does: REFCLK_CONFIG 0x%x, POWER_ON_AND_RESET 0x%x -> 0xff, LOCKED 0x%x\n",
++		 cfg, pwr, lock);
++}
++
+ static struct clk_hw *ipq_cmn_pll_clk_hw_register(struct platform_device *pdev)
+ {
+ 	struct clk_parent_data pdata = { .index = 0 };
+@@ -302,6 +338,9 @@
+ 	if (IS_ERR(regmap))
+ 		return ERR_CAST(regmap);
+ 
++	if (stock_cmn)
++		ipq_cmn_pll_stock_reset(dev, regmap);
++
+ 	cmn_pll = devm_kzalloc(dev, sizeof(*cmn_pll), GFP_KERNEL);
+ 	if (!cmn_pll)
+ 		return ERR_PTR(-ENOMEM);
+@@ -418,7 +457,9 @@
+ 
+ 	/* Register CMN PLL clock and fixed rate output clocks. */
+ 	ret = ipq_cmn_pll_register_clks(pdev);
+-	pm_runtime_put(dev);
++	/* stock keeps the CMN AHB/SYS clocks on */
++	if (!stock_cmn || ret)
++		pm_runtime_put(dev);
+ 	if (ret)
+ 		return dev_err_probe(dev, ret,
+ 				     "Failed to register CMN PLL clocks\n");
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -685,6 +685,14 @@
+ 	return ipq_pcs_config_mode(qpcs, PHY_INTERFACE_MODE_2500BASEX);
+ }
+ 
++static int ipq_pcs_config_mode_vendor(struct ipq_pcs *qpcs,
++				      phy_interface_t interface);
++
++/* Experiment: bring the UNIPHY up in the SSDK order at boot as well */
++static bool vendor_order = true;
++module_param(vendor_order, bool, 0444);
++MODULE_PARM_DESC(vendor_order, "USXGMII/10G-QXGMII UNIPHY bring-up in the SSDK order");
++
+ static int ipq_pcs_config_usxgmii(struct ipq_pcs *qpcs,
+ 				  int index,
+ 				  phy_interface_t interface)
+@@ -694,7 +702,10 @@
+ 
+ 	/* Configure the XPCS for USXGMII mode if required */
+ 	if (qpcs->interface != interface) {
+-		ret = ipq_pcs_config_mode(qpcs, interface);
++		if (vendor_order)
++			ret = ipq_pcs_config_mode_vendor(qpcs, interface);
++		else
++			ret = ipq_pcs_config_mode(qpcs, interface);
+ 		if (ret)
+ 			return ret;
+ 
+@@ -1234,10 +1245,12 @@
+ 	regmap_update_bits(qpcs->regmap, PCS_MISC2,
+ 			   PCS_MISC2_MODE_MASK | PCS_MISC2_RATE_MASK,
+ 			   PCS_MISC2_MODE_USXGMII);
++	/* 10 ms holds for UQXGMII, 100 ms for single-port USXGMII, as the SSDK */
+ 	regmap_write(qpcs->regmap, PCS_PLL_RESET, PCS_PLL_RESET_ASSERT);
+-	msleep(10);
++	msleep(interface == PHY_INTERFACE_MODE_10G_QXGMII ? 10 : 100);
+ 	regmap_write(qpcs->regmap, PCS_PLL_RESET, PCS_PLL_RESET_RELEASE);
+-	msleep(10);
++	msleep(interface == PHY_INTERFACE_MODE_10G_QXGMII ? 10 : 100);
++	ipq_pcs_apply_stock_serdes(qpcs, "after PLL release (SSDK order)");
+ 
+ 	ipq_pcs_hold_port_clks(qpcs, interface, true);
+ 	reset_control_assert(qpcs->xpcs_rstc);
+@@ -1260,8 +1273,14 @@
+ 		dev_warn(qpcs->dev, "vendor order: calibration not done (0x%x), going on as the SSDK does\n", val);
+ 
+ 	ipq_pcs_hold_port_clks(qpcs, interface, false);
+-	reset_control_deassert(qpcs->xpcs_rstc);
+ 	qpcs->interface = interface;
++	ret = clk_set_rate(qpcs->rx_hw.clk, 312500000);
++	if (!ret)
++		ret = clk_set_rate(qpcs->tx_hw.clk, 312500000);
++	if (ret)
++		dev_err(qpcs->dev, "vendor order: clock rate: %d\n", ret);
++	reset_control_deassert(qpcs->xpcs_rstc);
++	dev_info(qpcs->dev, "%s brought up in the SSDK order\n", phy_modes(interface));
+ 	return 0;
+ }
+ 
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -1133,7 +1133,7 @@
+ /* Experiment (BE7000 dead RX): once the chip locks, redo the SoC UNIPHY0
+  * bring-up (and its calibration) with the chip transmitting.
+  */
+-static bool qca8084_soc_recal = true;
++static bool qca8084_soc_recal;
+ module_param_named(soc_recal, qca8084_soc_recal, bool, 0444);
+ static bool qca8084_soc_recal_done;
+ extern int ipq_pcs_debug_recalibrate(void);
+--- a/drivers/net/phy/qcom/qca8084_serdes.c
++++ b/drivers/net/phy/qcom/qca8084_serdes.c
+@@ -20,6 +20,10 @@
+ static bool qca8084_vendor_seq = true;
+ module_param_named(vendor_seq, qca8084_vendor_seq, bool, 0444);
+ 
++/* the Xiaomi stock SSDK does not set PHY_MODE_CTRL_EN, public SSDK 12.5 does */
++static bool qca8084_phy_mode_ctrl;
++module_param_named(phy_mode_ctrl, qca8084_phy_mode_ctrl, bool, 0444);
++
+ #define CH_DIG_CTRL1				0x8000
+ #define CH_PHY_MODE_CTRL_EN			BIT(0)
+ 
+@@ -516,7 +520,7 @@
+ 		/* Vendor: "enable phy mode control to sync phy link
+ 		 * information to xpcs".
+ 		 */
+-		if (qca8084_vendor_seq) {
++		if (qca8084_vendor_seq && qca8084_phy_mode_ctrl) {
+ 			ret = mdiodev_c45_modify(xpcs_mdiodev, qca8084_xpcs_ch_mmd[i],
+ 						 CH_DIG_CTRL1, CH_PHY_MODE_CTRL_EN,
+ 						 CH_PHY_MODE_CTRL_EN);
