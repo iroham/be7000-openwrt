@@ -1,0 +1,16 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] debug variant B: no settle after the QCA8084 reset, stock CMN reset kept
+
+Bisecting uniphy22: same image with reset_settle_ms 0 by default.
+
+--- a/drivers/clk/qcom/nsscc-qca8k.c
++++ b/drivers/clk/qcom/nsscc-qca8k.c
+@@ -2169,7 +2169,7 @@
+  * The reference clock of QCA8k NSSCC needs to be enabled to make sure
+  * the GPIO reset taking effect.
+  */
+-static unsigned int reset_settle_ms = 100;
++static unsigned int reset_settle_ms;
+ module_param(reset_settle_ms, uint, 0444);
+ MODULE_PARM_DESC(reset_settle_ms, "wait after releasing the QCA8084 reset before the first access");
+ 
