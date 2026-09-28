@@ -1,0 +1,189 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] debug: XPCS ignores LOS, RX link edge detector, 30 min monitor, no CMN lock poll
+
+On a board fixed by uniphy22 the SoC XPCS still dropped the RX link for
+tens of seconds while block lock held and KR_STS2 was clean, with UNIPHY
+0x528 bit 3 (signal detect) down: a false LOS. The XPCS now ignores LOS
+(DEBUG_CTRL bit 4, suppress_los=0 to keep the old behaviour). A 200 ms
+edge detector logs every RX link drop and its length for 30 minutes with a
+summary every 5 minutes; the 5 s monitor runs 30 minutes and also logs
+STS1/STS2 (faults), DEBUG_CTRL and DIG_STS. The CMN reset no longer waits
+for a lock bit that stock never enables.
+
+--- a/drivers/clk/qcom/ipq-cmn-pll.c
++++ b/drivers/clk/qcom/ipq-cmn-pll.c
+@@ -314,8 +314,8 @@
+ 	regmap_write(regmap, CMN_PLL_POWER_ON_AND_RESET, 0xff);
+ 	msleep(1);
+ 	regmap_read(regmap, CMN_PLL_REFCLK_CONFIG, &cfg);
+-	regmap_read_poll_timeout(regmap, CMN_PLL_LOCKED, lock,
+-				 lock & CMN_PLL_CLKS_LOCKED, 100, 100000);
++	/* lock detect is off here as on stock (0x78c = 0x5d0): read, do not wait */
++	regmap_read(regmap, CMN_PLL_LOCKED, &lock);
+ 	dev_info(dev, "CMN block reset as the stock SSDK does: REFCLK_CONFIG 0x%x, POWER_ON_AND_RESET 0x%x -> 0xff, LOCKED 0x%x\n",
+ 		 cfg, pwr, lock);
+ }
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -457,6 +457,7 @@
+ {
+ 	struct ipq_pcs *qpcs = ipq_pcs_mon_qpcs;
+ 	unsigned int s1 = 0, s2 = 0, b8 = 0, r528 = 0, cal = 0;
++	unsigned int st1 = 0, st2 = 0, dbg = 0, dsts = 0;
+ 
+ 	if (!qpcs)
+ 		return;
+@@ -465,12 +466,70 @@
+ 	regmap_read(qpcs->regmap, 0x1e8, &b8);
+ 	regmap_read(qpcs->regmap, 0x528, &r528);
+ 	regmap_read(qpcs->regmap, 0x1e0, &cal);
+-	dev_info(qpcs->dev, "mon: KR_STS1 0x%04x KR_STS2 0x%04x 0x1e8 0x%04x 0x528 0x%04x CAL 0x%04x\n",
+-		 s1, s2, b8, r528, cal);
++	regmap_read(qpcs->regmap, 0x30001, &st1);
++	regmap_read(qpcs->regmap, 0x30008, &st2);
++	regmap_read(qpcs->regmap, 0x38005, &dbg);
++	regmap_read(qpcs->regmap, 0x38010, &dsts);
++	dev_info(qpcs->dev, "mon: KR_STS1 0x%04x KR_STS2 0x%04x 0x1e8 0x%04x 0x528 0x%04x CAL 0x%04x STS1 0x%04x STS2 0x%04x DBG 0x%04x DIG_STS 0x%04x\n",
++		 s1, s2, b8, r528, cal, st1, st2, dbg, dsts);
+ 	if (--ipq_pcs_mon_left > 0)
+ 		schedule_delayed_work(&ipq_pcs_mon_work, 5 * HZ);
+ }
+ 
++/* RX link edge detector: every 200 ms for 30 minutes, one line per change of
++ * the SoC RX link / block lock / 0x528 bits 0 and 3, the length of every RX
++ * link drop, and a summary every 5 minutes.
++ */
++static struct delayed_work ipq_pcs_edge_work;
++static int ipq_pcs_edge_left;
++static unsigned int ipq_pcs_edge_last = ~0u;
++static unsigned long ipq_pcs_edge_down_at;
++static unsigned int ipq_pcs_edge_drops, ipq_pcs_edge_lines;
++static unsigned long ipq_pcs_edge_total_ms, ipq_pcs_edge_max_ms;
++
++static void ipq_pcs_edge_fn(struct work_struct *work)
++{
++	struct ipq_pcs *qpcs = ipq_pcs_mon_qpcs;
++	unsigned int s1 = 0, r528 = 0, st;
++	bool up;
++
++	if (!qpcs)
++		return;
++	regmap_read(qpcs->regmap, XPCS_KR_STS, &s1);
++	regmap_read(qpcs->regmap, 0x528, &r528);
++	up = s1 & XPCS_KR_LINK_STS;
++	st = up | (s1 & BIT(0)) << 1 | (r528 & BIT(0)) << 2 | (r528 & BIT(3));
++	if (st != ipq_pcs_edge_last) {
++		if (ipq_pcs_edge_last != ~0u) {
++			if (!up && (ipq_pcs_edge_last & 1)) {
++				ipq_pcs_edge_down_at = jiffies;
++				ipq_pcs_edge_drops++;
++			} else if (up && !(ipq_pcs_edge_last & 1) && ipq_pcs_edge_down_at) {
++				unsigned long ms = jiffies_to_msecs(jiffies - ipq_pcs_edge_down_at);
++
++				ipq_pcs_edge_total_ms += ms;
++				if (ms > ipq_pcs_edge_max_ms)
++					ipq_pcs_edge_max_ms = ms;
++				ipq_pcs_edge_down_at = 0;
++				if (ipq_pcs_edge_lines < 400)
++					dev_info(qpcs->dev, "edge: RX link back after %lu ms\n", ms);
++			}
++		}
++		if (ipq_pcs_edge_lines < 400) {
++			ipq_pcs_edge_lines++;
++			dev_info(qpcs->dev, "edge: KR_STS1 0x%04x 0x528 0x%04x (link %d, block lock %d, 528.0 %d, 528.3 %d)\n",
++				 s1, r528, up, !!(s1 & BIT(0)), !!(r528 & BIT(0)), !!(r528 & BIT(3)));
++		}
++		ipq_pcs_edge_last = st;
++	}
++	if (--ipq_pcs_edge_left % 1500 == 0)
++		dev_info(qpcs->dev, "edge summary: %u RX link drops, %lu ms down in total, longest %lu ms%s\n",
++			 ipq_pcs_edge_drops, ipq_pcs_edge_total_ms, ipq_pcs_edge_max_ms,
++			 ipq_pcs_edge_down_at ? ", down right now" : "");
++	if (ipq_pcs_edge_left > 0)
++		schedule_delayed_work(&ipq_pcs_edge_work, msecs_to_jiffies(200));
++}
++
+ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+ 			       phy_interface_t interface)
+ {
+@@ -688,6 +747,32 @@
+ static int ipq_pcs_config_mode_vendor(struct ipq_pcs *qpcs,
+ 				      phy_interface_t interface);
+ 
++/* Experiment (BE7000 dead RX): on a board fixed by uniphy22 the XPCS still
++ * drops the RX link for tens of seconds while block lock holds and KR_STS2
++ * shows no errors; UNIPHY 0x528 bit 3 (signal detect) drops with it, so the
++ * analog LOS says "no signal" when there is one. DEBUG_CTRL bit 4 makes the
++ * XPCS ignore LOS and go by block lock and BER alone. Stock runs without it.
++ */
++#define XPCS_DEBUG_CTRL			0x38005
++#define XPCS_SUPRESS_LOS_DET		BIT(4)
++
++static bool suppress_los = true;
++module_param(suppress_los, bool, 0444);
++MODULE_PARM_DESC(suppress_los, "make the 10G-QXGMII XPCS ignore the analog LOS (DEBUG_CTRL bit 4)");
++
++static void ipq_pcs_los_setup(struct ipq_pcs *qpcs)
++{
++	unsigned int val = 0;
++
++	if (!suppress_los)
++		return;
++	regmap_read_poll_timeout(qpcs->regmap, XPCS_DIG_CTRL, val,
++				 !(val & XPCS_SOFT_RESET), 1000, 100000);
++	regmap_set_bits(qpcs->regmap, XPCS_DEBUG_CTRL, XPCS_SUPRESS_LOS_DET);
++	regmap_read(qpcs->regmap, XPCS_DEBUG_CTRL, &val);
++	dev_info(qpcs->dev, "XPCS ignores LOS now (DEBUG_CTRL 0x%x)\n", val);
++}
++
+ /* Experiment: bring the UNIPHY up in the SSDK order at boot as well */
+ static bool vendor_order = true;
+ module_param(vendor_order, bool, 0444);
+@@ -742,6 +827,7 @@
+ 			ret = regmap_set_bits(qpcs->regmap, XPCS_DIG_CTRL, XPCS_SOFT_RESET);
+ 			if (ret)
+ 				return ret;
++			ipq_pcs_los_setup(qpcs);
+ 		}
+ 	}
+ 
+@@ -1136,9 +1222,11 @@
+ 	if (ret)
+ 		return ret;
+ 
+-	return regmap_read_poll_timeout(qpcs->regmap, XPCS_DIG_CTRL, val,
+-					!(val & XPCS_SOFT_RESET),
+-					1000, 100000);
++	ret = regmap_read_poll_timeout(qpcs->regmap, XPCS_DIG_CTRL, val,
++				       !(val & XPCS_SOFT_RESET),
++				       1000, 100000);
++	ipq_pcs_los_setup(qpcs);
++	return ret;
+ }
+ 
+ /* Set the XPCS up again once 10GBASE-R from the PHY has locked.
+@@ -1943,9 +2031,12 @@
+ 		ret = ipq_pcs_config_usxgmii(qpcs, 0, PHY_INTERFACE_MODE_10G_QXGMII);
+ 		dev_info(dev, "early 10G-QXGMII bring-up before the PHY package: %d\n", ret);
+ 		ipq_pcs_mon_qpcs = qpcs;
+-		ipq_pcs_mon_left = 120;
++		ipq_pcs_mon_left = 360;
+ 		INIT_DELAYED_WORK(&ipq_pcs_mon_work, ipq_pcs_mon_fn);
+ 		schedule_delayed_work(&ipq_pcs_mon_work, 5 * HZ);
++		ipq_pcs_edge_left = 9000;
++		INIT_DELAYED_WORK(&ipq_pcs_edge_work, ipq_pcs_edge_fn);
++		schedule_delayed_work(&ipq_pcs_edge_work, HZ);
+ 	}
+ 
+ 	platform_set_drvdata(pdev, qpcs);
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -1251,7 +1251,7 @@
+ 			phydev_info(phydev, "QXGMII XPCS set up without BaseR lock, will redo it on first link up\n");
+ 		if (!qca8084_mon_shared) {
+ 			qca8084_mon_shared = shared_priv;
+-			qca8084_mon_left = 120;
++			qca8084_mon_left = 360;
+ 			INIT_DELAYED_WORK(&qca8084_mon_work, qca8084_mon_fn);
+ 			schedule_delayed_work(&qca8084_mon_work, 5 * HZ);
+ 		}
