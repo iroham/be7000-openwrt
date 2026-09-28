@@ -1,0 +1,171 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] debug: settle after the QCA8084 reset, SSDK-order UNIPHY bring-up and chip mode set without calibration
+
+Three differences from the vendor stack found by reading the SSDK, the
+QSDK MDIO driver and the DD-WRT history:
+- nsscc-qca8k: wait reset_settle_ms (default 100, as mdio-qca.c) after
+  releasing the QCA8084 reset before the first access;
+- pcs: "vmode" in ipq_pcs0_ctl redoes the UNIPHY bring-up in the SSDK
+  order (analog PLL reset first, 10 ms holds, then the block reset, one
+  calibration, no LINK_DETECT write);
+- qca808x: "fullnocal" in qca8084_ctl redoes the chip SerDes mode set
+  without the analog reset and calibration.
+
+--- a/drivers/clk/qcom/nsscc-qca8k.c
++++ b/drivers/clk/qcom/nsscc-qca8k.c
+@@ -2169,6 +2169,10 @@
+  * The reference clock of QCA8k NSSCC needs to be enabled to make sure
+  * the GPIO reset taking effect.
+  */
++static unsigned int reset_settle_ms = 100;
++module_param(reset_settle_ms, uint, 0444);
++MODULE_PARM_DESC(reset_settle_ms, "wait after releasing the QCA8084 reset before the first access");
++
+ static int nss_cc_qca8k_clock_enable_and_reset(struct device *dev)
+ {
+ 	struct gpio_desc *gpiod;
+@@ -2184,6 +2188,16 @@
+ 	} else if (gpiod) {
+ 		msleep(100);
+ 		gpiod_set_value_cansleep(gpiod, 0);
++		/* Experiment (BE7000 dead RX): the vendor MDIO driver
++		 * (mdio-qca.c) waits about 100 ms after releasing the reset
++		 * before it touches the chip; here the first access followed
++		 * within a millisecond. The chip loads its fuse trims and
++		 * starts its internal clocks right after reset.
++		 */
++		if (reset_settle_ms)
++			msleep(reset_settle_ms);
++		dev_info(dev, "reset released, %u ms settle before the first access\n",
++			 reset_settle_ms);
+ 	}
+ 
+ 	return 0;
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -1215,6 +1215,56 @@
+  */
+ static struct ipq_pcs *ipq_pcs_dbg;
+ 
++/* Experiment (BE7000 dead RX): the SSDK order for USXGMII/UQXGMII
++ * (__adpt_hppe_uniphy_uxgmii_mode_set): MISC2, the analog PLL reset first
++ * (10 ms + 10 ms), then port clocks off, XPCS reset, mode, sys and soft
++ * reset (100 ms), 10 ms, calibration (a timeout is ignored), port clocks
++ * on, XPCS release. No LINK_DETECT write. ipq_pcs_config_mode() does the
++ * block reset first and the PLL reset after it, with 100 ms holds.
++ */
++static int ipq_pcs_config_mode_vendor(struct ipq_pcs *qpcs,
++				      phy_interface_t interface)
++{
++	unsigned int val;
++	int ret;
++
++	if (!ipq_pcs_usxg_family(interface))
++		return -EOPNOTSUPP;
++
++	regmap_update_bits(qpcs->regmap, PCS_MISC2,
++			   PCS_MISC2_MODE_MASK | PCS_MISC2_RATE_MASK,
++			   PCS_MISC2_MODE_USXGMII);
++	regmap_write(qpcs->regmap, PCS_PLL_RESET, PCS_PLL_RESET_ASSERT);
++	msleep(10);
++	regmap_write(qpcs->regmap, PCS_PLL_RESET, PCS_PLL_RESET_RELEASE);
++	msleep(10);
++
++	ipq_pcs_hold_port_clks(qpcs, interface, true);
++	reset_control_assert(qpcs->xpcs_rstc);
++	regmap_update_bits(qpcs->regmap, PCS_MODE_CTRL, PCS_MODE_SEL_MASK,
++			   PCS_MODE_XPCS);
++	if (interface == PHY_INTERFACE_MODE_10G_QXGMII)
++		regmap_set_bits(qpcs->regmap, PCS_QP_USXG_OPTION,
++				PCS_QP_USXG_GMII_SRC_XPCS);
++
++	reset_control_assert(qpcs->sys_rstc);
++	reset_control_assert(qpcs->soft_rstc);
++	msleep(100);
++	reset_control_deassert(qpcs->sys_rstc);
++	reset_control_deassert(qpcs->soft_rstc);
++	msleep(10);
++
++	ret = regmap_read_poll_timeout(qpcs->regmap, PCS_CALIBRATION, val,
++				       val & PCS_CALIBRATION_DONE, 1000, 100000);
++	if (ret)
++		dev_warn(qpcs->dev, "vendor order: calibration not done (0x%x), going on as the SSDK does\n", val);
++
++	ipq_pcs_hold_port_clks(qpcs, interface, false);
++	reset_control_deassert(qpcs->xpcs_rstc);
++	qpcs->interface = interface;
++	return 0;
++}
++
+ static ssize_t ipq_pcs_dbg_write(struct file *file, const char __user *ubuf,
+ 				 size_t len, loff_t *ppos)
+ {
+@@ -1291,6 +1341,10 @@
+ 		ret = ipq_pcs_config_mode(qpcs, interface);
+ 		dev_info(qpcs->dev, "debug: mode setup again: %d\n", ret);
+ 		ipq_pcs_xpcs_redo(qpcs, -1, interface, true);
++	} else if (sysfs_streq(buf, "vmode")) {
++		ret = ipq_pcs_config_mode_vendor(qpcs, interface);
++		dev_info(qpcs->dev, "debug: mode setup again in the SSDK order: %d\n", ret);
++		ipq_pcs_xpcs_redo(qpcs, -1, interface, true);
+ 	} else {
+ 		return -EINVAL;
+ 	}
+--- a/drivers/net/phy/qcom/qca8084_serdes.c
++++ b/drivers/net/phy/qcom/qca8084_serdes.c
+@@ -184,6 +184,8 @@
+ 
+ static const int qca8084_xpcs_ch_mmd[QCA8084_CHANNEL_MAX] = { 31, 26, 27, 28 };
+ 
++bool qca8084_skip_ana_cal;
++
+ struct mdio_device *qca8084_package_pcs_probe(struct device_node *pcs_np)
+ {
+ 	struct qca8084_pcs_data *pcs_data;
+@@ -702,10 +704,17 @@
+ 			return ret;
+ 	}
+ 
+-	ret = qca8084_do_calibration(pcs_mdiodev);
+-	if (ret) {
+-		dev_err(&pcs_mdiodev->dev, "PCS calibration timeout!\n");
+-		return ret;
++	/* Experiment: the DD-WRT build reported working on a BE7000 had the
++	 * analog reset and calibration of the SSDK UQXGMII mode set disabled.
++	 */
++	if (qca8084_skip_ana_cal) {
++		dev_info(&pcs_mdiodev->dev, "analog reset and calibration skipped\n");
++	} else {
++		ret = qca8084_do_calibration(pcs_mdiodev);
++		if (ret) {
++			dev_err(&pcs_mdiodev->dev, "PCS calibration timeout!\n");
++			return ret;
++		}
+ 	}
+ 
+ 	/* Enable PCS SSC to fix mode */
+--- a/drivers/net/phy/qcom/qca8084_serdes.h
++++ b/drivers/net/phy/qcom/qca8084_serdes.h
+@@ -15,6 +15,7 @@
+ struct mdio_device *qca8084_package_xpcs_probe(struct device_node *xpcs_np);
+ void qca8084_package_xpcs_and_pcs_remove(struct mdio_device *xpcs_mdiodev,
+ 					 struct mdio_device *pcs_mdiodev);
++extern bool qca8084_skip_ana_cal;
+ int qca8084_qxgmii_set_mode(struct mdio_device *xpcs_mdiodev,
+ 			    struct mdio_device *pcs_mdiodev);
+ bool qca8084_qxgmii_baser_up(struct mdio_device *xpcs_mdiodev);
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -1675,7 +1675,11 @@
+ 		ret = qca8084_qxgmii_xpcs_setup(sp->mdiodev[1]);
+ 	else if (sysfs_streq(buf, "full"))
+ 		ret = qca8084_qxgmii_set_mode(sp->mdiodev[1], sp->mdiodev[0]);
+-	else
++	else if (sysfs_streq(buf, "fullnocal")) {
++		qca8084_skip_ana_cal = true;
++		ret = qca8084_qxgmii_set_mode(sp->mdiodev[1], sp->mdiodev[0]);
++		qca8084_skip_ana_cal = false;
++	} else
+ 		ret = -EINVAL;
+ 	if (ret != -EINVAL)
+ 		qca8084_dbg_restore_speeds(sp);
