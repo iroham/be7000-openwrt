@@ -1,0 +1,14 @@
+Build the IPQ9574 PCS into the kernel. As a module it loads at about 12 s
+together with the PPE, and the QCA8084 clock controller (which now waits
+for pcs0) then comes too late: the PHYs are attached with the generic
+driver before the QCA8084 driver can bind. Built in, pcs0 probes at boot
+and the whole chain (PCS, clock controller, PHY driver) is done long
+before the PPE module loads. kmod-pcs-qcom-ipq9574 becomes an empty
+package (OpenWrt notices the module is built-in).
+--- a/target/linux/qualcommbe/ipq95xx/config-default
++++ b/target/linux/qualcommbe/ipq95xx/config-default
+@@ -56,3 +56,4 @@
+ CONFIG_SPMI_MSM_PMIC_ARB=y
+ # CONFIG_SPMI_PMIC_CLKDIV is not set
+ CONFIG_MTD_OOPS=y
++CONFIG_PCS_QCOM_IPQ9574=y
