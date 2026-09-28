@@ -8,7 +8,8 @@ failing board the chip SerDes comes up at reset defaults (0x1e 0x04e4, 0x63
 writing those made the chip lock in 5 s instead of minutes (uniphy16) but the
 SoC still received nothing (KR_STS2 stayed 0). The vendor mdio driver programs
 EPHY_CFG 0x320c41 with bits 21:20 set, this driver clears them, so keep them
-set (ephy_ldo=0 restores the old behaviour) and only report the SerDes
+set only with ephy_ldo=1 (v4: off by default, the vendor clears them too
+right after its clock init) and only report the SerDes
 registers (stock_serdes=1 writes the three proven ones). Lock state of both
 sides is printed every 5 s for ten minutes.
 
@@ -197,7 +198,7 @@ sides is printed every 5 s for ten minutes.
  
 +
 +/* Experiment (BE7000 dead RX): chip side lock timeline in dmesg, every 5 s */
-+static bool qca8084_ephy_ldo = true;
++static bool qca8084_ephy_ldo;
 +module_param_named(ephy_ldo, qca8084_ephy_ldo, bool, 0444);
 +
 +static struct qca808x_shared_priv *qca8084_mon_shared;

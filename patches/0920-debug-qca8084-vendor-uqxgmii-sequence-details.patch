@@ -1,0 +1,161 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] debug: QCA8084 UQXGMII, the vendor sequence details mainline skips
+
+From the SSDK (mht_interface_ctrl.c, mht_interface_uqxgmii_mode_set) the
+steps this driver does not do: gate the per-channel GMII/XGMII and ethphy
+GMII clocks before the XPCS reset and the analog reset/calibration, soft
+reset the four copper PHYs right after the XPCS reset is released and before
+waiting for BaseR, and per channel set AN_EN with SPEED_1000 and the
+PHY_MODE_CTRL_EN bit. On a failing BE7000 the SerDes calibration comes out
+with default values (0x63 0x5ad6 instead of 0x5ef7), so the conditions of the
+calibration are the suspect. vendor_seq=0 restores the old behaviour.
+
+--- a/drivers/net/phy/qcom/qca8084_serdes.c
++++ b/drivers/net/phy/qcom/qca8084_serdes.c
+@@ -7,6 +7,7 @@
+ #include <linux/clk-provider.h>
+ #include <linux/dev_printk.h>
+ #include <linux/mdio.h>
++#include <linux/mii.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
+ #include <linux/phy.h>
+@@ -15,6 +16,13 @@
+ 
+ #include "qca8084_serdes.h"
+ 
++/* Experiment (BE7000 dead RX): vendor UQXGMII sequence details, see below */
++static bool qca8084_vendor_seq = true;
++module_param_named(vendor_seq, qca8084_vendor_seq, bool, 0444);
++
++#define CH_DIG_CTRL1				0x8000
++#define CH_PHY_MODE_CTRL_EN			BIT(0)
++
+ /* XPCS includes 4 channels, each channel has the different MMD ID for
+  * configuring auto-negotiation complete interrupt, mii-4bit, auto-
+  * negotiation capabilities and TX configuration for the connected PHY.
+@@ -489,13 +497,31 @@
+ 			return ret;
+ 
+ 		/* Enable auto-negotiation capability */
+-		ret = mdiodev_c45_modify(xpcs_mdiodev, qca8084_xpcs_ch_mmd[i],
+-					 MII_CONTROL,
+-					 AUTO_NEGOTIATION_EN,
+-					 AUTO_NEGOTIATION_EN);
++		if (qca8084_vendor_seq)
++			ret = mdiodev_c45_modify(xpcs_mdiodev, qca8084_xpcs_ch_mmd[i],
++						 MII_CONTROL,
++						 AUTO_NEGOTIATION_EN | PCS_SPEED_2500 |
++						 PCS_SPEED_1000 | PCS_SPEED_100,
++						 AUTO_NEGOTIATION_EN | PCS_SPEED_1000);
++		else
++			ret = mdiodev_c45_modify(xpcs_mdiodev, qca8084_xpcs_ch_mmd[i],
++						 MII_CONTROL,
++						 AUTO_NEGOTIATION_EN,
++						 AUTO_NEGOTIATION_EN);
+ 		if (ret)
+ 			return ret;
+ 
++		/* Vendor: "enable phy mode control to sync phy link
++		 * information to xpcs".
++		 */
++		if (qca8084_vendor_seq) {
++			ret = mdiodev_c45_modify(xpcs_mdiodev, qca8084_xpcs_ch_mmd[i],
++						 CH_DIG_CTRL1, CH_PHY_MODE_CTRL_EN,
++						 CH_PHY_MODE_CTRL_EN);
++			if (ret)
++				return ret;
++		}
++
+ 		/* Disable TX IPG check */
+ 		ret = mdiodev_c45_modify(xpcs_mdiodev, qca8084_xpcs_ch_mmd[i],
+ 					 XAUI_CONTROL,
+@@ -579,6 +605,57 @@
+ 	}
+ }
+ 
++
++/* Experiment (BE7000 dead RX): the details of the vendor UQXGMII sequence
++ * (SSDK mht_interface_ctrl.c, mht_interface_uqxgmii_mode_set) that this
++ * driver does not do: gate the per-channel GMII/XGMII and ethphy GMII clocks
++ * before the XPCS reset and the analog reset/calibration, soft-reset the
++ * four copper PHYs after the XPCS reset is released and before waiting for
++ * BaseR, set SPEED_1000 with AN_EN and PHY_MODE_CTRL_EN per channel.
++ */
++static void qca8084_gate_channel_clocks(struct qca8084_xpcs_data *xpcs_data)
++{
++	static const int ids[] = { XPCS_XGMII_RX_CLK, XPCS_XGMII_TX_CLK,
++				   XPCS_RX_CLK, XPCS_TX_CLK,
++				   XPCS_PORT_RX_CLK, XPCS_PORT_TX_CLK };
++	int ch, i;
++
++	for (ch = 0; ch < QCA8084_CHANNEL_MAX; ch++) {
++		for (i = 0; i < ARRAY_SIZE(ids); i++) {
++			struct clk *c = xpcs_data->xpcs_ch[ch].clks[ids[i]];
++
++			if (IS_ERR_OR_NULL(c))
++				continue;
++			if (__clk_is_enabled(c)) {
++				clk_disable_unprepare(c);
++			} else if (!clk_prepare_enable(c)) {
++				clk_disable_unprepare(c);
++			}
++		}
++	}
++}
++
++static void qca8084_ephy_soft_reset_all(struct mii_bus *bus)
++{
++	int addr, ret, i;
++
++	for (addr = 1; addr <= 4; addr++) {
++		if (!mdiobus_get_phy(bus, addr))
++			continue;
++		ret = mdiobus_write(bus, addr, MII_BMCR, BMCR_RESET);
++		if (ret < 0)
++			continue;
++		for (i = 0; i < 50; i++) {
++			usleep_range(1000, 1500);
++			ret = mdiobus_read(bus, addr, MII_BMCR);
++			if (ret < 0 || !(ret & BMCR_RESET))
++				break;
++		}
++		dev_info(&bus->dev, "vendor seq: ethphy %d soft reset, BMCR 0x%04x after %d ms\n",
++			 addr, ret & 0xffff, i + 1);
++	}
++}
++
+ static int qca8084_pcs_set_mode(struct mdio_device *xpcs_mdiodev,
+ 				       struct mdio_device *pcs_mdiodev)
+ {
+@@ -603,6 +680,11 @@
+ 	if (ret)
+ 		return ret;
+ 
++	if (qca8084_vendor_seq) {
++		qca8084_gate_channel_clocks(xpcs_data);
++		dev_info(&pcs_mdiodev->dev, "vendor seq: channel clocks gated before the analog reset\n");
++	}
++
+ 	reset_control_assert(xpcs_data->rstc);
+ 
+ 	ret = qca8084_pcs_set_interface_mode(pcs_mdiodev,
+@@ -634,7 +716,17 @@
+ 
+ 	qca8084_apply_stock_serdes(pcs_mdiodev, "after calibration");
+ 
+-	return reset_control_deassert(xpcs_data->rstc);
++	ret = reset_control_deassert(xpcs_data->rstc);
++	if (ret)
++		return ret;
++
++	/* Vendor: "ethphy software reset" right after the XPCS release,
++	 * before the BaseR wait.
++	 */
++	if (qca8084_vendor_seq)
++		qca8084_ephy_soft_reset_all(pcs_mdiodev->bus);
++
++	return 0;
+ }
+ 
+ static int qca8084_xpcs_clock_parent_set(struct mdio_device *xpcs_mdiodev,
