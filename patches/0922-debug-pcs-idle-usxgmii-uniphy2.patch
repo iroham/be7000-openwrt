@@ -1,0 +1,173 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] debug: bring the unused UNIPHY2 up in USXGMII like the stock SSDK
+
+The stock SSDK configures UNIPHY2 for USXGMII (switch_mac_mode2 = 0x0d)
+although nothing is attached to it: on stock its sys/ahb clocks are on and
+its PLL is reset, calibrated and locked (clk_summary of the same failing
+board: gcc_uniphy2_sys_clk and gcc_uniphy2_ahb_clk enabled on stock, off on
+OpenWrt). Here pcs2 is disabled and the block is left in its reset state
+with the clocks gated. It sits next to UNIPHY0, and the failing direction
+is the UNIPHY0 receiver.
+
+With qcom,idle-usxgmii on a PCS node the driver brings that UNIPHY up in
+USXGMII at probe (module parameter idle_usxgmii, default on) and exposes
+/sys/kernel/debug/ipq_pcs_idle_ctl with "down", "up" and "status" for an
+A/B in one boot.
+
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -190,6 +190,14 @@
+ 	 */
+ 	bool xpcs_redo;
+ 	struct mutex redo_lock;
++
++	/* Idle USXGMII bring-up of an otherwise unused UNIPHY, see
++	 * ipq_pcs_idle_up().
++	 */
++	struct clk *sys_clk;
++	struct clk *ahb_clk;
++	bool idle_up;
++	bool idle_gated;
+ };
+ 
+ #define phylink_pcs_to_qpcs_mii(_pcs)	\
+@@ -1667,6 +1675,106 @@
+ 	.fast_io = true,
+ };
+ 
++
++/* Experiment (BE7000 dead RX): the stock SSDK brings UNIPHY2 up in USXGMII
++ * (switch_mac_mode2 = 0x0d) although nothing is attached to it, so on stock
++ * its clocks are on and its PLL is reset, calibrated and locked. Here it is
++ * left untouched with its clocks gated. UNIPHY2 sits next to UNIPHY0, and
++ * the failing direction is the UNIPHY0 receiver. With qcom,idle-usxgmii the
++ * PCS does the same bring-up at probe; ipq_pcs_idle_ctl takes it down and
++ * up again at runtime ("down", "up", "status") for an A/B in one boot.
++ */
++static bool idle_usxgmii = true;
++module_param(idle_usxgmii, bool, 0444);
++MODULE_PARM_DESC(idle_usxgmii, "bring an unused UNIPHY with qcom,idle-usxgmii up in USXGMII at probe");
++
++static struct ipq_pcs *ipq_pcs_idle;
++
++static void ipq_pcs_idle_status(struct ipq_pcs *qpcs, const char *what)
++{
++	unsigned int pll = 0, cal = 0, kr = 0;
++
++	if (!qpcs->idle_up) {
++		dev_info(qpcs->dev, "idle %s: down (resets asserted, clocks gated)\n", what);
++		return;
++	}
++	regmap_read(qpcs->regmap, PCS_PLL_RESET, &pll);
++	regmap_read(qpcs->regmap, PCS_CALIBRATION, &cal);
++	regmap_read(qpcs->regmap, XPCS_KR_STS, &kr);
++	dev_info(qpcs->dev, "idle %s: up, PLL_RESET 0x%x CALIBRATION 0x%x KR_STS1 0x%x\n",
++		 what, pll, cal, kr);
++}
++
++static int ipq_pcs_idle_up(struct ipq_pcs *qpcs)
++{
++	int ret;
++
++	if (qpcs->idle_gated) {
++		ret = clk_prepare_enable(qpcs->sys_clk);
++		if (!ret)
++			ret = clk_prepare_enable(qpcs->ahb_clk);
++		if (ret)
++			return ret;
++		qpcs->idle_gated = false;
++	}
++	reset_control_deassert(qpcs->sys_rstc);
++	reset_control_deassert(qpcs->soft_rstc);
++	qpcs->interface = PHY_INTERFACE_MODE_NA;
++	ret = ipq_pcs_config_usxgmii(qpcs, 0, PHY_INTERFACE_MODE_USXGMII);
++	qpcs->idle_up = true;
++	dev_info(qpcs->dev, "idle USXGMII bring-up as the stock SSDK does: %d\n", ret);
++	ipq_pcs_idle_status(qpcs, "after bring-up");
++	return ret;
++}
++
++static void ipq_pcs_idle_down(struct ipq_pcs *qpcs)
++{
++	if (!qpcs->idle_up)
++		return;
++	regmap_write(qpcs->regmap, PCS_PLL_RESET, PCS_PLL_RESET_ASSERT);
++	reset_control_assert(qpcs->xpcs_rstc);
++	reset_control_assert(qpcs->sys_rstc);
++	reset_control_assert(qpcs->soft_rstc);
++	msleep(10);
++	clk_disable_unprepare(qpcs->ahb_clk);
++	clk_disable_unprepare(qpcs->sys_clk);
++	qpcs->idle_gated = true;
++	qpcs->idle_up = false;
++	qpcs->interface = PHY_INTERFACE_MODE_NA;
++	ipq_pcs_idle_status(qpcs, "after take-down");
++}
++
++static ssize_t ipq_pcs_idle_write(struct file *file, const char __user *ubuf,
++				  size_t len, loff_t *ppos)
++{
++	struct ipq_pcs *qpcs = ipq_pcs_idle;
++	char buf[16];
++	size_t n = min(len, sizeof(buf) - 1);
++
++	if (!qpcs)
++		return -ENODEV;
++	if (copy_from_user(buf, ubuf, n))
++		return -EFAULT;
++	buf[n] = 0;
++
++	if (sysfs_streq(buf, "up"))
++		ipq_pcs_idle_up(qpcs);
++	else if (sysfs_streq(buf, "down"))
++		ipq_pcs_idle_down(qpcs);
++	else if (sysfs_streq(buf, "status"))
++		ipq_pcs_idle_status(qpcs, "status");
++	else
++		return -EINVAL;
++	return len;
++}
++
++static const struct file_operations ipq_pcs_idle_fops = {
++	.owner = THIS_MODULE,
++	.open = simple_open,
++	.write = ipq_pcs_idle_write,
++	.llseek = noop_llseek,
++};
++
+ static int ipq9574_pcs_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+@@ -1691,11 +1799,13 @@
+ 				     "Failed to allocate register map\n");
+ 
+ 	clk = devm_clk_get_enabled(dev, "sys");
++	qpcs->sys_clk = clk;
+ 	if (IS_ERR(clk))
+ 		return dev_err_probe(dev, PTR_ERR(clk),
+ 				     "Failed to enable SYS clock\n");
+ 
+ 	clk = devm_clk_get_enabled(dev, "ahb");
++	qpcs->ahb_clk = clk;
+ 	if (IS_ERR(clk))
+ 		return dev_err_probe(dev, PTR_ERR(clk),
+ 				     "Failed to enable AHB clock\n");
+@@ -1725,6 +1835,18 @@
+ 	if (ret)
+ 		return ret;
+ 
++	if (of_property_read_bool(dev->of_node, "qcom,idle-usxgmii")) {
++		ipq_pcs_idle = qpcs;
++		debugfs_create_file("ipq_pcs_idle_ctl", 0200, NULL, NULL,
++				    &ipq_pcs_idle_fops);
++		if (idle_usxgmii)
++			ipq_pcs_idle_up(qpcs);
++		else
++			dev_info(dev, "idle USXGMII bring-up skipped (idle_usxgmii=0)\n");
++		platform_set_drvdata(pdev, qpcs);
++		return 0;
++	}
++
+ 	if (!ipq_pcs_dbg) {
+ 		ipq_pcs_dbg = qpcs;
+ 		debugfs_create_file("ipq_pcs0_ctl", 0200, NULL, NULL,

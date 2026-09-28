@@ -1,0 +1,14 @@
+Bring UNIPHY2 up in USXGMII like the stock SSDK does (switch_mac_mode2 =
+0x0d), with nothing attached to it (experiment, see patch 0922).
+--- a/target/linux/qualcommbe/dts/ipq9574-be7000.dts
++++ b/target/linux/qualcommbe/dts/ipq9574-be7000.dts
+@@ -991,7 +991,8 @@
+ };
+ 
+ &pcs2 {
+-	status = "disabled";
++	status = "okay";
++	qcom,idle-usxgmii;
+ };
+ 
+ /* Stock single-phy 5 GHz RF routing (TLMM6 low / TLMM7 high).
