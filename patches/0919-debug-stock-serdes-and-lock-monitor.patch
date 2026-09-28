@@ -1,0 +1,243 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] debug: program the stock UNIPHY SerDes values on both sides and log the lock timeline
+
+Experiment for the BE7000 dead RX. The SoC UNIPHY0 and the QCA8084 SerDes
+are the same IP (chip mmd1 reg N = SoC offset N * 4) and on a failing board
+the same registers differ between stock and OpenWrt on both sides: bit 4 of
+0x2e/0xb8, bits 0 and 2 of 0x14a/0x528, plus 0x1e, 0x63, 0x80 on the chip.
+Program the stock values around the PLL reset / calibration, gated by
+stock_serdes=0 on both modules, and print both lock states every 5 s for
+ten minutes.
+
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -22,6 +22,8 @@
+ #include <linux/platform_device.h>
+ #include <linux/regmap.h>
+ #include <linux/reset.h>
++#include <linux/workqueue.h>
++#include <linux/module.h>
+ 
+ #include <dt-bindings/net/qcom,ipq9574-pcs.h>
+ 
+@@ -372,6 +374,62 @@
+ 	return 0;
+ }
+ 
++
++/* Experiment (BE7000 dead RX): the SoC UNIPHY0 and the QCA8084 SerDes are
++ * the same IP, and on a failing board the same two registers differ between
++ * stock and OpenWrt on both sides (chip mmd1 reg N is SoC offset N * 4):
++ * bit 4 of 0xb8 (chip 0x2e) is clear on stock, bits 0 and 2 of 0x528
++ * (chip 0x14a) are set on stock. Program the stock values around the PLL
++ * reset, and log the lock state every 5 s so the timeline is in dmesg.
++ */
++static bool stock_serdes = true;
++module_param(stock_serdes, bool, 0444);
++MODULE_PARM_DESC(stock_serdes, "program the stock UNIPHY SerDes values (BE7000 experiment)");
++
++static const struct { unsigned int reg, val; } ipq_pcs_stock_regs[] = {
++	{ 0x0b8, 0x1433 },
++	{ 0x528, 0x072d },
++};
++
++static void ipq_pcs_apply_stock_serdes(struct ipq_pcs *qpcs, const char *when)
++{
++	unsigned int val;
++	int i;
++
++	if (!stock_serdes)
++		return;
++	for (i = 0; i < ARRAY_SIZE(ipq_pcs_stock_regs); i++) {
++		regmap_write(qpcs->regmap, ipq_pcs_stock_regs[i].reg,
++			     ipq_pcs_stock_regs[i].val);
++		regmap_read(qpcs->regmap, ipq_pcs_stock_regs[i].reg, &val);
++		dev_info(qpcs->dev, "stock serdes %s: 0x%03x <- 0x%04x, reads 0x%04x\n",
++			 when, ipq_pcs_stock_regs[i].reg,
++			 ipq_pcs_stock_regs[i].val, val);
++	}
++}
++
++static struct ipq_pcs *ipq_pcs_mon_qpcs;
++static struct delayed_work ipq_pcs_mon_work;
++static int ipq_pcs_mon_left;
++
++static void ipq_pcs_mon_fn(struct work_struct *work)
++{
++	struct ipq_pcs *qpcs = ipq_pcs_mon_qpcs;
++	unsigned int s1 = 0, s2 = 0, b8 = 0, r528 = 0, cal = 0;
++
++	if (!qpcs)
++		return;
++	regmap_read(qpcs->regmap, 0x30020, &s1);
++	regmap_read(qpcs->regmap, 0x30021, &s2);
++	regmap_read(qpcs->regmap, 0x0b8, &b8);
++	regmap_read(qpcs->regmap, 0x528, &r528);
++	regmap_read(qpcs->regmap, 0x1e0, &cal);
++	dev_info(qpcs->dev, "mon: KR_STS1 0x%04x KR_STS2 0x%04x 0xb8 0x%04x 0x528 0x%04x CAL 0x%04x\n",
++		 s1, s2, b8, r528, cal);
++	if (--ipq_pcs_mon_left > 0)
++		schedule_delayed_work(&ipq_pcs_mon_work, 5 * HZ);
++}
++
+ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
+ 			       phy_interface_t interface)
+ {
+@@ -476,6 +534,7 @@
+ 		if (ret)
+ 			goto err_clk;
+ 
++		ipq_pcs_apply_stock_serdes(qpcs, "in PLL reset");
+ 		msleep(100);
+ 		ret = regmap_write(qpcs->regmap, PCS_PLL_RESET,
+ 				   PCS_PLL_RESET_RELEASE);
+@@ -483,6 +542,7 @@
+ 			goto err_clk;
+ 
+ 		msleep(100);
++		ipq_pcs_apply_stock_serdes(qpcs, "after PLL release");
+ 	} else {
+ 		ret = regmap_clear_bits(qpcs->regmap, PCS_PLL_RESET,
+ 					PCS_ANA_SW_RESET);
+@@ -1654,6 +1714,10 @@
+ 	if (of_property_read_bool(dev->of_node, "qcom,early-10g-qxgmii")) {
+ 		ret = ipq_pcs_config_usxgmii(qpcs, 0, PHY_INTERFACE_MODE_10G_QXGMII);
+ 		dev_info(dev, "early 10G-QXGMII bring-up before the PHY package: %d\n", ret);
++		ipq_pcs_mon_qpcs = qpcs;
++		ipq_pcs_mon_left = 120;
++		INIT_DELAYED_WORK(&ipq_pcs_mon_work, ipq_pcs_mon_fn);
++		schedule_delayed_work(&ipq_pcs_mon_work, 5 * HZ);
+ 	}
+ 
+ 	platform_set_drvdata(pdev, qpcs);
+--- a/drivers/net/phy/qcom/qca8084_serdes.c
++++ b/drivers/net/phy/qcom/qca8084_serdes.c
+@@ -7,6 +7,7 @@
+ #include <linux/clk-provider.h>
+ #include <linux/dev_printk.h>
+ #include <linux/mdio.h>
++#include <linux/module.h>
+ #include <linux/of.h>
+ #include <linux/phy.h>
+ #include <linux/property.h>
+@@ -543,6 +544,37 @@
+ 	return ret;
+ }
+ 
++
++/* Experiment (BE7000 dead RX), see pcs-qcom-ipq9574.c: the SerDes registers
++ * that differ between stock and OpenWrt on a failing board, programmed to
++ * the stock values around the calibration. mmd1 reg N is SoC offset N * 4.
++ */
++static bool qca8084_stock_serdes = true;
++module_param_named(stock_serdes, qca8084_stock_serdes, bool, 0444);
++
++static const struct { u16 reg, val; } qca8084_stock_regs[] = {
++	{ 0x01e, 0x0554 },
++	{ 0x02e, 0x1d13 },
++	{ 0x063, 0x5ef7 },
++	{ 0x080, 0x1917 },
++	{ 0x14a, 0x072d },
++};
++
++static void qca8084_apply_stock_serdes(struct mdio_device *pcs_mdiodev, const char *when)
++{
++	int i, v;
++
++	if (!qca8084_stock_serdes)
++		return;
++	for (i = 0; i < ARRAY_SIZE(qca8084_stock_regs); i++) {
++		mdiodev_c45_write(pcs_mdiodev, MDIO_MMD_PMAPMD,
++				  qca8084_stock_regs[i].reg, qca8084_stock_regs[i].val);
++		v = mdiodev_c45_read(pcs_mdiodev, MDIO_MMD_PMAPMD, qca8084_stock_regs[i].reg);
++		dev_info(&pcs_mdiodev->dev, "stock serdes %s: mmd1 0x%03x <- 0x%04x, reads 0x%04x\n",
++			 when, qca8084_stock_regs[i].reg, qca8084_stock_regs[i].val, v);
++	}
++}
++
+ static int qca8084_pcs_set_mode(struct mdio_device *xpcs_mdiodev,
+ 				       struct mdio_device *pcs_mdiodev)
+ {
+@@ -574,6 +606,8 @@
+ 	if (ret)
+ 		return ret;
+ 
++	qca8084_apply_stock_serdes(pcs_mdiodev, "before calibration");
++
+ 	/* Reset of 4 channels */
+ 	for (channel = 0; channel < QCA8084_CHANNEL_MAX; channel++) {
+ 		xpcs_ch = xpcs_data->xpcs_ch[channel];
+@@ -594,6 +628,8 @@
+ 	if (ret)
+ 		return ret;
+ 
++	qca8084_apply_stock_serdes(pcs_mdiodev, "after calibration");
++
+ 	return reset_control_deassert(xpcs_data->rstc);
+ }
+ 
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -8,6 +8,7 @@
+ #include <linux/debugfs.h>
+ #include <linux/seq_file.h>
+ #include <linux/uaccess.h>
++#include <linux/workqueue.h>
+ #include <dt-bindings/net/qcom,qca808x.h>
+ 
+ #include "../phylib.h"
+@@ -1120,6 +1121,30 @@
+ 	return clk_prepare_enable(shared_priv->clk[MDIO_AHB_CLK]);
+ }
+ 
++
++/* Experiment (BE7000 dead RX): chip side lock timeline in dmesg, every 5 s */
++static struct qca808x_shared_priv *qca8084_mon_shared;
++static struct delayed_work qca8084_mon_work;
++static int qca8084_mon_left;
++
++static void qca8084_mon_fn(struct work_struct *work)
++{
++	struct qca808x_shared_priv *sp = qca8084_mon_shared;
++	int s1, s2, r2e, r14a, cal;
++
++	if (!sp || !sp->mdiodev[0] || !sp->mdiodev[1])
++		return;
++	s1 = mdiodev_c45_read(sp->mdiodev[1], MDIO_MMD_PCS, 0x20);
++	s2 = mdiodev_c45_read(sp->mdiodev[1], MDIO_MMD_PCS, 0x21);
++	r2e = mdiodev_c45_read(sp->mdiodev[0], MDIO_MMD_PMAPMD, 0x2e);
++	r14a = mdiodev_c45_read(sp->mdiodev[0], MDIO_MMD_PMAPMD, 0x14a);
++	cal = mdiodev_c45_read(sp->mdiodev[0], MDIO_MMD_PMAPMD, 0x78);
++	dev_info(&sp->mdiodev[1]->dev, "mon: chip KR_STS1 0x%04x KR_STS2 0x%04x mmd1 0x2e 0x%04x 0x14a 0x%04x CAL4 0x%04x\n",
++		 s1 & 0xffff, s2 & 0xffff, r2e & 0xffff, r14a & 0xffff, cal & 0xffff);
++	if (--qca8084_mon_left > 0)
++		schedule_delayed_work(&qca8084_mon_work, 5 * HZ);
++}
++
+ static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
+ {
+ 	struct qca808x_shared_priv *shared_priv;
+@@ -1195,6 +1220,12 @@
+ 		}
+ 		if (shared_priv->xpcs_redo)
+ 			phydev_info(phydev, "QXGMII XPCS set up without BaseR lock, will redo it on first link up\n");
++		if (!qca8084_mon_shared) {
++			qca8084_mon_shared = shared_priv;
++			qca8084_mon_left = 120;
++			INIT_DELAYED_WORK(&qca8084_mon_work, qca8084_mon_fn);
++			schedule_delayed_work(&qca8084_mon_work, 5 * HZ);
++		}
+ 	}
+ 
+ 	/* Initialize the PHY package clock and reset, which is the
+@@ -1449,6 +1480,10 @@
+ {
+ 	struct qca808x_shared_priv *shared_priv = phy_package_get_priv(phydev);;
+ 
++	if (qca8084_mon_shared == shared_priv) {
++		cancel_delayed_work_sync(&qca8084_mon_work);
++		qca8084_mon_shared = NULL;
++	}
+ 	qca8084_package_xpcs_and_pcs_remove(shared_priv->mdiodev[1],
+ 					    shared_priv->mdiodev[0]);
+ }
