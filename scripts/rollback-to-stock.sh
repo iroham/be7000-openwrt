@@ -11,15 +11,29 @@ for arg in $(cat /proc/cmdline); do
 	esac
 done
 case "$CUR" in rootfs) OTHER=1 ;; rootfs_1) OTHER=0 ;; *) echo "unexpected ubi.mtd=$CUR"; exit 1 ;; esac
-# /overlay shares stock's settings volume on mtd28 (bigoverlay). If that volume
-# still holds stock's own /data/etc, stock simply picks its settings up again.
-# If it does not (the partition was formatted by bigoverlay 1.2 to 1.2.5 and
-# the volume only carries our files), tell stock to repopulate /data/etc from
-# its ROM; otherwise it comes up with an empty /etc/config and even SSH will
-# not start.
+# /overlay shares stock's settings volume on mtd28 (bigoverlay). Stock does not
+# keep its settings as plain files there. Its preinit (89_mount_sec_cfg) moves
+# them into an encrypted container, sec_cfg/data.vol (a spare copy lives in
+# usr/sec_cfg/data.vol), and binds the opened container over /data/etc/config.
+# Seen from OpenWrt, etc/config is an empty directory even on a fully set up
+# stock. Stock builds without the container keep the files in etc/config.
+#
+# If either is there, stock picks its settings up again by itself, and
+# flag_format_overlay must stay unset: stock acts on the flag after it has
+# opened the container (90_mount_bind_etc, init_data_dir), empties it and
+# copies its ROM defaults in, so it comes up in the setup wizard. 1.2.6 and
+# 1.2.7 looked at etc/config only and did exactly that on every rollback.
+#
+# Only when the volume carries neither (the partition was formatted by
+# bigoverlay 1.2 to 1.2.5 and holds only our files) tell stock to repopulate
+# /data/etc from its ROM; otherwise it comes up with an empty /etc/config and
+# even SSH will not start.
 case "$(grep ' /overlay ' /proc/mounts | cut -d' ' -f1)" in
 /dev/ubi1_*)
-	if [ -n "$(ls /overlay/etc/config 2>/dev/null)" ]; then
+	if [ -s /overlay/sec_cfg/data.vol ] || [ -s /overlay/usr/sec_cfg/data.vol ] \
+	   || [ -n "$(ls /overlay/etc/config 2>/dev/null)" ]; then
+		# a flag left by an older copy of this script would still wipe them
+		[ -n "$(fw_printenv -n flag_format_overlay 2>/dev/null)" ] && fw_setenv flag_format_overlay
 		echo "stock settings found on mtd28, stock will boot with them"
 	else
 		fw_setenv flag_format_overlay 1
