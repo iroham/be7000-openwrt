@@ -1,13 +1,16 @@
 From: be7000-openwrt <noreply@example.com>
 Subject: [PATCH] debug: program the stock UNIPHY SerDes values on both sides and log the lock timeline
 
-Experiment for the BE7000 dead RX. The SoC UNIPHY0 and the QCA8084 SerDes
-are the same IP (chip mmd1 reg N = SoC offset N * 4) and on a failing board
-the same registers differ between stock and OpenWrt on both sides: bit 4 of
-0x2e/0xb8, bits 0 and 2 of 0x14a/0x528, plus 0x1e, 0x63, 0x80 on the chip.
-Program the stock values around the PLL reset / calibration, gated by
-stock_serdes=0 on both modules, and print both lock states every 5 s for
-ten minutes.
+Experiment for the BE7000 dead RX (v3, uniphy17). The QCA8084 SerDes and the
+SoC UNIPHY share a register map (chip mmd1 reg N = SoC offset N*4). On a
+failing board the chip SerDes comes up at reset defaults (0x1e 0x04e4, 0x63
+0x5ad6, 0x80 0x1916) where stock and a working board show 0x0554/0x5ef7/0x1917;
+writing those made the chip lock in 5 s instead of minutes (uniphy16) but the
+SoC still received nothing (KR_STS2 stayed 0). The vendor mdio driver programs
+EPHY_CFG 0x320c41 with bits 21:20 set, this driver clears them, so keep them
+set (ephy_ldo=0 restores the old behaviour) and only report the SerDes
+registers (stock_serdes=1 writes the three proven ones). Lock state of both
+sides is printed every 5 s for ten minutes.
 
 --- a/drivers/net/pcs/pcs-qcom-ipq9574.c
 +++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
@@ -20,7 +23,7 @@ ten minutes.
  
  #include <dt-bindings/net/qcom,ipq9574-pcs.h>
  
-@@ -372,6 +374,62 @@
+@@ -372,6 +374,60 @@
  	return 0;
  }
  
@@ -32,13 +35,12 @@ ten minutes.
 + * (chip 0x14a) are set on stock. Program the stock values around the PLL
 + * reset, and log the lock state every 5 s so the timeline is in dmesg.
 + */
-+static bool stock_serdes = true;
++static bool stock_serdes;
 +module_param(stock_serdes, bool, 0444);
 +MODULE_PARM_DESC(stock_serdes, "program the stock UNIPHY SerDes values (BE7000 experiment)");
 +
 +static const struct { unsigned int reg, val; } ipq_pcs_stock_regs[] = {
-+	{ 0x0b8, 0x1433 },
-+	{ 0x528, 0x072d },
++	{ 0x1e8, 0x3836 },
 +};
 +
 +static void ipq_pcs_apply_stock_serdes(struct ipq_pcs *qpcs, const char *when)
@@ -46,15 +48,14 @@ ten minutes.
 +	unsigned int val;
 +	int i;
 +
-+	if (!stock_serdes)
-+		return;
 +	for (i = 0; i < ARRAY_SIZE(ipq_pcs_stock_regs); i++) {
-+		regmap_write(qpcs->regmap, ipq_pcs_stock_regs[i].reg,
-+			     ipq_pcs_stock_regs[i].val);
++		if (stock_serdes)
++			regmap_write(qpcs->regmap, ipq_pcs_stock_regs[i].reg,
++				     ipq_pcs_stock_regs[i].val);
 +		regmap_read(qpcs->regmap, ipq_pcs_stock_regs[i].reg, &val);
-+		dev_info(qpcs->dev, "stock serdes %s: 0x%03x <- 0x%04x, reads 0x%04x\n",
-+			 when, ipq_pcs_stock_regs[i].reg,
-+			 ipq_pcs_stock_regs[i].val, val);
++		dev_info(qpcs->dev, "serdes %s: 0x%03x reads 0x%04x (stock 0x%04x%s)\n",
++			 when, ipq_pcs_stock_regs[i].reg, val,
++			 ipq_pcs_stock_regs[i].val, stock_serdes ? ", written" : "");
 +	}
 +}
 +
@@ -71,10 +72,10 @@ ten minutes.
 +		return;
 +	regmap_read(qpcs->regmap, 0x30020, &s1);
 +	regmap_read(qpcs->regmap, 0x30021, &s2);
-+	regmap_read(qpcs->regmap, 0x0b8, &b8);
++	regmap_read(qpcs->regmap, 0x1e8, &b8);
 +	regmap_read(qpcs->regmap, 0x528, &r528);
 +	regmap_read(qpcs->regmap, 0x1e0, &cal);
-+	dev_info(qpcs->dev, "mon: KR_STS1 0x%04x KR_STS2 0x%04x 0xb8 0x%04x 0x528 0x%04x CAL 0x%04x\n",
++	dev_info(qpcs->dev, "mon: KR_STS1 0x%04x KR_STS2 0x%04x 0x1e8 0x%04x 0x528 0x%04x CAL 0x%04x\n",
 +		 s1, s2, b8, r528, cal);
 +	if (--ipq_pcs_mon_left > 0)
 +		schedule_delayed_work(&ipq_pcs_mon_work, 5 * HZ);
@@ -83,7 +84,7 @@ ten minutes.
  static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
  			       phy_interface_t interface)
  {
-@@ -476,6 +534,7 @@
+@@ -476,6 +532,7 @@
  		if (ret)
  			goto err_clk;
  
@@ -91,7 +92,7 @@ ten minutes.
  		msleep(100);
  		ret = regmap_write(qpcs->regmap, PCS_PLL_RESET,
  				   PCS_PLL_RESET_RELEASE);
-@@ -483,6 +542,7 @@
+@@ -483,6 +540,7 @@
  			goto err_clk;
  
  		msleep(100);
@@ -99,7 +100,7 @@ ten minutes.
  	} else {
  		ret = regmap_clear_bits(qpcs->regmap, PCS_PLL_RESET,
  					PCS_ANA_SW_RESET);
-@@ -1654,6 +1714,10 @@
+@@ -1654,6 +1712,10 @@
  	if (of_property_read_bool(dev->of_node, "qcom,early-10g-qxgmii")) {
  		ret = ipq_pcs_config_usxgmii(qpcs, 0, PHY_INTERFACE_MODE_10G_QXGMII);
  		dev_info(dev, "early 10G-QXGMII bring-up before the PHY package: %d\n", ret);
@@ -120,7 +121,7 @@ ten minutes.
  #include <linux/of.h>
  #include <linux/phy.h>
  #include <linux/property.h>
-@@ -543,6 +544,37 @@
+@@ -543,6 +544,41 @@
  	return ret;
  }
  
@@ -129,36 +130,40 @@ ten minutes.
 + * that differ between stock and OpenWrt on a failing board, programmed to
 + * the stock values around the calibration. mmd1 reg N is SoC offset N * 4.
 + */
-+static bool qca8084_stock_serdes = true;
++static bool qca8084_stock_serdes;
 +module_param_named(stock_serdes, qca8084_stock_serdes, bool, 0444);
 +
-+static const struct { u16 reg, val; } qca8084_stock_regs[] = {
-+	{ 0x01e, 0x0554 },
-+	{ 0x02e, 0x1d13 },
-+	{ 0x063, 0x5ef7 },
-+	{ 0x080, 0x1917 },
-+	{ 0x14a, 0x072d },
++static const struct { u16 reg, val; bool wr; } qca8084_stock_regs[] = {
++	{ 0x01e, 0x0554, true },
++	{ 0x05c, 0x7d98, false },
++	{ 0x063, 0x5ef7, true },
++	{ 0x079, 0x4246, false },
++	{ 0x07a, 0x3333, false },
++	{ 0x07b, 0x1080, false },
++	{ 0x080, 0x1917, true },
 +};
 +
 +static void qca8084_apply_stock_serdes(struct mdio_device *pcs_mdiodev, const char *when)
 +{
 +	int i, v;
 +
-+	if (!qca8084_stock_serdes)
-+		return;
 +	for (i = 0; i < ARRAY_SIZE(qca8084_stock_regs); i++) {
-+		mdiodev_c45_write(pcs_mdiodev, MDIO_MMD_PMAPMD,
-+				  qca8084_stock_regs[i].reg, qca8084_stock_regs[i].val);
++		bool wr = qca8084_stock_serdes && qca8084_stock_regs[i].wr;
++
++		if (wr)
++			mdiodev_c45_write(pcs_mdiodev, MDIO_MMD_PMAPMD,
++					  qca8084_stock_regs[i].reg, qca8084_stock_regs[i].val);
 +		v = mdiodev_c45_read(pcs_mdiodev, MDIO_MMD_PMAPMD, qca8084_stock_regs[i].reg);
-+		dev_info(&pcs_mdiodev->dev, "stock serdes %s: mmd1 0x%03x <- 0x%04x, reads 0x%04x\n",
-+			 when, qca8084_stock_regs[i].reg, qca8084_stock_regs[i].val, v);
++		dev_info(&pcs_mdiodev->dev, "serdes %s: mmd1 0x%03x reads 0x%04x (stock 0x%04x%s)\n",
++			 when, qca8084_stock_regs[i].reg, v & 0xffff,
++			 qca8084_stock_regs[i].val, wr ? ", written" : "");
 +	}
 +}
 +
  static int qca8084_pcs_set_mode(struct mdio_device *xpcs_mdiodev,
  				       struct mdio_device *pcs_mdiodev)
  {
-@@ -574,6 +606,8 @@
+@@ -574,6 +610,8 @@
  	if (ret)
  		return ret;
  
@@ -167,7 +172,7 @@ ten minutes.
  	/* Reset of 4 channels */
  	for (channel = 0; channel < QCA8084_CHANNEL_MAX; channel++) {
  		xpcs_ch = xpcs_data->xpcs_ch[channel];
-@@ -594,6 +628,8 @@
+@@ -594,6 +632,8 @@
  	if (ret)
  		return ret;
  
@@ -186,12 +191,15 @@ ten minutes.
  #include <dt-bindings/net/qcom,qca808x.h>
  
  #include "../phylib.h"
-@@ -1120,6 +1121,30 @@
+@@ -1120,6 +1121,33 @@
  	return clk_prepare_enable(shared_priv->clk[MDIO_AHB_CLK]);
  }
  
 +
 +/* Experiment (BE7000 dead RX): chip side lock timeline in dmesg, every 5 s */
++static bool qca8084_ephy_ldo = true;
++module_param_named(ephy_ldo, qca8084_ephy_ldo, bool, 0444);
++
 +static struct qca808x_shared_priv *qca8084_mon_shared;
 +static struct delayed_work qca8084_mon_work;
 +static int qca8084_mon_left;
@@ -205,10 +213,10 @@ ten minutes.
 +		return;
 +	s1 = mdiodev_c45_read(sp->mdiodev[1], MDIO_MMD_PCS, 0x20);
 +	s2 = mdiodev_c45_read(sp->mdiodev[1], MDIO_MMD_PCS, 0x21);
-+	r2e = mdiodev_c45_read(sp->mdiodev[0], MDIO_MMD_PMAPMD, 0x2e);
++	r2e = mdiodev_c45_read(sp->mdiodev[0], MDIO_MMD_PMAPMD, 0x63);
 +	r14a = mdiodev_c45_read(sp->mdiodev[0], MDIO_MMD_PMAPMD, 0x14a);
 +	cal = mdiodev_c45_read(sp->mdiodev[0], MDIO_MMD_PMAPMD, 0x78);
-+	dev_info(&sp->mdiodev[1]->dev, "mon: chip KR_STS1 0x%04x KR_STS2 0x%04x mmd1 0x2e 0x%04x 0x14a 0x%04x CAL4 0x%04x\n",
++	dev_info(&sp->mdiodev[1]->dev, "mon: chip KR_STS1 0x%04x KR_STS2 0x%04x mmd1 0x63 0x%04x 0x14a 0x%04x CAL4 0x%04x\n",
 +		 s1 & 0xffff, s2 & 0xffff, r2e & 0xffff, r14a & 0xffff, cal & 0xffff);
 +	if (--qca8084_mon_left > 0)
 +		schedule_delayed_work(&qca8084_mon_work, 5 * HZ);
@@ -217,7 +225,35 @@ ten minutes.
  static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
  {
  	struct qca808x_shared_priv *shared_priv;
-@@ -1195,6 +1220,12 @@
+@@ -1163,11 +1191,24 @@
+ 	if (ret)
+ 		return ret;
+ 
+-	/* Enable efuse loading into analog circuit */
+-	ret = qca8084_mii_modify(phydev, QCA8084_EPHY_CFG,
+-				 QCA8084_EPHY_LDO_EN, 0);
++	/* Experiment (BE7000 dead RX): the vendor mdio driver writes EPHY_CFG
++	 * 0x320c41 right after the GPIO reset, i.e. with bits 21:20 SET, while
++	 * this driver clears them ("enable efuse loading"). On the failing
++	 * boards the SerDes analog registers come up at their reset defaults
++	 * (0x63 0x5ad6 instead of the fused 0x5ef7 seen on stock and on a
++	 * working board), which looks like the efuse never being loaded into
++	 * the analog. Keep the vendor value unless ephy_ldo=0.
++	 */
++	if (qca8084_ephy_ldo)
++		ret = qca8084_mii_modify(phydev, QCA8084_EPHY_CFG,
++					 QCA8084_EPHY_LDO_EN, QCA8084_EPHY_LDO_EN);
++	else
++		ret = qca8084_mii_modify(phydev, QCA8084_EPHY_CFG,
++					 QCA8084_EPHY_LDO_EN, 0);
+ 	if (ret)
+ 		return ret;
++	phydev_info(phydev, "EPHY_CFG bits 21:20 %s (ephy_ldo=%d)\n",
++		    qca8084_ephy_ldo ? "kept set like the vendor driver" : "cleared", qca8084_ephy_ldo);
+ 
+ 	usleep_range(10000, 11000);
+ 
+@@ -1195,6 +1236,12 @@
  		}
  		if (shared_priv->xpcs_redo)
  			phydev_info(phydev, "QXGMII XPCS set up without BaseR lock, will redo it on first link up\n");
@@ -230,7 +266,7 @@ ten minutes.
  	}
  
  	/* Initialize the PHY package clock and reset, which is the
-@@ -1449,6 +1480,10 @@
+@@ -1449,6 +1496,10 @@
  {
  	struct qca808x_shared_priv *shared_priv = phy_package_get_priv(phydev);;
  
