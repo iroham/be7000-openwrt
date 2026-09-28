@@ -1,0 +1,12 @@
+Reset and prepare the QCA8084 package only after the SoC PCS is up
+(vendor order): the clock controller defers its probe until pcs0 is bound.
+--- a/target/linux/qualcommbe/dts/ipq9574-be7000.dts
++++ b/target/linux/qualcommbe/dts/ipq9574-be7000.dts
+@@ -628,6 +628,7 @@
+ 		reg = <0x18>;
+ 		reset-gpios = <&tlmm 60 GPIO_ACTIVE_LOW>;
+ 		qcom,vendor-preinit;
++		qcom,reset-after-pcs = <&pcs0>;
+ 		clocks = <&cmn_pll ETH0_50MHZ_CLK>,
+ 			 <0>,
+ 			 <0>,

@@ -1,0 +1,68 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] clk: qcom: nsscc-qca8k: optionally wait for the SoC PCS before the GPIO reset
+
+The vendor SSDK (commit 3c58ee12, "initialize manhattan after enabling
+miami uniphy") resets and prepares the QCA8084 only once the SoC UNIPHY
+is configured and transmitting, so the package SerDes comes out of reset
+and calibrates with a signal on the lane. Here the clock controller, and
+with it the GPIO reset and the vendor preinit, probes at 1.5 s, while the
+PCS comes up ten seconds later.
+
+Pulsing the reset line a second time from the PCS does not work: the
+preinit result is lost with it and the ePHYs stay in reset (observed:
+phy_poll_reset -ETIMEDOUT, no ports at all). Instead, when the DT names
+the PCS in qcom,reset-after-pcs, defer this probe until that device is
+bound, so the reset, the preinit and the clock registration all happen
+after the SoC side is up, in the vendor order and in one place.
+
+diff --git a/drivers/clk/qcom/nsscc-qca8k.c b/drivers/clk/qcom/nsscc-qca8k.c
+index dca2420..2f6b0a1 100644
+--- a/drivers/clk/qcom/nsscc-qca8k.c
++++ b/drivers/clk/qcom/nsscc-qca8k.c
+@@ -7,6 +7,8 @@
+ #include <linux/kernel.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
++#include <linux/of_platform.h>
++#include <linux/platform_device.h>
+ #include <linux/property.h>
+ #include <linux/delay.h>
+ #include <linux/regmap.h>
+@@ -2231,11 +2233,37 @@ static void nss_cc_qca8k_preinit(struct device *dev, struct regmap *regmap)
+ 	dev_info(dev, "vendor preinit done, SRDS1_SYS_CBCR 0x%08x\n", val);
+ }
+ 
++/* Vendor order (SSDK 3c58ee12): the package is reset and prepared only once
++ * the SoC UNIPHY transmits. When the DT names that PCS, wait for it to bind.
++ */
++static int nss_cc_qca8k_wait_for_pcs(struct device *dev)
++{
++	struct platform_device *pcs;
++	struct device_node *np;
++	bool bound;
++
++	np = of_parse_phandle(dev->of_node, "qcom,reset-after-pcs", 0);
++	if (!np)
++		return 0;
++
++	pcs = of_find_device_by_node(np);
++	of_node_put(np);
++	bound = pcs && device_is_bound(&pcs->dev);
++	if (pcs)
++		put_device(&pcs->dev);
++
++	return bound ? 0 : -EPROBE_DEFER;
++}
++
+ static int nss_cc_qca8k_probe(struct mdio_device *mdiodev)
+ {
+ 	struct regmap *regmap;
+ 	int ret;
+ 
++	ret = nss_cc_qca8k_wait_for_pcs(&mdiodev->dev);
++	if (ret)
++		return dev_err_probe(&mdiodev->dev, ret, "waiting for the SoC PCS\n");
++
+ 	ret = nss_cc_qca8k_clock_enable_and_reset(&mdiodev->dev);
+ 	if (ret)
+ 		return dev_err_probe(&mdiodev->dev, ret, "Fail to reset NSSCC\n");
