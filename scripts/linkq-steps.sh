@@ -10,7 +10,9 @@
 #   11 chip SerDes0 clock off as on stock, 12 chip memory control and
 #   sec_ctrl clocks as on stock.
 # Nothing is written to flash; a reboot undoes everything. Runs in the
-# background, so a dropped SSH session does not stop it.
+# background, so a dropped SSH session does not stop it. On uniphy24 and
+# newer it first waits until the router has been up for 30 minutes, see
+# below.
 #
 # usage:  sh linkq-steps.sh
 # result: /tmp/linkq-steps.txt (summary), /tmp/linkq-steps.tar.gz (everything)
@@ -172,6 +174,8 @@ if [ -z "$LQST_BG" ]; then
 		LQST_BG=1 setsid sh /tmp/.linkq-steps.run.sh >/dev/null 2>&1 < /dev/null &
 	fi
 	echo "started in the background, takes about four minutes and keeps running if this session drops"
+	[ -e /sys/module/pcs_qcom_ipq9574/parameters/suppress_los ] && [ "$(cut -d. -f1 /proc/uptime)" -lt 1830 ] &&
+		echo "this build polls the PCS for 30 minutes after boot, the steps start when that is over"
 	echo "done when $SUM ends with the line 'done'; then send /tmp/linkq-steps.tar.gz"
 	exit 0
 fi
@@ -216,6 +220,19 @@ socm() {
 	say "   $1: $v -> $w"
 }
 
+# uniphy24 and newer read the SoC PCS every 200 ms and every 5 s for the first
+# 30 minutes after boot, with no locking against the re-init steps below
+# (UNIPHY bring-up again, chip SerDes reset). BurmecianKnight's router rebooted
+# during these steps on uniphy24; a read landing while the XPCS is held in
+# reset is the likely cause. Wait until those monitors have stopped.
+if [ -e /sys/module/pcs_qcom_ipq9574/parameters/suppress_los ]; then
+	up=$(cut -d. -f1 /proc/uptime)
+	if [ "$up" -lt 1830 ]; then
+		say "uptime $up s, this build polls the PCS for 30 minutes after boot, waiting $((1830 - up)) s"
+		sleep $((1830 - up))
+	fi
+fi
+
 say "linkq-steps $(date), kernel $(uname -r), uptime $(cut -d' ' -f1 /proc/uptime) s"
 for r in 0xc800008 0xc8001a8 0xc8001ac 0xc8001c0 0xc8001c4 0xc8001c8 0xc8001d0 0xc90f044 0xc90f048; do
 	say "   chip $r = $(swr $r)"
@@ -227,8 +244,17 @@ measure "as booted"
 echo down > "$IDLE"; sleep 5
 measure "UNIPHY2 down"
 
+# The debug "up" enables the UNIPHY2 clocks before it releases the resets,
+# and on the boards seen so far gcc_uniphy2_sys_clk then stays off ("status
+# stuck at 'off'"), the bring-up gives up and UNIPHY2 stays down. Say so.
+echo "linkq-steps: UNIPHY2 up" > /dev/kmsg 2>/dev/null
 echo up > "$IDLE"; sleep 5
-measure "UNIPHY2 up again"
+if ! dmesg | grep -q 'linkq-steps: UNIPHY2 up' ||
+   dmesg | sed -n '/linkq-steps: UNIPHY2 up/,$p' | grep -q 'idle after bring-up: up'; then
+	measure "UNIPHY2 up again"
+else
+	measure "UNIPHY2 up again FAILED, it stays down from here on"
+fi
 
 : > "$DIR/governors"
 for p in "$CPUFREQ"/policy*; do
