@@ -7,6 +7,7 @@ scp -O rollback-to-stock.sh root@192.168.1.1:/tmp/
 ssh root@192.168.1.1 "sh /tmp/rollback-to-stock.sh && reboot"
 
 The script flashes nothing, it switches the boot slot to the other slot where stock is. OpenWrt stays in its slot. Stock comes up with its own settings. This works over Wi-Fi too.
+In 1.2.6, 1.2.7 and the debug builds the rollback script itself reset stock to factory settings. Stock keeps them in an encrypted sec_cfg container, the old script did not know that and decided there were none. If your copy of the script comes from one of those, take the fixed scripts/rollback-to-stock.sh from the repository.
 If stock came up with empty settings after going back (web interface without settings, SSH does not start, xmir-patcher says "dropbear is found, but it cannot run"), a version from 1.2 to 1.2.5 was installed before, those formatted the stock settings partition. A normal factory reset fixes it: hold the reset button for about ten seconds, or over telnet: nvram set restore_defaults=1 && nvram commit && reboot -f.
 MIWIFIRepairTool also brings stock back, nothing is lost with it either.
 
