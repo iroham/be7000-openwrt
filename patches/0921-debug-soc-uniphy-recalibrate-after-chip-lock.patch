@@ -1,0 +1,86 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] debug: redo the SoC UNIPHY0 bring-up (calibration) once the QCA8084 is locked
+
+On the failing BE7000 boards the SoC UNIPHY calibration result (0x1e8)
+differs between stock and OpenWrt on the same board, and the SoC receive
+side is the one that never locks (zerc00l: no signal at all; Denchik777 and
+BurmecianKnight: signal with saturated BER). Stock configures the SoC UNIPHY
+after the chip transmits; this tree calibrates it at probe with the chip in
+reset. When the QCA8084 driver first sees its own 10GBASE-R lock (the chip
+now locks within 5 s of its configuration), redo the whole SoC 10G-QXGMII
+bring-up including the PLL reset, and log 0x1e8 before/after and the lock
+state. soc_recal=0 disables it.
+
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -410,6 +410,41 @@
+ static struct delayed_work ipq_pcs_mon_work;
+ static int ipq_pcs_mon_left;
+ 
++static int ipq_pcs_config_usxgmii(struct ipq_pcs *qpcs, int index,
++				  phy_interface_t interface);
++int ipq_pcs_debug_recalibrate(void);
++
++/* Experiment (BE7000 dead RX): redo the whole UNIPHY0 10G-QXGMII bring-up,
++ * including the PLL reset and with it the analog calibration, at a moment
++ * when the QCA8084 is locked and transmitting. The first bring-up happens at
++ * probe with the chip still in reset, and the calibration result (0x1e8)
++ * differs from stock on the same board. Called from the QCA8084 driver when
++ * it first sees its own 10GBASE-R lock.
++ */
++int ipq_pcs_debug_recalibrate(void)
++{
++	struct ipq_pcs *qpcs = ipq_pcs_mon_qpcs;
++	unsigned int before = 0, after = 0, s1 = 0, s2 = 0;
++	int ret, i;
++
++	if (!qpcs)
++		return -ENODEV;
++
++	regmap_read(qpcs->regmap, 0x1e8, &before);
++	qpcs->interface = PHY_INTERFACE_MODE_NA;
++	ret = ipq_pcs_config_usxgmii(qpcs, 0, PHY_INTERFACE_MODE_10G_QXGMII);
++	for (i = 1; i < PCS_MAX_MII_NRS && !ret; i++)
++		ret = ipq_pcs_config_usxgmii(qpcs, i, PHY_INTERFACE_MODE_10G_QXGMII);
++	msleep(500);
++	regmap_read(qpcs->regmap, 0x1e8, &after);
++	regmap_read(qpcs->regmap, 0x30020, &s1);
++	regmap_read(qpcs->regmap, 0x30021, &s2);
++	dev_info(qpcs->dev, "recalibrated with the PHY transmitting: %d, 0x1e8 0x%04x -> 0x%04x, KR_STS1 0x%04x KR_STS2 0x%04x\n",
++		 ret, before, after, s1, s2);
++	return ret;
++}
++EXPORT_SYMBOL_GPL(ipq_pcs_debug_recalibrate);
++
+ static void ipq_pcs_mon_fn(struct work_struct *work)
+ {
+ 	struct ipq_pcs *qpcs = ipq_pcs_mon_qpcs;
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -1130,6 +1130,14 @@
+ static struct delayed_work qca8084_mon_work;
+ static int qca8084_mon_left;
+ 
++/* Experiment (BE7000 dead RX): once the chip locks, redo the SoC UNIPHY0
++ * bring-up (and its calibration) with the chip transmitting.
++ */
++static bool qca8084_soc_recal = true;
++module_param_named(soc_recal, qca8084_soc_recal, bool, 0444);
++static bool qca8084_soc_recal_done;
++extern int ipq_pcs_debug_recalibrate(void);
++
+ static void qca8084_mon_fn(struct work_struct *work)
+ {
+ 	struct qca808x_shared_priv *sp = qca8084_mon_shared;
+@@ -1144,6 +1152,11 @@
+ 	cal = mdiodev_c45_read(sp->mdiodev[0], MDIO_MMD_PMAPMD, 0x78);
+ 	dev_info(&sp->mdiodev[1]->dev, "mon: chip KR_STS1 0x%04x KR_STS2 0x%04x mmd1 0x63 0x%04x 0x14a 0x%04x CAL4 0x%04x\n",
+ 		 s1 & 0xffff, s2 & 0xffff, r2e & 0xffff, r14a & 0xffff, cal & 0xffff);
++	if (qca8084_soc_recal && !qca8084_soc_recal_done && s1 > 0 && (s1 & BIT(12))) {
++		qca8084_soc_recal_done = true;
++		dev_info(&sp->mdiodev[1]->dev, "chip locked, asking the SoC PCS to recalibrate\n");
++		ipq_pcs_debug_recalibrate();
++	}
+ 	if (--qca8084_mon_left > 0)
+ 		schedule_delayed_work(&qca8084_mon_work, 5 * HZ);
+ }
