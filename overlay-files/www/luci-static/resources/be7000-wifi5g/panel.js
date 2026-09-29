@@ -52,6 +52,7 @@ var T = {
 		busy: 'Переключаю режим. Wi-Fi 5 ГГц пропадёт примерно на полминуты, клиенты переподключатся сами.',
 		pending: 'Есть неприменённые изменения Wi-Fi. Сначала примените или отмените их.',
 		na: 'Недоступно: в этой сборке нет драйвера с поддержкой разделения.',
+		noEht: 'Сейчас у радио 5 ГГц код страны %s, и прошивка радиомодуля с ним выключает Wi-Fi 7. Точка работает как Wi-Fi 6. Чтобы вернуть Wi-Fi 7, смените код страны у радио 5 ГГц в его настройках ниже, например на US.',
 		confirmTitle: 'Сменить режим 5 ГГц?',
 		confirmSplit: 'У нижнего радио появятся копии сетей 5 ГГц с теми же именами и паролями, каналы для начала 36 и 149. Их можно поменять ниже, в списке сетей.',
 		confirmSingle: 'Второе радио и его копии сетей будут удалены, останется одно радио на весь диапазон.',
@@ -93,6 +94,7 @@ var T = {
 		busy: 'Switching. 5 GHz Wi-Fi is down for about half a minute, clients reconnect by themselves.',
 		pending: 'There are unapplied Wi-Fi changes. Apply or revert them first.',
 		na: 'Not available: this build has no driver support for the split.',
+		noEht: 'The 5 GHz radio now has country code %s, and the radio firmware turns Wi-Fi 7 off for it. The access point runs as Wi-Fi 6. To get Wi-Fi 7 back, change the country code of the 5 GHz radio in its settings below, for example to US.',
 		confirmTitle: 'Change the 5 GHz mode?',
 		confirmSplit: 'The lower radio gets copies of the 5 GHz networks with the same names and passwords, channels start at 36 and 149. You can change them below, in the network list.',
 		confirmSingle: 'The second radio and its network copies are removed, one radio for the whole band stays.',
@@ -231,6 +233,7 @@ return baseclass.extend({
 		L.dom.content(root, [
 			E('h3', {}, tx.title),
 			E('p', { 'class': 'b5-lead' }, tx.lead),
+			st.no_eht ? E('p', { 'class': 'alert-message warning' }, tx.noEht.format(st.country5 || '?')) : '',
 			E('div', { 'class': 'b5-modes' }, [ modeCard(tx, 'single', !split), modeCard(tx, 'split', split) ]),
 			radios.length ? E('div', { 'class': 'b5-radios' }, radios.map(function(r) { return radioChip(tx, r); })) : '',
 			E('div', { 'class': 'b5-act' }, [ btn, note ? E('span', { 'class': 'b5-note' }, note) : '' ])

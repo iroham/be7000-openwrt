@@ -1,6 +1,7 @@
 'use strict';
 
 import { popen, access, readfile } from 'fs';
+import { cursor } from 'uci';
 
 const BIN = '/usr/sbin/be7000-5g-split';
 const LOG = '/tmp/be7000-5g-split.log';
@@ -14,6 +15,31 @@ function sh(cmd) {
 	return out;
 }
 
+// NO-EHT on the 5 GHz rules of the QCN9274 phy: the firmware turns off
+// 802.11be for some countries (RU among them), the AP silently runs as Wi-Fi 6
+function eht_state() {
+	let country5 = null, no_eht = false;
+	let c = cursor();
+	c.foreach('wireless', 'wifi-device', function(d) {
+		if (d.band == '5g' && country5 == null)
+			country5 = d.country ?? '';
+	});
+	let phy = sh('ls /sys/bus/pci/devices/0002:01:00.0/ieee80211 2>/dev/null | head -1');
+	if (length(phy)) {
+		let head = `phy#${replace(phy, 'phy', '')} `, inphy = false;
+		for (let line in split(sh('iw reg get'), '\n')) {
+			if (substr(line, 0, 4) == 'phy#' || line == 'global')
+				inphy = (index(line, head) == 0);
+			else if (inphy) {
+				let m = match(line, /^\s*\(([0-9]+) - ([0-9]+)/);
+				if (m && +m[1] >= 5000 && +m[2] <= 5925 && index(line, 'NO-EHT') >= 0)
+					no_eht = true;
+			}
+		}
+	}
+	return { country5, no_eht };
+}
+
 return {
 	'be7000-wifi5g': {
 		status: {
@@ -24,7 +50,8 @@ return {
 					split: sh(`${BIN} status`) == 'on',
 					saved: sh('uci -q get be7000.wifi.split_5g') == '1',
 					running,
-					log: trim(readfile(LOG) ?? '')
+					log: trim(readfile(LOG) ?? ''),
+					...eht_state()
 				};
 			}
 		},
