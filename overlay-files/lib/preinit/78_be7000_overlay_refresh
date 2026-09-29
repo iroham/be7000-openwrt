@@ -49,6 +49,20 @@ be7000_is_kept() {
 	return 1
 }
 
+# $1 path relative to upper/: true when the image has its own copy and the
+# overlay one is not configuration the user keeps across upgrades
+be7000_replaced_by_image() {
+	case "$1" in
+	etc/config/*|etc/apk/*|lib/apk/*|lib/modules/*|lib/modules.stale-*|root/*|\
+	etc/dropbear/*|etc/uhttpd.crt|etc/uhttpd.key|etc/shadow|etc/passwd|etc/group|\
+	etc/luci-uploads/*|etc/sysupgrade.conf|etc/rc.local|etc/crontabs/*|etc/be7000-reinstall)
+		return 1 ;;
+	esac
+	[ -e "/$1" ] || [ -L "/$1" ] || return 1
+	be7000_is_kept "$1" && return 1
+	return 0
+}
+
 # $1 upper dir, $2 where the moved files go; the image is / (preinit runs
 # before the overlay is mounted)
 be7000_refresh_upper() {
@@ -58,14 +72,7 @@ be7000_refresh_upper() {
 	rm -rf "$stash"
 	(cd "$up" && find . \( -type f -o -type l \)) | sed 's|^\./||' > /tmp/be7000-refresh.files
 	while read -r f; do
-		case "$f" in
-		etc/config/*|etc/apk/*|lib/apk/*|lib/modules/*|lib/modules.stale-*|root/*|\
-		etc/dropbear/*|etc/uhttpd.crt|etc/uhttpd.key|etc/shadow|etc/passwd|etc/group|\
-		etc/luci-uploads/*|etc/sysupgrade.conf|etc/rc.local|etc/crontabs/*|etc/be7000-reinstall)
-			continue ;;
-		esac
-		[ -e "/$f" ] || [ -L "/$f" ] || continue
-		be7000_is_kept "$f" && continue
+		be7000_replaced_by_image "$f" || continue
 		mkdir -p "$stash/$(dirname "$f")"
 		mv "$up/$f" "$stash/$f" && n=$((n + 1))
 	done < /tmp/be7000-refresh.files
@@ -85,6 +92,38 @@ be7000_vol_dev() {
 	return 1
 }
 
+# Test image: copy what an upgrade would keep from the shared upper/ into
+# the slot's own small rootfs_data. Settings and deletions (whiteouts) first,
+# then hybrid-failover, then the rest; whatever does not fit is skipped and
+# logged instead of giving up the whole copy.
+be7000_test_copy() {
+	local src="$1" dst="$2" f ok=0 skip=0
+	be7000_keep_list "$src"
+	(cd "$src" && find . ! -type d) | sed 's|^\./||' > /tmp/be7000-test.all
+	{
+		grep -E '^etc/' /tmp/be7000-test.all
+		grep -E 'hybrid' /tmp/be7000-test.all
+		grep -v -E '^etc/|hybrid' /tmp/be7000-test.all
+	} > /tmp/be7000-test.order
+	while read -r f; do
+		if [ -f "$src/$f" ] && [ ! -L "$src/$f" ]; then
+			be7000_replaced_by_image "$f" && continue
+		elif [ -L "$src/$f" ]; then
+			be7000_replaced_by_image "$f" && continue
+		fi
+		mkdir -p "$dst/$(dirname "$f")"
+		if cp -a "$src/$f" "$dst/$f" 2>/dev/null; then
+			ok=$((ok + 1))
+		else
+			rm -f "$dst/$f"
+			skip=$((skip + 1))
+			echo "- be7000: no room in the test copy for $f -" > /dev/kmsg
+		fi
+	done < /tmp/be7000-test.order
+	rm -f /tmp/be7000-test.all /tmp/be7000-test.order "$BE7000_KEEP"
+	echo "- be7000: test image runs on a private copy of the shared settings ($ok files, $skip skipped) -" > /dev/kmsg
+}
+
 be7000_overlay_refresh_test() {
 	local cfg data c=/tmp/be7000-t-cfg d=/tmp/be7000-t-data
 	cfg=$(be7000_vol_dev cfg overlay_data) || return 0
@@ -95,16 +134,10 @@ be7000_overlay_refresh_test() {
 		if [ ! -f "$d/.be7000_test_copy" ] && [ -d "$c/upper" ]; then
 			rm -rf "$d/upper" "$d/work" "$d/.be7000-replaced"
 			mkdir -p "$d/upper" "$d/work"
-			if cp -a "$c/upper/." "$d/upper/" 2>/dev/null; then
-				be7000_refresh_upper "$d/upper" "$d/.be7000-replaced"
-				# run on this copy, not on the shared volume
-				[ -f "$d/upper/etc/config/fstab" ] && sed -i "/^config mount 'bigoverlay'/,/^$/ s/option enabled '1'/option enabled '0'/" "$d/upper/etc/config/fstab"
-				: > "$d/.be7000_test_copy"
-				echo "- be7000: test image runs on a private copy of the shared settings -" > /dev/kmsg
-			else
-				echo "- be7000: no room to copy the shared settings, test image starts empty -" > /dev/kmsg
-				rm -rf "$d/upper" "$d/work"
-			fi
+			be7000_test_copy "$c/upper" "$d/upper"
+			# run on this copy, not on the shared volume
+			[ -f "$d/upper/etc/config/fstab" ] && sed -i "/^config mount 'bigoverlay'/,/^$/ s/option enabled '1'/option enabled '0'/" "$d/upper/etc/config/fstab"
+			: > "$d/.be7000_test_copy"
 			sync
 		fi
 		umount "$d"
