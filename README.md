@@ -102,10 +102,10 @@ OpenWrt SNAPSHOT r20260623-790d036a, ядро 6.18.36, архитектура aa
 
 | Способ | Реквизиты |
 |------|-----------|
-| **USDT** (TON) | `UQBZhwBuZCgQOtrgRGMu4PKiiOcf9dTKxRpapZt1oDn0m3yH` |
-| **USDT / ETH** (ERC-20) | `0xeb05803030afB64C903C7BfB79d18957efD6bcCd` |
-| **SOL** (Solana) | `GcKxgUeSfKnsPL9iEaYKJArosfYKMtE4W5wVDdHrRVTu` |
-| **BTC** (Bitcoin) | `bc1qcyd3kaa3y2cv2yn90rsa628y3ptz56zs05z2jq` |
-| **WeChat, QR ниже** | `itnitro` |
+| <img alt="USDT TON" src="https://img.shields.io/badge/USDT-TON-26A17B?style=for-the-badge&logo=tether&logoColor=white"> | `UQBZhwBuZCgQOtrgRGMu4PKiiOcf9dTKxRpapZt1oDn0m3yH` |
+| <img alt="USDT ETH ERC-20" src="https://img.shields.io/badge/USDT%20%2F%20ETH-ERC--20-627EEA?style=for-the-badge&logo=ethereum&logoColor=white"> | `0xeb05803030afB64C903C7BfB79d18957efD6bcCd` |
+| <img alt="SOL" src="https://img.shields.io/badge/SOL-Solana-9945FF?style=for-the-badge&logo=solana&logoColor=white"> | `GcKxgUeSfKnsPL9iEaYKJArosfYKMtE4W5wVDdHrRVTu` |
+| <img alt="BTC" src="https://img.shields.io/badge/BTC-Bitcoin-F7931A?style=for-the-badge&logo=bitcoin&logoColor=white"> | `bc1qcyd3kaa3y2cv2yn90rsa628y3ptz56zs05z2jq` |
+| <img alt="WeChat" src="https://img.shields.io/badge/WeChat-itnitro-07C160?style=for-the-badge&logo=wechat&logoColor=white"> | `itnitro` |
 
 <img src="docs/img/wechat-itnitro-qr.jpg" alt="WeChat itnitro" width="200">
