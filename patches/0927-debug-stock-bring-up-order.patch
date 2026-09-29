@@ -1,0 +1,872 @@
+From: be7000-openwrt <noreply@example.com>
+Subject: [PATCH] debug: stock bring-up order for UNIPHY0 and the QCA8084
+
+A stock boot log of a BE7000 (stock 1.1.x, kernel 5.4, qca-ssdk.ko) shows
+this order: mdio-qca pulses the QCA8084 GPIO reset and does its preinit at
+2.55-2.77 s, so the chip is out of reset and powered from then on. The
+SSDK loads at 14.3 s, resets the CMN block with the GCC clock init and the
+PPE at 14.87 s, sets UNIPHY0 to UQXGMII (PLL reset, sys/soft reset, one
+calibration) at 15.0-15.19 s and, in the same call, sets the chip to
+PORT_UQXGMII at 15.198 s. UNIPHY2 follows at 15.29-15.88 s. The SoC XPCS
+is never reset or reconfigured again after that.
+
+The chip system clocks follow their own timeline on stock. The mdio-qca
+preinit (qca_mht_clock_init, about 2.77 s) enables SRDS0_SYS_CBCR
+(0xc8001a8) and SRDS1_SYS_CBCR (0xc8001ac) and pulses their resets, and
+enables the four GEPHY system clocks (0xc8001b0-0xc8001bc). All six are
+still on when UNIPHY0 calibrates and when the chip is set to UQXGMII.
+Only after the chip mode set, at 15.262 s ("MHT GCC CLK initialization"),
+does ssdk_mht_gcc_clock_init() -> ssdk_mht_gcc_common_clk_parent_enable()
+run in MHT_PHY_UQXGMII_MODE: it sets SRDS0_SYS to XO/25 MHz and turns
+SerDes0 off to save power, and enables SRDS1_SYS and GEPHY0-3_SYS (plus
+the AHB and sec control clocks, with the switch core clock off). The open
+SSDK source asserts the SerDes0 ARES there, but the stock qca-ssdk.ko
+1.1.38 calls ssdk_mht_clk_disable() at that point (offset 0x13c of the
+function), which clears only the enable bit. The stock runtime dump
+agrees: SRDS0_SYS CBC 0x80000000, SRDS1 and GEPHY0-3 0x1.
+
+uniphy24 calibrates UNIPHY0 at 1.51 s with the chip still in reset, only
+releases the chip reset at 2.77 s (0918), and sets the chip SerDes up at
+12.5 s, 11 s after the SoC calibration, then does a SoC XPCS redo on the
+first link up (0906). 0918 misread SSDK commit 3c58ee12: that commit puts
+the chip UQXGMII mode set after the SoC UNIPHY, not the chip GPIO reset.
+
+With pcs_qcom_ipq9574.stock_order=1 (default):
+- nsscc-qca8k ignores qcom,reset-after-pcs and does the GPIO reset, the
+  settle and the vendor preinit at its own probe, as mdio-qca does. The
+  PCS parameter is set before any initcall, so reading it there has no
+  probe order issue.
+- nsscc-qca8k holds both chip SerDes system clocks on after the preinit
+  (with qcom,vendor-preinit). SerDes0 has no consumer here, and the only
+  consumer of SerDes1, the QCA8084 PCS, enables it at the chip mode set.
+  Without the hold clk_disable_unused() gates both at about 3.5 s, so
+  UNIPHY0 calibrates with both off and the chip with SerDes0 off, where
+  stock has both on. The GEPHY system clocks are not held: each QCA8084
+  PHY enables its own at probe, and the deferred probes are flushed at
+  late_initcall, before clk_disable_unused() at late_initcall_sync, so
+  they stay on as on stock. dmesg says what is held.
+- The PCS probe does not do the qcom,early-10g-qxgmii and
+  qcom,idle-usxgmii bring-ups and keeps them pending.
+- The QCA8084 driver logs the SRDS0, SRDS1 and GEPHY0-3 SYS_CBCRs (stock
+  has all six at 0x1 there) and calls ipq_pcs_stock_soc_up() right before
+  qca8084_qxgmii_set_mode(): the same early bring-up code as before (0924
+  vendor order, 0913/0917), once per boot, so phylink's pcs_config later
+  finds the interface set and does the per-channel part only. dmesg logs
+  the time from the SoC calibration to the chip mode set.
+- Right after the chip mode set the QCA8084 driver calls
+  nss_cc_qca8k_stock_release(), where stock runs its MHT GCC clock init:
+  the SerDes0 hold is dropped, which clears only the enable bit as the
+  stock SSDK does, and dmesg shows SRDS0/SRDS1_SYS_CBCR before and after
+  (stock 0x80000000 and 0x1). SerDes1 stays held. Then it reads the chip
+  BaseR status for the 0903 decision and calls ipq_pcs_stock_idle_up()
+  for UNIPHY2, so the 0.4 s UNIPHY2 bring-up does not change what 0903
+  sees. If the package init ends before the chip mode set (an error, or no
+  10G-QXGMII), UNIPHY2 is brought up anyway, with a warning, so it is not
+  left parked.
+- The SoC XPCS redo on first link up (0906) is skipped when the XPCS was
+  last set up by that stock bring-up. If the stock bring-up did not run
+  and phylink set the XPCS up, the redo runs as before. The chip-side
+  redo (0903) stays.
+- The UNIPHY0 monitor and edge detector (0926) start only after that
+  bring-up has finished, so they never read UNIPHY0/XPCS during its PLL
+  and XPCS resets.
+- ipq_pcs0_ctl, ipq_pcs0_regs and ipq_pcs_idle_ctl return -EBUSY while
+  the UNIPHY0 or UNIPHY2 stock bring-up runs, and neither bring-up starts
+  while one of them runs.
+
+The CMN reset at probe, the 100 ms settle, suppress_los, the other debugfs
+knobs and the 0920 details stay as they are. stock_order=0 gives uniphy24.
+A board that loses RX without the SoC redo can still get it by hand with
+"echo xpcs > /sys/kernel/debug/ipq_pcs0_ctl".
+
+The hooks are declared in include/linux/pcs/pcs-qcom-ipq9574.h under
+IS_REACHABLE(). A built-in caller of a modular PCS, or a kernel without the
+PCS, gets stubs that keep the old order. A modular PCS reports stock_order
+off and keeps the old order itself, because the built-in QCA8084 drivers
+cannot call into it. The 0921 ipq_pcs_debug_recalibrate() declaration moves
+to that header with a stub for the same reason, so qca808x no longer needs
+the PCS built in to link. nss_cc_qca8k_stock_release() sits in the same
+header under IS_REACHABLE(CONFIG_IPQ_NSSCC_QCA8K); a modular nsscc-qca8k
+with a built-in QCA8084 PHY driver does not take the SerDes0 hold, since
+nothing could drop it.
+
+--- a/drivers/clk/qcom/nsscc-qca8k.c
++++ b/drivers/clk/qcom/nsscc-qca8k.c
+@@ -8,6 +8,7 @@
+ #include <linux/module.h>
+ #include <linux/of.h>
+ #include <linux/of_platform.h>
++#include <linux/pcs/pcs-qcom-ipq9574.h>
+ #include <linux/platform_device.h>
+ #include <linux/property.h>
+ #include <linux/delay.h>
+@@ -2247,6 +2248,135 @@
+ 	dev_info(dev, "vendor preinit done, SRDS1_SYS_CBCR 0x%08x\n", val);
+ }
+ 
++/* Stock order: stock mdio-qca (qca_mht_clock_init) turns both SerDes system
++ * clocks and the four GEPHY system clocks on outside the clock framework at
++ * its probe (2.77 s). They stay on through the SoC UNIPHY0 calibration and
++ * the chip UQXGMII mode set (15.2 s). Right after the mode set the SSDK's MHT
++ * GCC clock init (15.262 s) turns SerDes0 off in PHY mode and leaves SerDes1
++ * and the GEPHYs on (stock runtime dump: SRDS0_SYS CBC 0x80000000, SRDS1 and
++ * GEPHY0-3 0x1). Here SerDes0 has no consumer, and the only consumer of
++ * SerDes1, the QCA8084 PCS, enables it at the chip mode set, so
++ * clk_disable_unused() would gate both at about 3.5 s. Hold both on from
++ * here. nss_cc_qca8k_stock_release() drops the SerDes0 hold after the chip
++ * mode set; SerDes1 stays held. The GEPHY system clocks need no hold: each
++ * QCA8084 PHY enables its own at probe, and deferred probes are flushed
++ * (late_initcall) before clk_disable_unused() runs (late_initcall_sync).
++ */
++static DEFINE_MUTEX(nss_cc_qca8k_stock_lock);
++static struct device *nss_cc_qca8k_stock_dev;
++static struct regmap *nss_cc_qca8k_stock_regmap;
++static struct clk *nss_cc_qca8k_srds0_held;
++static bool nss_cc_qca8k_stock_released;
++
++static void nss_cc_qca8k_clk_off(void *clk)
++{
++	clk_disable_unprepare(clk);
++}
++
++/* devm, on unbind: drop the SerDes0 hold if it is still there */
++static void nss_cc_qca8k_stock_forget(void *unused)
++{
++	mutex_lock(&nss_cc_qca8k_stock_lock);
++	if (nss_cc_qca8k_srds0_held)
++		clk_disable_unprepare(nss_cc_qca8k_srds0_held);
++	nss_cc_qca8k_srds0_held = NULL;
++	nss_cc_qca8k_stock_regmap = NULL;
++	nss_cc_qca8k_stock_dev = NULL;
++	mutex_unlock(&nss_cc_qca8k_stock_lock);
++}
++
++static struct clk *nss_cc_qca8k_hold(struct device *dev,
++				     struct clk_branch *branch, const char *name)
++{
++	struct clk *clk;
++	int ret;
++
++	clk = devm_clk_hw_get_clk(dev, &branch->clkr.hw, "stock-order");
++	if (IS_ERR(clk)) {
++		dev_warn(dev, "stock order: %s system clock not held: %ld\n",
++			 name, PTR_ERR(clk));
++		return NULL;
++	}
++
++	ret = clk_prepare_enable(clk);
++	dev_info(dev, "stock order: %s system clock held on: %d\n", name, ret);
++	return ret ? NULL : clk;
++}
++
++static void nss_cc_qca8k_hold_stock(struct device *dev, struct regmap *regmap)
++{
++	struct clk *clk;
++
++	if (!ipq_pcs_stock_order() ||
++	    !device_property_read_bool(dev, "qcom,vendor-preinit"))
++		return;
++
++	clk = nss_cc_qca8k_hold(dev, &nss_cc_srds1_sys_clk, "SerDes1");
++	if (clk && devm_add_action_or_reset(dev, nss_cc_qca8k_clk_off, clk))
++		dev_warn(dev, "stock order: SerDes1 system clock hold dropped\n");
++
++	mutex_lock(&nss_cc_qca8k_stock_lock);
++	/* A built-in QCA8084 PHY driver cannot call into this driver as a
++	 * module, so it could never drop the SerDes0 hold.
++	 */
++	if (IS_MODULE(CONFIG_IPQ_NSSCC_QCA8K) && IS_BUILTIN(CONFIG_QCA808X_PHY))
++		dev_info(dev, "stock order: SerDes0 system clock not held, the built-in QCA8084 PHY driver could not release it\n");
++	else if (!nss_cc_qca8k_stock_released)
++		nss_cc_qca8k_srds0_held = nss_cc_qca8k_hold(dev, &nss_cc_srds0_sys_clk,
++							    "SerDes0");
++	nss_cc_qca8k_stock_dev = dev;
++	nss_cc_qca8k_stock_regmap = regmap;
++	mutex_unlock(&nss_cc_qca8k_stock_lock);
++	if (devm_add_action_or_reset(dev, nss_cc_qca8k_stock_forget, NULL))
++		dev_warn(dev, "stock order: SerDes0 system clock hold dropped\n");
++
++	dev_info(dev, "stock order: GEPHY0-3 system clocks not held, each PHY enables its own at probe\n");
++}
++
++/**
++ * nss_cc_qca8k_stock_release() - stock order: SerDes0 system clock off
++ *
++ * Called by the QCA8084 PHY driver right after its UQXGMII mode set, where
++ * the SSDK's MHT GCC clock init turns the SerDes0 system clock off. Drops the
++ * SerDes0 hold taken at probe; the SerDes1 hold stays. The open SSDK source
++ * asserts the SerDes0 ARES there, but the stock qca-ssdk.ko (1.1.38) calls
++ * ssdk_mht_clk_disable(), which only clears the enable bit, and the stock
++ * runtime dump reads 0x80000000 (enable and ARES clear). So only the clock
++ * goes off, the reset is left alone. Runs once per boot.
++ */
++void nss_cc_qca8k_stock_release(void)
++{
++	unsigned int s0 = 0, s1 = 0, s0_after = 0, s1_after = 0;
++	struct regmap *regmap;
++	bool held;
++
++	mutex_lock(&nss_cc_qca8k_stock_lock);
++	if (nss_cc_qca8k_stock_released)
++		goto out;
++	nss_cc_qca8k_stock_released = true;
++
++	regmap = nss_cc_qca8k_stock_regmap;
++	if (!regmap) {
++		pr_info("qca8k-nsscc: stock order: no clock hold to release after the chip mode set\n");
++		goto out;
++	}
++
++	held = !!nss_cc_qca8k_srds0_held;
++	regmap_read(regmap, 0x1a8, &s0);
++	regmap_read(regmap, 0x1ac, &s1);
++	if (held)
++		clk_disable_unprepare(nss_cc_qca8k_srds0_held);
++	nss_cc_qca8k_srds0_held = NULL;
++	regmap_read(regmap, 0x1a8, &s0_after);
++	regmap_read(regmap, 0x1ac, &s1_after);
++	dev_info(nss_cc_qca8k_stock_dev,
++		 "stock order: SerDes0 system clock %s after the chip mode set: SRDS0_SYS_CBCR 0x%08x -> 0x%08x (stock 0x80000000), SRDS1_SYS_CBCR 0x%08x -> 0x%08x (stock 0x1)\n",
++		 held ? "released" : "was not held", s0, s0_after, s1, s1_after);
++out:
++	mutex_unlock(&nss_cc_qca8k_stock_lock);
++}
++EXPORT_SYMBOL_GPL(nss_cc_qca8k_stock_release);
++
+ /* Vendor order (SSDK 3c58ee12): the package is reset and prepared only once
+  * the SoC UNIPHY transmits. When the DT names that PCS, wait for it to bind.
+  */
+@@ -2260,6 +2390,16 @@
+ 	if (!np)
+ 		return 0;
+ 
++	/* Stock order: stock mdio-qca resets the chip at its own probe, long
++	 * before the SSDK touches UNIPHY0. The PCS module parameter is set
++	 * before any initcall, so reading it here has no probe order issue.
++	 */
++	if (ipq_pcs_stock_order()) {
++		of_node_put(np);
++		dev_info_once(dev, "stock order: chip reset at clock controller probe, not after the PCS\n");
++		return 0;
++	}
++
+ 	pcs = of_find_device_by_node(np);
+ 	of_node_put(np);
+ 	bound = pcs && device_is_bound(&pcs->dev);
+@@ -2288,7 +2428,13 @@
+ 
+ 	nss_cc_qca8k_preinit(&mdiodev->dev, regmap);
+ 
+-	return qcom_cc_really_probe(&mdiodev->dev, &nss_cc_qca8k_desc, regmap);
++	ret = qcom_cc_really_probe(&mdiodev->dev, &nss_cc_qca8k_desc, regmap);
++	if (ret)
++		return ret;
++
++	nss_cc_qca8k_hold_stock(&mdiodev->dev, regmap);
++
++	return 0;
+ }
+ 
+ static const struct of_device_id nss_cc_qca8k_match_table[] = {
+--- a/drivers/net/pcs/pcs-qcom-ipq9574.c
++++ b/drivers/net/pcs/pcs-qcom-ipq9574.c
+@@ -8,6 +8,7 @@
+ #include <linux/debugfs.h>
+ #include <linux/delay.h>
+ #include <linux/io.h>
++#include <linux/ktime.h>
+ #include <linux/mm.h>
+ #include <linux/slab.h>
+ #include <linux/seq_file.h>
+@@ -198,6 +199,15 @@
+ 	struct clk *ahb_clk;
+ 	bool idle_up;
+ 	bool idle_gated;
++
++	/* When the last USXGMII family calibration finished, for the log */
++	ktime_t cal_done;
++
++	/* stock_order: the stock bring-up is running, and the XPCS was last
++	 * set up by it, so there is no redo on first link up
++	 */
++	bool stock_bringup;
++	bool xpcs_stock;
+ };
+ 
+ #define phylink_pcs_to_qpcs_mii(_pcs)	\
+@@ -420,7 +430,6 @@
+ 
+ static int ipq_pcs_config_usxgmii(struct ipq_pcs *qpcs, int index,
+ 				  phy_interface_t interface);
+-int ipq_pcs_debug_recalibrate(void);
+ 
+ /* Experiment (BE7000 dead RX): redo the whole UNIPHY0 10G-QXGMII bring-up,
+  * including the PLL reset and with it the analog calibration, at a moment
+@@ -664,6 +673,7 @@
+ 		dev_err(qpcs->dev, "PCS calibration timed-out\n");
+ 		goto err_clk;
+ 	}
++	qpcs->cal_done = ktime_get();
+ 
+ 	/* Re-enable the port clocks disabled at entry */
+ 	ret = ipq_pcs_hold_port_clks(qpcs, interface, false);
+@@ -778,6 +788,60 @@
+ module_param(vendor_order, bool, 0444);
+ MODULE_PARM_DESC(vendor_order, "USXGMII/10G-QXGMII UNIPHY bring-up in the SSDK order");
+ 
++/* Experiment (BE7000 dead RX): the stock bring-up order. The stock firmware
++ * takes the QCA8084 out of reset at MDIO probe, brings UNIPHY0 up in
++ * UQXGMII and sets the chip to UQXGMII right after it in the same call,
++ * then UNIPHY2, and never touches the SoC XPCS again. With stock_order the
++ * early 10G-QXGMII and idle USXGMII bring-ups move from probe to the
++ * QCA8084 mode set (ipq_pcs_stock_soc_up(), ipq_pcs_stock_idle_up()), the
++ * QCA8084 clock controller does not wait for this PCS and holds both chip
++ * SerDes system clocks on (SerDes0 until right after the chip mode set), and
++ * the SoC XPCS redo on first link up is skipped when that bring-up set the
++ * XPCS up. The QCA8084 drivers can only call in when this driver is built
++ * in, so a modular PCS keeps the old order.
++ */
++static bool stock_order = true;
++module_param(stock_order, bool, 0444);
++MODULE_PARM_DESC(stock_order, "bring UNIPHY0/UNIPHY2 up around the QCA8084 mode set as stock does, no SoC XPCS redo after that (built-in PCS only)");
++
++static bool ipq_pcs_stock(void)
++{
++	return IS_BUILTIN(CONFIG_PCS_QCOM_IPQ9574) && stock_order;
++}
++
++/**
++ * ipq_pcs_stock_order() - stock bring-up order selected
++ *
++ * Return: the stock_order module parameter, false if the PCS is a module.
++ */
++bool ipq_pcs_stock_order(void)
++{
++	return ipq_pcs_stock();
++}
++EXPORT_SYMBOL_GPL(ipq_pcs_stock_order);
++
++/* stock_order: the stock bring-ups of UNIPHY0 and UNIPHY2 run under this lock,
++ * with the state further down.
++ */
++static DEFINE_MUTEX(ipq_pcs_stock_lock);
++
++/* The debugfs knobs (ipq_pcs0_ctl, ipq_pcs0_regs, ipq_pcs_idle_ctl) return
++ * -EBUSY while a stock bring-up runs, and no stock bring-up starts while one
++ * of them runs. Without stock_order nothing changes.
++ */
++static int ipq_pcs_dbg_begin(void)
++{
++	if (ipq_pcs_stock() && !mutex_trylock(&ipq_pcs_stock_lock))
++		return -EBUSY;
++	return 0;
++}
++
++static void ipq_pcs_dbg_end(void)
++{
++	if (ipq_pcs_stock())
++		mutex_unlock(&ipq_pcs_stock_lock);
++}
++
+ static int ipq_pcs_config_usxgmii(struct ipq_pcs *qpcs,
+ 				  int index,
+ 				  phy_interface_t interface)
+@@ -801,7 +865,11 @@
+ 					       val, val & XPCS_KR_LINK_STS,
+ 					       1000, 100000);
+ 		qpcs->xpcs_redo = !!ret;
+-		if (ret)
++		qpcs->xpcs_stock = qpcs->stock_bringup;
++		if (ret && qpcs->xpcs_stock)
++			dev_info(qpcs->dev,
++				 "10GBASE-R link not up before USXG_EN, the chip is set up next (stock order, no XPCS redo)\n");
++		else if (ret)
+ 			dev_warn(qpcs->dev,
+ 				 "10GBASE-R link not up before USXG_EN, will set the XPCS up again on first link up\n");
+ 		else
+@@ -1249,6 +1317,19 @@
+ 	if (!qpcs->xpcs_redo && !force)
+ 		goto out;
+ 
++	/* Stock never resets the SoC XPCS once the chip is up. Only when the
++	 * stock bring-up set the XPCS up; after a phylink bring-up the redo
++	 * runs as before.
++	 */
++	if (!force && qpcs->xpcs_stock) {
++		val = 0;
++		regmap_read(qpcs->regmap, XPCS_KR_STS, &val);
++		qpcs->xpcs_redo = false;
++		dev_info(qpcs->dev, "stock order: SoC XPCS redo skipped (KR_STS1 0x%x)\n",
++			 val);
++		goto out;
++	}
++
+ 	if (!force) {
+ 		ret = regmap_read_poll_timeout(qpcs->regmap, XPCS_KR_STS, val,
+ 					       val & XPCS_KR_LINK_STS,
+@@ -1357,6 +1438,7 @@
+ 
+ 	ret = regmap_read_poll_timeout(qpcs->regmap, PCS_CALIBRATION, val,
+ 				       val & PCS_CALIBRATION_DONE, 1000, 100000);
++	qpcs->cal_done = ktime_get();
+ 	if (ret)
+ 		dev_warn(qpcs->dev, "vendor order: calibration not done (0x%x), going on as the SSDK does\n", val);
+ 
+@@ -1483,10 +1565,13 @@
+ 	struct ipq_pcs *qpcs = ipq_pcs_dbg;
+ 	unsigned int v;
+ 	u32 a;
+-	int i;
++	int i, ret;
+ 
+ 	if (!qpcs)
+ 		return -ENODEV;
++	ret = ipq_pcs_dbg_begin();
++	if (ret)
++		return ret;
+ 
+ 	for (i = 0; i < ARRAY_SIZE(ranges); i++)
+ 		for (a = ranges[i].from; a <= ranges[i].to; a += ranges[i].step) {
+@@ -1494,14 +1579,27 @@
+ 			regmap_read(qpcs->regmap, a, &v);
+ 			seq_printf(s, "U 0x%06x 0x%08x\n", a, v);
+ 		}
++	ipq_pcs_dbg_end();
+ 	return 0;
+ }
+ DEFINE_SHOW_ATTRIBUTE(ipq_pcs_regs);
+ 
++static ssize_t ipq_pcs_dbg_write_excl(struct file *file, const char __user *ubuf,
++				      size_t len, loff_t *ppos)
++{
++	ssize_t ret = ipq_pcs_dbg_begin();
++
++	if (ret)
++		return ret;
++	ret = ipq_pcs_dbg_write(file, ubuf, len, ppos);
++	ipq_pcs_dbg_end();
++	return ret;
++}
++
+ static const struct file_operations ipq_pcs_dbg_fops = {
+ 	.owner	= THIS_MODULE,
+ 	.open	= simple_open,
+-	.write	= ipq_pcs_dbg_write,
++	.write	= ipq_pcs_dbg_write_excl,
+ 	.llseek	= noop_llseek,
+ };
+ 
+@@ -1911,6 +2009,7 @@
+ 	struct ipq_pcs *qpcs = ipq_pcs_idle;
+ 	char buf[16];
+ 	size_t n = min(len, sizeof(buf) - 1);
++	int ret;
+ 
+ 	if (!qpcs)
+ 		return -ENODEV;
+@@ -1918,6 +2017,9 @@
+ 		return -EFAULT;
+ 	buf[n] = 0;
+ 
++	ret = ipq_pcs_dbg_begin();
++	if (ret)
++		return ret;
+ 	if (sysfs_streq(buf, "up"))
+ 		ipq_pcs_idle_up(qpcs);
+ 	else if (sysfs_streq(buf, "down"))
+@@ -1925,8 +2027,9 @@
+ 	else if (sysfs_streq(buf, "status"))
+ 		ipq_pcs_idle_status(qpcs, "status");
+ 	else
+-		return -EINVAL;
+-	return len;
++		ret = -EINVAL;
++	ipq_pcs_dbg_end();
++	return ret ? ret : len;
+ }
+ 
+ static const struct file_operations ipq_pcs_idle_fops = {
+@@ -1936,6 +2039,149 @@
+ 	.llseek = noop_llseek,
+ };
+ 
++/* The early 10G-QXGMII bring-up of qcom,early-10g-qxgmii, then the UNIPHY0
++ * monitors. They start only here, so they never read UNIPHY0 or the XPCS
++ * while this bring-up has the PLL or the XPCS in reset.
++ */
++static int ipq_pcs_early_up(struct ipq_pcs *qpcs, bool at_probe)
++{
++	int ret;
++
++	qpcs->stock_bringup = !at_probe;
++	ret = ipq_pcs_config_usxgmii(qpcs, 0, PHY_INTERFACE_MODE_10G_QXGMII);
++	qpcs->stock_bringup = false;
++	if (at_probe)
++		dev_info(qpcs->dev, "early 10G-QXGMII bring-up before the PHY package: %d\n", ret);
++	else
++		dev_info(qpcs->dev, "stock order: 10G-QXGMII bring-up right before the QCA8084 mode set: %d\n",
++			 ret);
++	ipq_pcs_mon_qpcs = qpcs;
++	ipq_pcs_mon_left = 360;
++	INIT_DELAYED_WORK(&ipq_pcs_mon_work, ipq_pcs_mon_fn);
++	schedule_delayed_work(&ipq_pcs_mon_work, 5 * HZ);
++	ipq_pcs_edge_left = 9000;
++	INIT_DELAYED_WORK(&ipq_pcs_edge_work, ipq_pcs_edge_fn);
++	schedule_delayed_work(&ipq_pcs_edge_work, HZ);
++	return ret;
++}
++
++/* stock_order state: the UNIPHYs whose probe-time bring-up was deferred,
++ * all under ipq_pcs_stock_lock.
++ */
++static struct ipq_pcs *ipq_pcs_stock_soc;
++static bool ipq_pcs_stock_soc_done;
++static int ipq_pcs_stock_soc_ret;
++static struct ipq_pcs *ipq_pcs_stock_idle;
++static bool ipq_pcs_stock_chip_done;
++
++static bool ipq_pcs_early_in_dt(void)
++{
++	struct device_node *np;
++
++	for_each_compatible_node(np, NULL, "qcom,ipq9574-pcs") {
++		if (of_device_is_available(np) &&
++		    of_property_read_bool(np, "qcom,early-10g-qxgmii")) {
++			of_node_put(np);
++			return true;
++		}
++	}
++
++	return false;
++}
++
++/**
++ * ipq_pcs_stock_soc_up() - stock order: bring UNIPHY0 up for 10G-QXGMII now
++ * @cal_done: set to the time the UNIPHY calibration finished, 0 if none
++ *
++ * Called by the QCA8084 driver right before its UQXGMII mode set. Runs the
++ * bring-up that qcom,early-10g-qxgmii does at probe without stock_order, at
++ * most once per boot; later calls return the first result. If it cannot run,
++ * phylink's pcs_config does the full bring-up later, as before.
++ *
++ * Return: the bring-up result, -EPROBE_DEFER if the PCS asking for it has not
++ * probed yet, -ENODEV if no PCS asks for it or stock_order is off.
++ */
++int ipq_pcs_stock_soc_up(ktime_t *cal_done)
++{
++	struct ipq_pcs *qpcs;
++	int ret;
++
++	*cal_done = 0;
++	if (!ipq_pcs_stock())
++		return -ENODEV;
++
++	mutex_lock(&ipq_pcs_stock_lock);
++	qpcs = ipq_pcs_stock_soc;
++	if (!qpcs) {
++		ret = ipq_pcs_early_in_dt() ? -EPROBE_DEFER : -ENODEV;
++		pr_info("ipq9574_pcs: stock order: no UNIPHY ready for the 10G-QXGMII bring-up (%d), phylink will do it\n",
++			ret);
++		goto out;
++	}
++
++	if (ipq_pcs_stock_soc_done) {
++		ret = ipq_pcs_stock_soc_ret;
++		dev_info(qpcs->dev, "stock order: 10G-QXGMII bring-up already done (%d)\n", ret);
++	} else if (qpcs->interface == PHY_INTERFACE_MODE_10G_QXGMII) {
++		ret = 0;
++		dev_info(qpcs->dev, "stock order: 10G-QXGMII already set up by phylink\n");
++	} else {
++		ret = ipq_pcs_early_up(qpcs, false);
++	}
++	ipq_pcs_stock_soc_done = true;
++	ipq_pcs_stock_soc_ret = ret;
++	*cal_done = qpcs->cal_done;
++out:
++	mutex_unlock(&ipq_pcs_stock_lock);
++	return ret;
++}
++EXPORT_SYMBOL_GPL(ipq_pcs_stock_soc_up);
++
++/**
++ * ipq_pcs_stock_idle_up() - stock order: bring the idle UNIPHY up now
++ *
++ * Called by the QCA8084 driver right after its UQXGMII mode set, or when its
++ * package init ends before that step. Runs the qcom,idle-usxgmii bring-up
++ * that stock_order=0 does at probe, once. A PCS that probes after this call
++ * does it at probe.
++ */
++void ipq_pcs_stock_idle_up(void)
++{
++	struct ipq_pcs *qpcs;
++
++	if (!ipq_pcs_stock())
++		return;
++
++	mutex_lock(&ipq_pcs_stock_lock);
++	ipq_pcs_stock_chip_done = true;
++	qpcs = ipq_pcs_stock_idle;
++	ipq_pcs_stock_idle = NULL;
++	if (qpcs && qpcs->idle_up) {
++		dev_info(qpcs->dev, "stock order: idle UNIPHY already up\n");
++	} else if (qpcs) {
++		dev_info(qpcs->dev, "stock order: idle USXGMII bring-up after the QCA8084 mode set\n");
++		ipq_pcs_idle_up(qpcs);
++	}
++	mutex_unlock(&ipq_pcs_stock_lock);
++}
++EXPORT_SYMBOL_GPL(ipq_pcs_stock_idle_up);
++
++/* stock_order at probe: park the idle bring-up until the chip mode set,
++ * unless that already happened. Returns true when parked.
++ */
++static bool ipq_pcs_stock_defer_idle(struct ipq_pcs *qpcs)
++{
++	bool defer;
++
++	mutex_lock(&ipq_pcs_stock_lock);
++	defer = !ipq_pcs_stock_chip_done;
++	if (defer)
++		ipq_pcs_stock_idle = qpcs;
++	mutex_unlock(&ipq_pcs_stock_lock);
++
++	return defer;
++}
++
+ static int ipq9574_pcs_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+@@ -1996,14 +2242,19 @@
+ 	if (ret)
+ 		return ret;
+ 
++	if (stock_order && !IS_BUILTIN(CONFIG_PCS_QCOM_IPQ9574))
++		dev_info_once(dev, "stock order: needs the PCS built in, keeping the old order\n");
++
+ 	if (of_property_read_bool(dev->of_node, "qcom,idle-usxgmii")) {
+ 		ipq_pcs_idle = qpcs;
+ 		debugfs_create_file("ipq_pcs_idle_ctl", 0200, NULL, NULL,
+ 				    &ipq_pcs_idle_fops);
+-		if (idle_usxgmii)
+-			ipq_pcs_idle_up(qpcs);
+-		else
++		if (!idle_usxgmii)
+ 			dev_info(dev, "idle USXGMII bring-up skipped (idle_usxgmii=0)\n");
++		else if (ipq_pcs_stock() && ipq_pcs_stock_defer_idle(qpcs))
++			dev_info(dev, "stock order: idle USXGMII bring-up deferred until after the QCA8084 mode set\n");
++		else
++			ipq_pcs_idle_up(qpcs);
+ 		platform_set_drvdata(pdev, qpcs);
+ 		return 0;
+ 	}
+@@ -2026,17 +2277,18 @@
+ 	 * long before phylink configures this PCS, so when the DT asks for it
+ 	 * bring UNIPHY0 up for 10G-QXGMII right away. phylink's later config
+ 	 * finds the interface already set and only does the per-channel part.
++	 * With stock_order the QCA8084 driver asks for it right before its
++	 * mode set instead (ipq_pcs_stock_soc_up()).
+ 	 */
+ 	if (of_property_read_bool(dev->of_node, "qcom,early-10g-qxgmii")) {
+-		ret = ipq_pcs_config_usxgmii(qpcs, 0, PHY_INTERFACE_MODE_10G_QXGMII);
+-		dev_info(dev, "early 10G-QXGMII bring-up before the PHY package: %d\n", ret);
+-		ipq_pcs_mon_qpcs = qpcs;
+-		ipq_pcs_mon_left = 360;
+-		INIT_DELAYED_WORK(&ipq_pcs_mon_work, ipq_pcs_mon_fn);
+-		schedule_delayed_work(&ipq_pcs_mon_work, 5 * HZ);
+-		ipq_pcs_edge_left = 9000;
+-		INIT_DELAYED_WORK(&ipq_pcs_edge_work, ipq_pcs_edge_fn);
+-		schedule_delayed_work(&ipq_pcs_edge_work, HZ);
++		if (ipq_pcs_stock()) {
++			mutex_lock(&ipq_pcs_stock_lock);
++			ipq_pcs_stock_soc = qpcs;
++			mutex_unlock(&ipq_pcs_stock_lock);
++			dev_info(dev, "stock order: early 10G-QXGMII bring-up deferred to the QCA8084 mode set\n");
++		} else {
++			ipq_pcs_early_up(qpcs, true);
++		}
+ 	}
+ 
+ 	platform_set_drvdata(pdev, qpcs);
+--- a/include/linux/pcs/pcs-qcom-ipq9574.h
++++ b/include/linux/pcs/pcs-qcom-ipq9574.h
+@@ -6,10 +6,57 @@
+ #ifndef __LINUX_PCS_QCOM_IPQ9574_H
+ #define __LINUX_PCS_QCOM_IPQ9574_H
+ 
++#include <linux/errno.h>
++#include <linux/types.h>
++
+ struct device_node;
+ struct phylink_pcs;
+ 
+ struct phylink_pcs *ipq_pcs_get(struct device_node *np);
+ void ipq_pcs_put(struct phylink_pcs *pcs);
+ 
++/* BE7000 debug hooks used by the QCA8084 PHY and clock drivers: the stock
++ * bring-up order (pcs_qcom_ipq9574.stock_order) and the 0921 recalibration.
++ * The stock order only takes effect with the PCS driver built in; a modular
++ * PCS reports it off. Callers that cannot reach the PCS get the stubs.
++ */
++#if IS_REACHABLE(CONFIG_PCS_QCOM_IPQ9574)
++bool ipq_pcs_stock_order(void);
++int ipq_pcs_stock_soc_up(ktime_t *cal_done);
++void ipq_pcs_stock_idle_up(void);
++int ipq_pcs_debug_recalibrate(void);
++#else
++static inline bool ipq_pcs_stock_order(void)
++{
++	return false;
++}
++
++static inline int ipq_pcs_stock_soc_up(ktime_t *cal_done)
++{
++	*cal_done = 0;
++	return -ENODEV;
++}
++
++static inline void ipq_pcs_stock_idle_up(void)
++{
++}
++
++static inline int ipq_pcs_debug_recalibrate(void)
++{
++	return -ENODEV;
++}
++#endif
++
++/* Stock order hook of the QCA8084 clock controller (nsscc-qca8k), called by
++ * the QCA8084 PHY driver right after the chip mode set: drop the SerDes0
++ * system clock hold. Callers that cannot reach the clock driver get the stub.
++ */
++#if IS_REACHABLE(CONFIG_IPQ_NSSCC_QCA8K)
++void nss_cc_qca8k_stock_release(void);
++#else
++static inline void nss_cc_qca8k_stock_release(void)
++{
++}
++#endif
++
+ #endif /* __LINUX_PCS_QCOM_IPQ9574_H */
+--- a/drivers/net/phy/qcom/qca808x.c
++++ b/drivers/net/phy/qcom/qca808x.c
+@@ -6,6 +6,8 @@
+ #include <linux/reset.h>
+ #include <linux/clk.h>
+ #include <linux/debugfs.h>
++#include <linux/ktime.h>
++#include <linux/pcs/pcs-qcom-ipq9574.h>
+ #include <linux/seq_file.h>
+ #include <linux/uaccess.h>
+ #include <linux/workqueue.h>
+@@ -1136,7 +1138,6 @@
+ static bool qca8084_soc_recal;
+ module_param_named(soc_recal, qca8084_soc_recal, bool, 0444);
+ static bool qca8084_soc_recal_done;
+-extern int ipq_pcs_debug_recalibrate(void);
+ 
+ static void qca8084_mon_fn(struct work_struct *work)
+ {
+@@ -1161,7 +1162,12 @@
+ 		schedule_delayed_work(&qca8084_mon_work, 5 * HZ);
+ }
+ 
+-static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
++/* Stock order: set once the chip mode set step has asked for the idle
++ * UNIPHY bring-up
++ */
++static bool qca8084_stock_idle_called;
++
++static int __qca8084_phy_package_config_init_once(struct phy_device *phydev)
+ {
+ 	struct qca808x_shared_priv *shared_priv;
+ 	int ret, mode;
+@@ -1227,18 +1233,62 @@
+ 
+ 	/* Configure PCS working on 10G-QXGMII mode */
+ 	if (phydev->interface == PHY_INTERFACE_MODE_10G_QXGMII) {
++		bool stock = ipq_pcs_stock_order();
++		ktime_t soc_cal = 0, chip_start = 0;
++		bool baser;
+ 		int i;
+ 
++		/* Stock order: the SSDK sets UNIPHY0 to UQXGMII and the chip
++		 * right after it in the same call, runs its MHT GCC clock init
++		 * (SerDes0 system clock off), then brings UNIPHY2 up.
++		 */
++		if (stock) {
++			/* SRDS0, SRDS1, GEPHY0-3 system clock CBCRs; stock
++			 * has all six on (0x1) at this point.
++			 */
++			u32 cbcr[6] = {};
++
++			for (i = 0, ret = 0; i < ARRAY_SIZE(cbcr) && !ret; i++)
++				ret = qca8084_dbg_sw_rw(phydev->mdio.bus,
++							0xc8001a8 + i * 4,
++							false, &cbcr[i]);
++			phydev_info(phydev, "stock order: chip SRDS0 0x%08x SRDS1 0x%08x GEPHY0-3 0x%08x 0x%08x 0x%08x 0x%08x SYS_CBCR (%d) before the SoC UNIPHY0 bring-up\n",
++				    cbcr[0], cbcr[1], cbcr[2], cbcr[3],
++				    cbcr[4], cbcr[5], ret);
++			ret = ipq_pcs_stock_soc_up(&soc_cal);
++			chip_start = ktime_get();
++			if (soc_cal)
++				phydev_info(phydev, "stock order: SoC UNIPHY0 bring-up %d, its calibration finished %lld us before the chip mode set\n",
++					    ret, ktime_us_delta(chip_start, soc_cal));
++			else
++				phydev_info(phydev, "stock order: SoC UNIPHY0 bring-up %d, no SoC calibration yet, chip mode set goes ahead\n",
++					    ret);
++		}
++
+ 		ret = qca8084_qxgmii_set_mode(shared_priv->mdiodev[1],
+ 					      shared_priv->mdiodev[0]);
++		/* Stock order: the SSDK's MHT GCC clock init follows the chip
++		 * mode set right away and turns the SerDes0 system clock off.
++		 */
++		if (stock) {
++			phydev_info(phydev, "stock order: chip UQXGMII mode set %d, took %lld ms\n",
++				    ret, ktime_ms_delta(ktime_get(), chip_start));
++			nss_cc_qca8k_stock_release();
++		}
++		/* BaseR after the mode set, before the UNIPHY2 bring-up */
++		baser = !ret && !force_xpcs_redo &&
++			qca8084_qxgmii_baser_up(shared_priv->mdiodev[1]);
++		if (stock) {
++			qca8084_stock_idle_called = true;
++			ipq_pcs_stock_idle_up();
++		}
+ 		if (ret)
+ 			return ret;
+ 
+ 		for (i = 0; i < ARRAY_SIZE(shared_priv->ch_speed); i++)
+ 			shared_priv->ch_speed[i] = SPEED_UNKNOWN;
+ 
+-		shared_priv->xpcs_redo = force_xpcs_redo ||
+-			!qca8084_qxgmii_baser_up(shared_priv->mdiodev[1]);
++		shared_priv->xpcs_redo = force_xpcs_redo || !baser;
+ 		qca8084_dbg_shared = shared_priv;
+ 		if (!qca8084_dbg_dentry) {
+ 			qca8084_dbg_dentry = debugfs_create_file("qca8084_ctl", 0200,
+@@ -1263,6 +1313,24 @@
+ 	return qca8084_package_clock_init(shared_priv);
+ }
+ 
++static int qca8084_phy_package_config_init_once(struct phy_device *phydev)
++{
++	int ret = __qca8084_phy_package_config_init_once(phydev);
++
++	/* Stock order: the idle UNIPHY waits for the chip mode set. If the
++	 * package init ended before that step (an error, or no 10G-QXGMII),
++	 * bring it up anyway so it is not left parked.
++	 */
++	if (ipq_pcs_stock_order() && !qca8084_stock_idle_called) {
++		phydev_warn(phydev, "stock order: package init ended before the chip mode set (%d), idle UNIPHY brought up anyway\n",
++			    ret);
++		qca8084_stock_idle_called = true;
++		ipq_pcs_stock_idle_up();
++	}
++
++	return ret;
++}
++
+ static int qca8084_config_init(struct phy_device *phydev)
+ {
+ 	struct qca808x_priv *dbg_priv = phydev->priv;
