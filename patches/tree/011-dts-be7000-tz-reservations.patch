@@ -1,0 +1,35 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: dts: be7000: reserve the TrustZone app and boot chain regions like stock
+
+Stock reserves tzapp@49b00000 (6 MB) and rsvd1@4fa00000, rsvd2@4fb00000
+(256 KB each) as no-map. Our DTS did not, so /proc/iomem showed them as
+System RAM and Linux could hand out pages the secure side may still use.
+Reserve them the same way. Costs about 6.5 MB of MemTotal.
+
+--- a/target/linux/qualcommbe/dts/ipq9574-be7000.dts
++++ b/target/linux/qualcommbe/dts/ipq9574-be7000.dts
+@@ -135,6 +135,24 @@
+ 	};
+ 
+ 	reserved-memory {
++		/* Same as stock: TrustZone applications and two regions of the
++		 * boot chain. Without them Linux hands this memory out as normal
++		 * RAM although the secure side may still write to it. */
++		tzapp@49b00000 {
++			no-map;
++			reg = <0x0 0x49b00000 0x0 0x600000>;
++		};
++
++		rsvd1@4fa00000 {
++			no-map;
++			reg = <0x0 0x4fa00000 0x0 0x40000>;
++		};
++
++		rsvd2@4fb00000 {
++			no-map;
++			reg = <0x0 0x4fb00000 0x0 0x40000>;
++		};
++
+ 		q6_region: wcnss@4ab00000 {
+ 			no-map;
+ 			reg = <0x0 0x4ab00000 0x0 0x2b00000>;
