@@ -1,12 +1,12 @@
 # OpenWrt для Xiaomi BE7000
 
-[English](README.en.md)
+[English](README.en.md) · <a href="#поддержать-проект"><img alt="Поддержать проект" src="https://img.shields.io/badge/%D0%9F%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C%20%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82-Boosty%20%C2%B7%20crypto-F15F2C?style=flat-square"></a>
 
 Свежий OpenWrt из main для Xiaomi BE7000 (плата RC06, процессор IPQ9554), ядро 6.18, без kexec. Система грузится прямо с флеша, сток остаётся в соседнем слоте, вернуться на него можно в любой момент.
 
 За основу взят порт kravasuper (ветка xiaomi_be7000, коммит 790d036a). К нему добавлены исправления в драйвер Ethernet, без которых на моей плате система не доходила до сети ([patches.md](docs/patches.md)), и набор служб, которые делают жизнь в двух слотах с заводским загрузчиком предсказуемой.
 
-Текущая версия **1.2.7**. Образы лежат в [Releases](../../releases), суммы в sha256sums.txt. Как поставить, в разделе [Установка, обновление, откат](#установка-обновление-откат).
+Текущая версия **1.3.0**. Образы лежат в [Releases](../../releases), суммы в sha256sums.txt. Как поставить, в разделе [Установка, обновление, откат](#установка-обновление-откат).
 
 ## Содержание
 
@@ -18,6 +18,7 @@
 - [Тема оформления](#тема-оформления)
 - [Лицензия](#лицензия)
 - [Спасибо](#спасибо)
+- [Поддержать проект](#поддержать-проект)
 
 ## Что проверено
 
@@ -92,3 +93,19 @@ OpenWrt SNAPSHOT r20260623-790d036a, ядро 6.18.36, архитектура aa
 ## Спасибо
 
 Полный список с ссылками открывается в LuCI на странице Система, Благодарности, и его же видно в приветствии по SSH. Отдельно zerc00l, который дал удалённый доступ к своему роутеру: на его плате нашлась причина мёртвого Ethernet. И kravasuper за сам порт, на котором всё стоит.
+
+## Поддержать проект
+
+Сборка делается в свободное время: отладка на чужих платах, десятки тестовых образов, CI. Если она вам пригодилась, можно поддержать работу. Спасибо!
+
+<a href="https://boosty.to/itnitro"><img alt="Boosty" src="https://img.shields.io/badge/Boosty-itnitro-F15F2C?style=for-the-badge&logo=boosty&logoColor=white"></a>
+
+| Способ | Реквизиты |
+|------|-----------|
+| **USDT** (TON) | `UQBZhwBuZCgQOtrgRGMu4PKiiOcf9dTKxRpapZt1oDn0m3yH` |
+| **USDT / ETH** (ERC-20) | `0xeb05803030afB64C903C7BfB79d18957efD6bcCd` |
+| **SOL** (Solana) | `GcKxgUeSfKnsPL9iEaYKJArosfYKMtE4W5wVDdHrRVTu` |
+| **BTC** (Bitcoin) | `bc1qcyd3kaa3y2cv2yn90rsa628y3ptz56zs05z2jq` |
+| **WeChat, QR ниже** | `itnitro` |
+
+<img src="docs/img/wechat-itnitro-qr.jpg" alt="WeChat itnitro" width="200">

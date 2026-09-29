@@ -18,12 +18,16 @@ var TEXT = {
 	ru: {
 		hello: 'Спасибо всем, без кого этой сборки бы не было.',
 		star: 'на его плате нашлась причина',
-		more: 'исходники, релизы и обсуждение'
+		more: 'исходники, релизы и обсуждение',
+		support: 'поддержать проект',
+		crypto: 'криптовалюта и WeChat'
 	},
 	en: {
 		hello: 'Thanks to everyone this build would not exist without.',
 		star: 'the fix was found on his board',
-		more: 'sources, releases and discussion'
+		more: 'sources, releases and discussion',
+		support: 'support the project',
+		crypto: 'crypto and WeChat'
 	}
 };
 
@@ -88,6 +92,24 @@ return view.extend({
 			'open ',
 			E('a', { 'href': d.project, 'target': '_blank', 'rel': 'noopener' }, d.project.replace('https://', ''))
 		]));
+		if (d.support) {
+			body.push(E('div', { 'class': 'bct-gt' }, '# ' + tx.support));
+			body.push(E('div', { 'class': 'bct-p' }, [
+				E('span', { 'class': 'bct-pr' }, '$ '),
+				'open ',
+				E('a', { 'href': d.support.url, 'target': '_blank', 'rel': 'noopener' }, d.support.url.replace('https://', '')),
+				' ',
+				E('span', { 'class': 'bct-site' }, '(Boosty)')
+			]));
+			body.push(E('div', { 'class': 'bct-p' }, [
+				E('span', { 'class': 'bct-pr' }, '$ '),
+				'open ',
+				E('a', { 'href': t(d.support.more), 'target': '_blank', 'rel': 'noopener' }, 'README'),
+				' ',
+				E('span', { 'class': 'bct-site' }, '(' + tx.crypto + ')')
+			]));
+		}
+
 		body.push(E('div', { 'class': 'bct-p' }, [ E('span', { 'class': 'bct-pr' }, '$ '), E('span', { 'class': 'bct-cur' }) ]));
 
 		return E('div', { 'class': 'bct' }, [
