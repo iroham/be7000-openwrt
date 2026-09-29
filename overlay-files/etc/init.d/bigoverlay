@@ -178,6 +178,12 @@ make_volume() {
 
 boot() {
 	[ "$(uci -q get bigoverlay.main.enabled)" = "1" ] || return 0
+	# a local test build runs on a private copy of the shared volume (see
+	# /lib/preinit/78_be7000_overlay_refresh) and must not switch to it
+	if [ -e /rom/etc/be7000-test ]; then
+		logger -t bigoverlay "test image, staying on the private copy"
+		return 0
+	fi
 	# Already serving as /overlay: nothing left to do, forget any switch tries.
 	case "$(mount | grep ' on /overlay ')" in
 	/dev/ubi1_*)
