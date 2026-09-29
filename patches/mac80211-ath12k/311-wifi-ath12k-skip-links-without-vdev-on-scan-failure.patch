@@ -1,0 +1,20 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: wifi: ath12k: skip links without a vdev when a scan fails
+
+With an MLD AP on a multi-radio wiphy (BE7000 5 GHz split plus MLO) a
+link can exist before its vdev is created and bound to a radio, then
+arvif->ar is NULL. When the scan request fails, the cleanup loop in
+ath12k_mac_op_hw_scan() dereferences it. The cancel path already skips
+links that are not created, do the same here.
+
+--- a/drivers/net/wireless/ath/ath12k/mac.c
++++ b/drivers/net/wireless/ath/ath12k/mac.c
+@@ -5807,7 +5807,7 @@
+ 		links_map = ahvif->links_map;
+ 		for_each_set_bit(link_id, &links_map, ATH12K_NUM_MAX_LINKS) {
+ 			arvif = wiphy_dereference(hw->wiphy, ahvif->link[link_id]);
+-			if (!arvif)
++			if (!arvif || !arvif->is_created)
+ 				continue;
+ 
+ 			ar = arvif->ar;
