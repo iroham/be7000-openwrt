@@ -1,0 +1,55 @@
+#!/usr/bin/ucode
+// Builds /etc/banner: the stock OpenWrt banner from /rom plus the credits
+// from the same JSON the LuCI page (System, Credits) shows. English when
+// LuCI is set to English (luci.main.lang), Russian otherwise.
+
+import { readfile, writefile, popen } from 'fs';
+
+const src = readfile('/rom/etc/banner') ?? '';
+const data = json(readfile('/www/luci-static/resources/be7000-credits/credits.json') ?? '{}');
+const ver = match(readfile('/etc/be7000-release') ?? '', /VERSION=([^\n]+)/)?.[1];
+const p = popen('uci -q get luci.main.lang');
+const lang = match(trim(p?.read('all') ?? ''), /^en/) ? 'en' : 'ru';
+p?.close();
+
+const T = {
+	ru: { hello: 'Спасибо всем, без кого этой сборки бы не было',
+	      star: 'на его плате нашлась причина мёртвого Ethernet',
+	      links: 'Ссылки на всех в LuCI, Система, Благодарности' },
+	en: { hello: 'Thanks to everyone this build would not exist without',
+	      star: 'the cause of the dead Ethernet was found on his board',
+	      links: 'Links to everyone in LuCI, System, Credits' }
+}[lang];
+
+let out = src;
+if (length(out) && !match(out, /\n$/))
+	out += '\n';
+
+out += `\n be7000-openwrt${ver ? ' ' + ver : ''}\n\n ${T.hello}\n`;
+
+for (let g in data.groups ?? []) {
+	out += `\n  ${g.title[lang] ?? g.title.ru}\n`;
+	let rest = [];
+	for (let q in g.people) {
+		if (q.star)
+			out += `    ${q.name}, ${T.star}\n`;
+		else
+			push(rest, q.name);
+	}
+	// wrap the plain names at about 76 columns
+	let line = '    ';
+	for (let i, n in rest) {
+		let piece = n + (i < length(rest) - 1 ? ', ' : '');
+		if (length(line) + length(piece) > 76) {
+			out += rtrim(line) + '\n';
+			line = '    ';
+		}
+		line += piece;
+	}
+	if (length(rest))
+		out += line + '\n';
+}
+
+out += `\n ${T.links}\n ${replace(data.project ?? '', 'https://', '')}\n\n`;
+
+writefile('/etc/banner', out);

@@ -1,0 +1,138 @@
+{
+	"project": "https://github.com/timofey-maykov/be7000-openwrt",
+	"groups": [
+		{
+			"id": "boards",
+			"title": {
+				"ru": "Проверяли на проблемных платах",
+				"en": "Tested on failing boards"
+			},
+			"people": [
+				{
+					"name": "zerc00l",
+					"site": "4PDA",
+					"url": "https://4pda.to/forum/index.php?showuser=6802658",
+					"star": true,
+					"ru": "Дал удалённый доступ к своему роутеру, и на его плате нашлась причина мёртвого Ethernet. До этого десятки перепрошивок и дампы стока и OpenWrt с одной платы.",
+					"en": "Gave remote access to his router, and the cause of the dead Ethernet was found on his board. Before that, dozens of reflashes and stock and OpenWrt dumps from the same board."
+				},
+				{
+					"name": "Denchik777",
+					"site": "4PDA",
+					"url": "https://4pda.to/forum/index.php?showuser=587396",
+					"ru": "Первый дамп стока и вывод регуляторов, проверял каждую отладочную сборку на рабочей плате.",
+					"en": "The first stock dump and regulator output, checked every debug build on a working board."
+				},
+				{
+					"name": "BurmecianKnight",
+					"site": "GitHub",
+					"url": "https://github.com/BurmecianKnight",
+					"ru": "Тесты в issue #1, дамп загрузчика, замеры линии на стоке и на каждой сборке.",
+					"en": "Tests in issue #1, a bootloader dump, lane measurements on stock and on every build."
+				},
+				{
+					"name": "fufliks862",
+					"site": "4PDA",
+					"url": "https://4pda.to/forum/index.php?showuser=12493086",
+					"ru": "Первые отладочные логи, по ним стало видно, что линия поднимается только в одну сторону.",
+					"en": "The first debug logs, which showed that the lane came up in one direction only."
+				},
+				{
+					"name": "dima-dior1999",
+					"site": "4PDA",
+					"url": "https://4pda.to/forum/index.php?showuser=2822472",
+					"ru": "Первые сообщения о плате без сети и помощь другим в теме.",
+					"en": "The first reports of a board without network, and help to others in the thread."
+				},
+				{
+					"name": "xiaoqi2020",
+					"site": "GitHub",
+					"url": "https://github.com/xiaoqi2020",
+					"ru": "Логи с платы без сети в issue #4.",
+					"en": "Logs from a board without network in issue #4."
+				},
+				{
+					"name": "tera2null",
+					"site": "GitHub",
+					"url": "https://github.com/tera2null",
+					"ru": "Плата с ошибками приёма и откат на сток в issue #3.",
+					"en": "A board with receive errors and the rollback to stock in issue #3."
+				}
+			]
+		},
+		{
+			"id": "bugs",
+			"title": {
+				"ru": "Нашли и помогли исправить",
+				"en": "Found and helped fix"
+			},
+			"people": [
+				{
+					"name": "kazanova-sgh",
+					"site": "4PDA",
+					"url": "https://4pda.to/forum/index.php?showuser=1995297",
+					"ru": "extroot поверх общего тома и каталог стеков Docker.",
+					"en": "extroot over the shared volume and the Docker stacks directory."
+				}
+			]
+		},
+		{
+			"id": "base",
+			"title": {
+				"ru": "На чьей работе стоит сборка",
+				"en": "Whose work this build stands on"
+			},
+			"people": [
+				{
+					"name": "kravasuper",
+					"site": "GitHub",
+					"url": "https://github.com/kravasuper/openwrt",
+					"ru": "Дерево OpenWrt на ядре 6.18 для BE7000, основа сборки, и исправление DMA приёма EDMA.",
+					"en": "The OpenWrt tree on kernel 6.18 for the BE7000 that this build is based on, and the EDMA receive DMA fix."
+				},
+				{
+					"name": "dima424658",
+					"site": "GitHub",
+					"url": "https://github.com/openwrt/openwrt/pull/20604",
+					"ru": "Первый запрос в OpenWrt с поддержкой BE7000.",
+					"en": "The first pull request adding BE7000 support to OpenWrt."
+				},
+				{
+					"name": "Kenneth Kasilag",
+					"site": "GitHub",
+					"url": "https://github.com/openwrt/openwrt/pull/24033",
+					"ru": "Серия исправлений UNIPHY и USXGMII для IPQ9574.",
+					"en": "The UNIPHY and USXGMII fix series for IPQ9574."
+				},
+				{
+					"name": "Alta Labs Route10",
+					"site": "GitHub",
+					"url": "https://github.com/openwrt/openwrt/pull/25322",
+					"ru": "Порт Route10 (SkytheFolf), подсказка про сброс QCA8084 со стороны nsscc.",
+					"en": "The Route10 port (SkytheFolf), the hint about resetting the QCA8084 from nsscc."
+				},
+				{
+					"name": "FOV5",
+					"site": "4PDA",
+					"url": "https://4pda.to/forum/index.php?showuser=3121811",
+					"ru": "Разбор OTA стока и загрузчика, идея хранить настройки OpenWrt в томе стока.",
+					"en": "Analysis of the stock OTA and bootloader, the idea of keeping OpenWrt settings in the stock volume."
+				},
+				{
+					"name": "OpenWrt",
+					"site": "openwrt.org",
+					"url": "https://openwrt.org",
+					"ru": "Сама система, LuCI и все пакеты.",
+					"en": "The system itself, LuCI and all the packages."
+				}
+			]
+		}
+	],
+	"support": {
+		"url": "https://boosty.to/itnitro",
+		"more": {
+			"ru": "https://github.com/timofey-maykov/be7000-openwrt#поддержать-проект",
+			"en": "https://github.com/timofey-maykov/be7000-openwrt/blob/main/README.en.md#support-the-project"
+		}
+	}
+}

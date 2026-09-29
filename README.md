@@ -1,12 +1,12 @@
 # OpenWrt для Xiaomi BE7000
 
-[English](README.en.md)
+[English](README.en.md) · <a href="#поддержать-проект"><img alt="Поддержать проект" src="https://img.shields.io/badge/%D0%9F%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C%20%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82-Boosty%20%C2%B7%20crypto-F15F2C?style=flat-square"></a>
 
 Свежий OpenWrt из main для Xiaomi BE7000 (плата RC06, процессор IPQ9554), ядро 6.18, без kexec. Система грузится прямо с флеша, сток остаётся в соседнем слоте, вернуться на него можно в любой момент.
 
 За основу взят порт kravasuper (ветка xiaomi_be7000, коммит 790d036a). К нему добавлены исправления в драйвер Ethernet, без которых на моей плате система не доходила до сети ([patches.md](docs/patches.md)), и набор служб, которые делают жизнь в двух слотах с заводским загрузчиком предсказуемой.
 
-Текущая версия **1.2.7**. Образы лежат в [Releases](../../releases), суммы в sha256sums.txt. Как поставить, в разделе [Установка, обновление, откат](#установка-обновление-откат).
+Текущая версия **1.3.0**. Образы лежат в [Releases](../../releases), суммы в sha256sums.txt. Как поставить, в разделе [Установка, обновление, откат](#установка-обновление-откат).
 
 ## Содержание
 
@@ -18,6 +18,7 @@
 - [Тема оформления](#тема-оформления)
 - [Лицензия](#лицензия)
 - [Спасибо](#спасибо)
+- [Поддержать проект](#поддержать-проект)
 
 ## Что проверено
 
@@ -33,7 +34,7 @@
 
 ## Известные проблемы
 
-- **На части плат не работает Ethernet.** Система загружается, Wi-Fi работает, порты поднимают линк, но MAC не принимает ни одного кадра ни на одном порту. В журнале `BaseR link not up yet`. Сток на тех же платах работает, загрузчик и ревизия процессора такие же, как у рабочих плат, так что дело в том, как драйвер поднимает связь между процессором (UNIPHY) и микросхемой портов QCA8084. Если это ваш случай, заходите по Wi-Fi (сеть OpenWrt-BE7000, пароль be7000openwrt). Тестовые сборки с исправлением выходят пре-релизами, обсуждение в [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) и в теме на 4PDA. Что уже выяснено, в [patches.md](docs/patches.md#в-работе).
+- **Ethernet на части плат до 1.3.0.** Порты поднимали линк, но роутер не принимал ни одного кадра. Причина оказалась в запросе ядра на регулятор l2 через RPM, в 1.3.0 это исправлено, подробности в [patches.md](docs/patches.md#приём-по-ethernet-на-части-плат). Если на вашей плате кабель всё ещё не работает, напишите в [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) или в тему на 4PDA, заходить можно по Wi-Fi (сеть OpenWrt-BE7000, пароль be7000openwrt).
 - На 5 ГГц одно радио на весь диапазон, два независимых 5 ГГц, как 5G-1 и 5G-2 в стоке, пока не поддерживаются.
 - Места под /overlay 19.4 МБ, для чего-то крупного лучше вынести его на USB командой be7000-extroot.
 - Ядро использует мейнлайновый qcom-ppe, а не вендорный NSS, так что ускорение только на уровне PPE.
@@ -91,4 +92,20 @@ OpenWrt SNAPSHOT r20260623-790d036a, ядро 6.18.36, архитектура aa
 
 ## Спасибо
 
-kravasuper за сам порт, всем, кто писал в обсуждении про TLMM и XPCS, за подсказки, FOV5 за идею с общим томом, zerc00l, Denchik777, dima, fufliks862 и BurmecianKnight за журналы и терпение.
+Полный список с ссылками открывается в LuCI на странице Система, Благодарности, и его же видно в приветствии по SSH. Отдельно zerc00l, который дал удалённый доступ к своему роутеру: на его плате нашлась причина мёртвого Ethernet. И kravasuper за сам порт, на котором всё стоит.
+
+## Поддержать проект
+
+Сборка делается в свободное время: отладка на чужих платах, десятки тестовых образов, CI. Если она вам пригодилась, можно поддержать работу. Спасибо!
+
+<a href="https://boosty.to/itnitro"><img alt="Boosty" src="https://img.shields.io/badge/Boosty-itnitro-F15F2C?style=for-the-badge&logo=boosty&logoColor=white"></a>
+
+| Способ | Реквизиты |
+|------|-----------|
+| <img alt="USDT TON" src="https://img.shields.io/badge/USDT-TON-26A17B?style=for-the-badge&logo=tether&logoColor=white"> | `UQBZhwBuZCgQOtrgRGMu4PKiiOcf9dTKxRpapZt1oDn0m3yH` |
+| <img alt="USDT ETH ERC-20" src="https://img.shields.io/badge/USDT%20%2F%20ETH-ERC--20-627EEA?style=for-the-badge&logo=ethereum&logoColor=white"> | `0xeb05803030afB64C903C7BfB79d18957efD6bcCd` |
+| <img alt="SOL" src="https://img.shields.io/badge/SOL-Solana-9945FF?style=for-the-badge&logo=solana&logoColor=white"> | `GcKxgUeSfKnsPL9iEaYKJArosfYKMtE4W5wVDdHrRVTu` |
+| <img alt="BTC" src="https://img.shields.io/badge/BTC-Bitcoin-F7931A?style=for-the-badge&logo=bitcoin&logoColor=white"> | `bc1qcyd3kaa3y2cv2yn90rsa628y3ptz56zs05z2jq` |
+| <img alt="WeChat" src="https://img.shields.io/badge/WeChat-itnitro-07C160?style=for-the-badge&logo=wechat&logoColor=white"> | `itnitro` |
+
+<img src="docs/img/wechat-itnitro-qr.jpg" alt="WeChat itnitro" width="200">
