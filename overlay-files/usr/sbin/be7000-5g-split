@@ -1,0 +1,151 @@
+#!/bin/sh
+# 5 GHz split, like 5G-1 and 5G-2 on stock: the QCN9274 runs its dual-MAC
+# firmware as two radios, 36-64 and 149-165.
+#
+#   be7000-5g-split status | on | off
+#
+# The ath12k board_id parameter picks the firmware (0x1008 split, 0 = the
+# single-MAC board id from DT), the PCI device is rebound to apply it, and
+# the wireless config gets a second 5 GHz radio with copies of the networks
+# of the first one. The choice is kept in /etc/config/be7000 and restored
+# at boot by /etc/init.d/be7000-5g-split.
+
+SPLIT_ID=0x1008
+PARAM=/sys/module/ath12k/parameters/board_id
+DRV=/sys/bus/pci/drivers/ath12k_pci
+
+pci_dev() {
+	for d in $DRV/0*; do [ -e "$d" ] && { basename "$d"; return; }; done
+	for d in /sys/bus/pci/devices/*; do
+		[ "$(cat $d/vendor 2>/dev/null):$(cat $d/device 2>/dev/null)" = "0x17cb:0x1109" ] && { basename "$d"; return; }
+	done
+}
+
+# the 5 GHz wifi-device of the PCI radio without a radio index, or with index 1
+main_radio() {
+	local s
+	for s in $(uci -q show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p"); do
+		[ "$(uci -q get wireless.$s.band)" = 5g ] || continue
+		case "$(uci -q get wireless.$s.path)" in *pci*) ;; *) continue ;; esac
+		case "$(uci -q get wireless.$s.radio)" in ""|1) echo $s; return ;; esac
+	done
+}
+
+low_radio() {
+	local s path="$(uci -q get wireless.$1.path)"
+	for s in $(uci -q show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p"); do
+		[ "$(uci -q get wireless.$s.path)" = "$path" ] && [ "$(uci -q get wireless.$s.radio)" = 0 ] && { echo $s; return; }
+	done
+}
+
+ifaces_of() {
+	uci -q show wireless | sed -n "s/^wireless\.\([^.]*\)\.device='$1'$/\1/p"
+}
+
+apply_fw() {
+	local dev="$(pci_dev)"
+	[ -n "$dev" ] || { echo "no QCN9274 on PCI" >&2; return 1; }
+	[ -w "$PARAM" ] || { echo "ath12k has no board_id parameter" >&2; return 1; }
+	[ "$(cat $PARAM)" = "$(printf %d $1)" ] && [ -e "$DRV/$dev" ] && return 0
+	echo "$(printf %d $1)" > $PARAM
+	[ -e "$DRV/$dev" ] && echo "$dev" > $DRV/unbind
+	sleep 2
+	echo "$dev" > $DRV/bind
+	# wait for the phy to come back
+	i=0; while [ $i -lt 60 ] && ! ls /sys/bus/pci/devices/$dev/ieee80211 >/dev/null 2>&1; do sleep 1; i=$((i+1)); done
+}
+
+# drop wifi-devices on the same PCI path other than the given ones (left
+# by the hotplug wifi-detect when it saw the new radios first)
+drop_extra() {
+	local s path="$(uci -q get wireless.$1.path)" i
+	for s in $(uci -q show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p"); do
+		[ "$s" = "$1" ] || [ "$s" = "$2" ] && continue
+		[ "$(uci -q get wireless.$s.path)" = "$path" ] || continue
+		for i in $(ifaces_of $s); do uci -q delete wireless.$i; done
+		uci -q delete wireless.$s
+	done
+}
+
+config_on() {
+	local r="$(main_radio)" low ch
+	[ -n "$r" ] || { echo "no 5 GHz radio in /etc/config/wireless" >&2; return 1; }
+	uci set wireless.$r.radio=1
+	# the upper radio covers 144-177; ACS right after the firmware switch
+	# is unreliable, so start on fixed channels
+	ch="$(uci -q get wireless.$r.channel)"
+	case "$ch" in [0-9]*) [ "$ch" -ge 144 ] || uci set wireless.$r.channel=149 ;; *) uci set wireless.$r.channel=149 ;; esac
+	low="$(low_radio $r)"
+	if [ -z "$low" ]; then
+		low=${r}_low
+		uci set wireless.$low=wifi-device
+		for o in type path band htmode country cell_density num_global_macaddr; do
+			v="$(uci -q get wireless.$r.$o)" && uci set wireless.$low.$o="$v"
+		done
+		uci set wireless.$low.radio=0
+		uci set wireless.$low.channel=36
+		for i in $(ifaces_of $r); do
+			n=${i}_low
+			uci set wireless.$n=wifi-iface
+			uci -q show wireless.$i | sed -n "s/^wireless\.$i\.\([^=]*\)=\(.*\)$/\1 \2/p" | while read o v; do
+				[ "$o" = device ] && continue
+				eval "uci set wireless.$n.$o=$v"
+			done
+			uci set wireless.$n.device=$low
+		done
+	fi
+	uci -q delete wireless.$low.disabled
+	drop_extra $r $low
+	uci commit wireless
+}
+
+config_off() {
+	local r="$(main_radio)" low i
+	[ -n "$r" ] || return 0
+	low="$(low_radio $r)"
+	if [ -n "$low" ]; then
+		for i in $(ifaces_of $low); do uci -q delete wireless.$i; done
+		uci -q delete wireless.$low
+	fi
+	uci -q delete wireless.$r.radio
+	drop_extra $r
+	uci commit wireless
+}
+
+save() {
+	[ -f /etc/config/be7000 ] || touch /etc/config/be7000
+	uci -q get be7000.wifi >/dev/null || uci set be7000.wifi=wifi
+	uci set be7000.wifi.split_5g=$1
+	uci commit be7000
+}
+
+case "$1" in
+	status)
+		p="$(cat $PARAM 2>/dev/null)"
+		if [ -n "$p" ] && [ "$p" -ne 0 ] && [ $((p & 0x1000)) -ne 0 ]; then echo on; else echo off; fi
+		;;
+	on)
+		save 1
+		config_on || exit 1
+		apply_fw $SPLIT_ID || exit 1
+		sleep 5
+		wifi reload
+		echo "5 GHz split on: two radios, 36-64 and 149-165"
+		;;
+	off)
+		save 0
+		config_off
+		apply_fw 0 || exit 1
+		sleep 5
+		wifi reload
+		echo "5 GHz split off: one radio for the whole band"
+		;;
+	boot)
+		[ "$(uci -q get be7000.wifi.split_5g)" = 1 ] && apply_fw $SPLIT_ID
+		exit 0
+		;;
+	*)
+		echo "usage: $0 status|on|off" >&2
+		exit 1
+		;;
+esac
