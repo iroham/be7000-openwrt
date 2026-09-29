@@ -1,7 +1,8 @@
 #!/bin/sh /etc/rc.common
-# Restore the 5 GHz split (be7000-5g-split) before netifd sets up Wi-Fi
+# Restore the 5 GHz split (be7000-5g-split): RF lines, calibration and the
+# ath12k board_id option, before kmodloader (S10 boot) loads ath12k
 
-START=19
+START=09
 
 boot() {
 	/usr/sbin/be7000-5g-split boot
