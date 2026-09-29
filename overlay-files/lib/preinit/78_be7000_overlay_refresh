@@ -97,7 +97,7 @@ be7000_vol_dev() {
 # then hybrid-failover, then the rest; whatever does not fit is skipped and
 # logged instead of giving up the whole copy.
 be7000_test_copy() {
-	local src="$1" dst="$2" f ok=0 skip=0
+	local src="$1" dst="$2" f ok=0 skip=0 i n_prio
 	be7000_keep_list "$src"
 	(cd "$src" && find . ! -type d) | sed 's|^\./||' > /tmp/be7000-test.all
 	{
@@ -105,7 +105,16 @@ be7000_test_copy() {
 		grep -E 'hybrid' /tmp/be7000-test.all
 		grep -v -E '^etc/|hybrid' /tmp/be7000-test.all
 	} > /tmp/be7000-test.order
+	n_prio=$(grep -c -E '^etc/|hybrid' /tmp/be7000-test.all)
+	i=0
 	while read -r f; do
+		i=$((i + 1))
+		# settings and hybrid-failover always; the rest only while at least
+		# 3 MB stay free, the running system needs room to write
+		if [ $i -gt "$n_prio" ] && [ "$(df -k "$dst" | awk 'NR==2 {print $4}')" -lt 3072 ]; then
+			skip=$((skip + 1))
+			continue
+		fi
 		if [ -f "$src/$f" ] && [ ! -L "$src/$f" ]; then
 			be7000_replaced_by_image "$f" && continue
 		elif [ -L "$src/$f" ]; then
