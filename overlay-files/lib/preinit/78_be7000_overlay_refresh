@@ -138,6 +138,9 @@ be7000_overlay_refresh_test() {
 			# run on this copy, not on the shared volume
 			[ -f "$d/upper/etc/config/fstab" ] && sed -i "/^config mount 'bigoverlay'/,/^$/ s/option enabled '1'/option enabled '0'/" "$d/upper/etc/config/fstab"
 			: > "$d/.be7000_test_copy"
+			# fstools wipes a volume that is not marked ready (FS_STATE_READY = 2)
+			rm -f "$d/.fs_state"
+			ln -s 2 "$d/.fs_state"
 			sync
 		fi
 		umount "$d"
