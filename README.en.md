@@ -1,12 +1,12 @@
 # OpenWrt for Xiaomi BE7000
 
-[Русская версия](README.md)
+[Русская версия](README.md) · <a href="#support-the-project"><img alt="Support the project" src="https://img.shields.io/badge/Support%20the%20project-Boosty%20%C2%B7%20crypto-F15F2C?style=flat-square"></a>
 
 Fresh OpenWrt from main for the Xiaomi BE7000 (RC06 board, IPQ9554 SoC), kernel 6.18, no kexec. The system boots straight from flash, the stock firmware stays in the other slot, and you can go back to it at any time.
 
 It is based on the kravasuper port (branch xiaomi_be7000, commit 790d036a). On top of it I added fixes to the Ethernet driver, without which the system on my board never got as far as the network ([patches.en.md](docs/patches.en.md)), and a set of services that make life with two slots and the factory bootloader predictable.
 
-The current version is **1.2.7**. Images are in [Releases](../../releases), checksums in sha256sums.txt. How to install it is in the section [Installation, updating, rollback](#installation-updating-rollback).
+The current version is **1.3.0**. Images are in [Releases](../../releases), checksums in sha256sums.txt. How to install it is in the section [Installation, updating, rollback](#installation-updating-rollback).
 
 ## Contents
 
@@ -18,6 +18,7 @@ The current version is **1.2.7**. Images are in [Releases](../../releases), chec
 - [Theme](#theme)
 - [License](#license)
 - [Thanks](#thanks)
+- [Support the project](#support-the-project)
 
 ## What has been tested
 
@@ -92,3 +93,19 @@ The patches in patches are distributed under GPL-2.0-only, like the Linux kernel
 ## Thanks
 
 The full list with links is on the System, Credits page in LuCI, and the same list is in the SSH login greeting. Special thanks to zerc00l, who gave remote access to his router: the cause of the dead Ethernet was found on his board. And to kravasuper for the port everything stands on.
+
+## Support the project
+
+The build is made in spare time: debugging on other people's boards, dozens of test images, CI. If it was useful to you, you can support the work. Thank you!
+
+<a href="https://boosty.to/itnitro"><img alt="Boosty" src="https://img.shields.io/badge/Boosty-itnitro-F15F2C?style=for-the-badge&logo=boosty&logoColor=white"></a>
+
+| Method | Details |
+|------|-----------|
+| **USDT** (TON) | `UQBZhwBuZCgQOtrgRGMu4PKiiOcf9dTKxRpapZt1oDn0m3yH` |
+| **USDT / ETH** (ERC-20) | `0xeb05803030afB64C903C7BfB79d18957efD6bcCd` |
+| **SOL** (Solana) | `GcKxgUeSfKnsPL9iEaYKJArosfYKMtE4W5wVDdHrRVTu` |
+| **BTC** (Bitcoin) | `bc1qcyd3kaa3y2cv2yn90rsa628y3ptz56zs05z2jq` |
+| **WeChat, QR below** | `itnitro` |
+
+<img src="docs/img/wechat-itnitro-qr.jpg" alt="WeChat itnitro" width="200">
