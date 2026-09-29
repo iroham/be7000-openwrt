@@ -2,6 +2,12 @@
 
 [Русская версия](CHANGELOG.md)
 
+**1.2.8**, September 30, 2026.
+- On some boards Ethernet reception did not work after installation: there was a link, but the router did not receive a single frame, on LAN or WAN. The cause was power. The DTS had the l2 regulator from the Qualcomm reference board, the kernel requested it over RPM at boot, and stock never makes such requests. After that request the SoC receiver on the lane to the QCA8084 went silent, although every lane register and clock matched stock. The kernel no longer votes l2, USB gets a fixed 1.8 V supply. On zerc00l's board the cable works, iperf3 941 Mbit/s both ways without a single lane error. Huge thanks to zerc00l for remote access to his router, and to BurmecianKnight, Denchik777, xiaoqi2020, tera2null, kazanova-sgh and fufliks862 for the logs and patience.
+- EDMA receive DMA fix from OpenWrt main (0362, by krava): receive buffers were mapped with one DMA direction and unmapped with another, so on IPQ95xx the CPU could read stale data instead of the frame.
+- Ethernet reception is no longer moved to a single core. The generic packet-steering sent RPS of all qcom_ppe queues to CPU0, which already handles the 5 GHz Wi-Fi interrupts. EDMA spreads reception over four cores by itself, Wi-Fi is unchanged.
+- Rolling back to stock no longer resets stock settings kept in the encrypted sec_cfg.
+
 **1.2.7**, September 26, 2026.
 - On boards coming straight from stock, the stock settings volume has number 1 (/dev/ubi1_1), while fstab expected /dev/ubi1_0: fstools searched for the partition for fifteen seconds and fell back to the slot's internal overlay, the shared volume was not used, and bigoverlay rebooted the router twice. Now the device is looked up by volume name and the fstab entry fixes itself. This showed up in the logs from Denchik777 and dima-dior1999.
 - Wi-Fi was not enabled on a clean install in 1.2.6: the service treated as an update any installation where /etc/config/wireless already existed, and hotplug generates that file before the service runs. Now an update is detected by a marker from sysupgrade.conf, and for old images by whether the network has a password set. Thanks to Denchik777 for the hint.

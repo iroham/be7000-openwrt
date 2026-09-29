@@ -24,6 +24,7 @@ The last two patches fix real driver bugs and do not depend on the board, they a
 | 0901 | QCA8084: missing BaseR when attaching the PHY is no longer an error but a warning |
 | 0902 | qcom-ppe: the index does not go negative when rolling back the port setup |
 | 0903 | QCA8084: if BaseR did not lock when attaching, redo the XPCS setup on the first link up |
+| 0904 | qcom-ppe: EDMA receive buffers are mapped and unmapped with the same DMA direction (from OpenWrt main, 0362) |
 
 ## OpenWrt tree changes
 
@@ -33,12 +34,8 @@ The last two patches fix real driver bugs and do not depend on the board, they a
 | 002 | device profile: kmod-ath11k-ahb, without it the built-in 2.4 GHz radio is left without a driver |
 | 003 | sysupgrade writes to the slot it booted from |
 | 004 | mtdoops in the kernel config |
+| 005 | BE7000 DTS: the kernel does not vote the l2 regulator over RPM, same as stock. With that request some boards had no reception on the UNIPHY0 lane from the QCA8084, i.e. no Ethernet at all. USB gets a fixed 1.8 V supply |
 
-## In progress
+## Ethernet reception on some boards
 
-On some boards Ethernet reception does not work after installation: there is a link, the MAC does not receive a single frame, Wi-Fi works. Test builds with fixes live in branches and come out as pre-releases with `debug-*` tags:
-
-- `fix/uniphy-upstream`: the 0356-0361 series from OpenWrt main (UNIPHY bring-up as in SSDK, accepted for the Askey SBE1V1K), its steps for 10G-QXGMII, and redoing the SoC's XPCS setup after 10GBASE-R locks.
-- `perf/edma-rx`: the fix for the EDMA receive DMA direction from OpenWrt main, and Ethernet reception without moving it to a single core.
-
-The discussion is in [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) and in the 4PDA thread.
+Before 1.2.8, on some boards Ethernet reception did not work after installation: there was a link, the MAC did not receive a single frame, Wi-Fi worked. The cause was power: the l2 regulator in the DTS came from the Qualcomm reference board, and the kernel's RPM request for it silenced the SoC receiver on the 10G-QXGMII lane to the QCA8084, while every lane register and clock matched stock. Found on zerc00l's board, which he gave us for remote testing. The fix is patch 005. The history of the search is in [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) and in the 4PDA thread.
