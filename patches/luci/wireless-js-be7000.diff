@@ -1,0 +1,23 @@
+# Our two lines in LuCI's view/network/wireless.js (luci-mod-network).
+# overlay-files/www/luci-static/resources/view/network/wireless.js is that
+# file from the pinned luci feed with this diff applied; after moving the
+# luci pin, copy the new file and apply this again.
+--- a/wireless.js
++++ b/wireless.js
+@@ -11,6 +11,7 @@
+ 'require firewall';
+ 'require tools.widgets as widgets';
+ 'require uqr';
++'require be7000-wifi5g.panel as be7000wifi5g';
+ 
+ const isReadonlyView = !L.hasViewPermission();
+ 
+@@ -2676,7 +2677,7 @@
+ 
+ 			cbi_update_table(table, [], E('em', { 'class': 'spinning' }, _('Collecting data...')));
+ 
+-			return E([ nodes, E('div', { 'class': 'cbi-section' }, [
++			return E([ be7000wifi5g.render(), nodes, E('div', { 'class': 'cbi-section' }, [
+ 				E('h3', _('Associated Stations')),
+ 				table
+ 			]) ]);

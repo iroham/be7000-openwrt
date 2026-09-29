@@ -1,5 +1,10 @@
 #!/bin/sh /etc/rc.common
-# Keep the kernel-module feed pointed at the kernel that is actually running.
+# Keep the feeds pointed at what the running image was built from.
+#
+# Userspace packages are published per OpenWrt base (feed/<base>/<arch>/...),
+# because packages built on one base do not fit another one: the base is the
+# FEED= line of /rom/etc/be7000-release. Images without it (1.3.x and older)
+# keep the old shared path.
 #
 # Modules are published per kernel config hash (vermagic), under
 # feed/targets/<target>/<hash>/packages/. The image is built with the right
@@ -23,6 +28,12 @@ rom_kernel_hash() {
 
 start() {
 	[ -f "$LIST" ] || return 0
+	local base
+	base=$(sed -n 's/^FEED=//p' /rom/etc/be7000-release 2>/dev/null | head -1)
+	if [ -n "$base" ] && ! grep -q "feed/$base/aarch64_cortex-a73/" "$LIST"; then
+		sed -i -E "s|feed/([A-Za-z0-9._-]+/)?aarch64_cortex-a73/|feed/$base/aarch64_cortex-a73/|" "$LIST"
+		logger -t be7000-feeds "package feeds now feed/$base"
+	fi
 	local hash
 	hash=$(rom_kernel_hash)
 	[ -n "$hash" ] || return 0

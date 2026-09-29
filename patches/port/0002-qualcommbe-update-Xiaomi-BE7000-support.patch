@@ -1,0 +1,447 @@
+From 579bcae24088e3b0df1ec7fc72e52dccb29271ee Mon Sep 17 00:00:00 2001
+From: krava <igor.kravchenko05@gmail.com>
+Date: Sun, 21 Jun 2026 21:01:25 +0000
+Subject: [PATCH 2/5] qualcommbe: update Xiaomi BE7000 support
+
+Signed-off-by: krava <igor.kravchenko05@gmail.com>
+(cherry picked from commit 358a7d980a7c6e2a0c3b3ee68597c8b2ed874b4a)
+---
+ .../luci-static/resources/view/nfc/nfc.js     | 37 +++++++++-
+ target/linux/qualcommbe/Makefile              |  2 +-
+ target/linux/qualcommbe/image/ipq95xx.mk      |  6 +-
+ .../base-files/etc/init.d/smp_affinity        |  9 +--
+ .../etc/uci-defaults/05_packet_steering       |  2 +-
+ .../base-files/sbin/be7000-wireless-defaults  |  4 +-
+ ...808x-fix-QCA8084-XPCS-channel-lookup.patch | 41 -----------
+ ...c-qcom-q6v5-wcss-add-ipq9574-support.patch | 73 ++++++++++++-------
+ ...ca808x-disable-EEE-on-QCA8084-QXGMII.patch | 38 ++++++++++
+ 9 files changed, 131 insertions(+), 81 deletions(-)
+ delete mode 100644 target/linux/qualcommbe/patches-6.18/0700-net-phy-qca808x-fix-QCA8084-XPCS-channel-lookup.patch
+ create mode 100644 target/linux/qualcommbe/patches-6.18/0707-net-phy-qca808x-disable-EEE-on-QCA8084-QXGMII.patch
+
+diff --git a/package/luci-app-be7000-nfc/htdocs/luci-static/resources/view/nfc/nfc.js b/package/luci-app-be7000-nfc/htdocs/luci-static/resources/view/nfc/nfc.js
+index 43c2b859bb..84bd6641df 100644
+--- a/package/luci-app-be7000-nfc/htdocs/luci-static/resources/view/nfc/nfc.js
++++ b/package/luci-app-be7000-nfc/htdocs/luci-static/resources/view/nfc/nfc.js
+@@ -10,10 +10,16 @@ var nfcEnable;
+ var nfcMode;
+ var nfcUrl;
+ 
++function normalizeNfcUrl(url) {
++	url = (url || '').trim();
++
++	return url || 'auto';
++}
++
+ function readNfcForm() {
+ 	var enabled = nfcEnable.formvalue('nfc');
+ 	var mode = nfcMode.formvalue('nfc') || 'url';
+-	var url = nfcUrl.formvalue('nfc') || 'auto';
++	var url = normalizeNfcUrl(nfcUrl.formvalue('nfc'));
+ 
+ 	return {
+ 		enabled: enabled == '1',
+@@ -68,9 +74,34 @@ return view.extend({
+ 		nfcMode = o;
+ 
+ 		o = s.option(form.Value, 'url', _('URL'));
+-		o.placeholder = 'auto';
+-		o.default = 'auto';
++		o.placeholder = 'https://192.168.1.1/';
++		o.default = '';
++		o.rmempty = true;
+ 		o.depends('mode', 'url');
++		o.load = function(section_id) {
++			var value = this.map.data.get(this.map.config, section_id, this.option);
++
++			return value == 'auto' ? '' : value;
++		};
++		o.write = function(section_id, value) {
++			value = normalizeNfcUrl(value);
++
++			return this.map.data.set(this.map.config, section_id, this.option, value);
++		};
++		o.remove = function(section_id) {
++			return this.map.data.set(this.map.config, section_id, this.option, 'auto');
++		};
++		o.validate = function(section_id, value) {
++			value = (value || '').trim();
++
++			if (value == '')
++				return true;
++
++			if (!value.match(/^https?:\/\/[^\/\s?#]+(?:[\/?#][^\s]*)?$/i))
++				return _('Enter a valid http:// or https:// URL.');
++
++			return true;
++		};
+ 		nfcUrl = o;
+ 
+ 		o = s.option(form.Button, '_write', _('Write tag'));
+diff --git a/target/linux/qualcommbe/Makefile b/target/linux/qualcommbe/Makefile
+index 385ed9fc6e..0972ef874f 100644
+--- a/target/linux/qualcommbe/Makefile
++++ b/target/linux/qualcommbe/Makefile
+@@ -14,7 +14,7 @@ include $(INCLUDE_DIR)/target.mk
+ DEFAULT_PACKAGES += \
+ 	kmod-usb3 kmod-usb-dwc3 kmod-usb-dwc3-qcom \
+ 	kmod-leds-gpio kmod-gpio-button-hotplug \
+-	kmod-qcom-ppe \
++	kmod-qcom-ppe kmod-ath11k-ahb \
+ 	wpad-basic-mbedtls \
+ 	e2fsprogs kmod-fs-ext4 losetup \
+ 	uboot-envtools
+diff --git a/target/linux/qualcommbe/image/ipq95xx.mk b/target/linux/qualcommbe/image/ipq95xx.mk
+index 2d8b02aa92..63efd02105 100644
+--- a/target/linux/qualcommbe/image/ipq95xx.mk
++++ b/target/linux/qualcommbe/image/ipq95xx.mk
+@@ -94,11 +94,13 @@ define Device/xiaomi_be7000
+ 	SOC := ipq9574
+ 	KERNEL_SIZE := 6096k
+ 	IMAGE_SIZE := 32116k
+-	DEVICE_PACKAGES := kmod-ath11k-ahb ath11k-firmware-ipq9574 \
++	DEVICE_PACKAGES := ath11k-firmware-ipq9574 \
+ 					kmod-ath12k ath12k-firmware-qcn9274 \
+ 					kmod-qrtr-smd \
+ 					kmod-usb-storage be7000-nfc-i2ctransfer \
+-					iperf3 ethtool-full uboot-envtools
++					luci luci-app-be7000-nfc luci-proto-wireguard \
++					iperf3 ethtool-full mdio-tools qrencode uboot-envtools \
++					kmod-wireguard wireguard-tools
+ 	IMAGE/factory.ubi := be7000-append-ubi
+ 	IMAGE/sysupgrade.bin := be7000-append-ubi | append-metadata
+ endef
+diff --git a/target/linux/qualcommbe/ipq95xx/base-files/etc/init.d/smp_affinity b/target/linux/qualcommbe/ipq95xx/base-files/etc/init.d/smp_affinity
+index 1345cd8fe0..0f28322862 100755
+--- a/target/linux/qualcommbe/ipq95xx/base-files/etc/init.d/smp_affinity
++++ b/target/linux/qualcommbe/ipq95xx/base-files/etc/init.d/smp_affinity
+@@ -42,16 +42,15 @@ enable_affinity_ipq95xx()
+ {
+ 	local ring cpu
+ 
+-	# EDMA RX descriptor rings.
++	# IPQ9574 EDMA RX descriptor rings.
+ 	set_affinity 'rxdesc_20$' 0
+ 	set_affinity 'rxdesc_21$' 1
+ 	set_affinity 'rxdesc_22$' 2
+ 	set_affinity 'rxdesc_23$' 3
+ 
+-	# EDMA TX completion rings. The stock BE7000 firmware balances the full
+-	# configured txcmpl_4..31 range over all four Cortex-A73 cores.
+-	for ring in $(seq 4 31); do
+-		cpu=$(( (ring - 4) % 4 ))
++	# IPQ9574 EDMA TX completion rings are exposed as txcmpl_8..31.
++	for ring in $(seq 8 31); do
++		cpu=$(( (ring - 8) % 4 ))
+ 		set_affinity "txcmpl_${ring}$" "$cpu"
+ 	done
+ 
+diff --git a/target/linux/qualcommbe/ipq95xx/base-files/etc/uci-defaults/05_packet_steering b/target/linux/qualcommbe/ipq95xx/base-files/etc/uci-defaults/05_packet_steering
+index 03dc94c137..d44c7c2b5d 100755
+--- a/target/linux/qualcommbe/ipq95xx/base-files/etc/uci-defaults/05_packet_steering
++++ b/target/linux/qualcommbe/ipq95xx/base-files/etc/uci-defaults/05_packet_steering
+@@ -6,7 +6,7 @@
+ 
+ uci -q get network.globals.packet_steering >/dev/null || {
+ 	uci set network.globals="globals"
+-	uci set network.globals.packet_steering="1"
++	uci set network.globals.packet_steering="2"
+ 	uci commit network
+ }
+ 
+diff --git a/target/linux/qualcommbe/ipq95xx/base-files/sbin/be7000-wireless-defaults b/target/linux/qualcommbe/ipq95xx/base-files/sbin/be7000-wireless-defaults
+index aa377f4e92..a90b0abda3 100755
+--- a/target/linux/qualcommbe/ipq95xx/base-files/sbin/be7000-wireless-defaults
++++ b/target/linux/qualcommbe/ipq95xx/base-files/sbin/be7000-wireless-defaults
+@@ -33,10 +33,10 @@ apply_defaults()
+ 	uci -q batch <<-EOF
+ 		set wireless.radio0.channel='auto'
+ 		set wireless.radio0.htmode='HE40'
+-		set wireless.default_radio0.ssid='BE7000-2G'
++		set wireless.default_radio0.ssid='BE7000'
+ 		set wireless.radio1.channel='auto'
+ 		set wireless.radio1.htmode='EHT80'
+-		set wireless.default_radio1.ssid='BE7000-5G'
++		set wireless.default_radio1.ssid='BE7000_5G'
+ 		commit wireless
+ 	EOF
+ 
+diff --git a/target/linux/qualcommbe/patches-6.18/0700-net-phy-qca808x-fix-QCA8084-XPCS-channel-lookup.patch b/target/linux/qualcommbe/patches-6.18/0700-net-phy-qca808x-fix-QCA8084-XPCS-channel-lookup.patch
+deleted file mode 100644
+index 4bed7d1b80..0000000000
+--- a/target/linux/qualcommbe/patches-6.18/0700-net-phy-qca808x-fix-QCA8084-XPCS-channel-lookup.patch
++++ /dev/null
+@@ -1,41 +0,0 @@
+-Subject: net: phy: qca808x: fix QCA8084 XPCS channel lookup
+-
+-qca8084_qxgmii_set_speed() walks the XPCS channel table to find the
+-entry matching the PHY channel. Use the loop index for that lookup
+-instead of indexing the array by the requested channel on every
+-iteration.
+-
+-Also keep the local variable declaration before executable statements in
+-qca8084_link_change_notify().
+-
+-Signed-off-by: Igor Kravchenko <igor.kravchenko05@gmail.com>
+----
+- drivers/net/phy/qcom/qca8084_serdes.c | 2 +-
+- drivers/net/phy/qcom/qca808x.c        | 3 ++-
+- 2 files changed, 3 insertions(+), 2 deletions(-)
+-
+---- a/drivers/net/phy/qcom/qca8084_serdes.c
+-+++ b/drivers/net/phy/qcom/qca8084_serdes.c
+-@@ -680,7 +680,7 @@ void qca8084_qxgmii_set_speed(struct mdi
+- 	unsigned long rate;
+- 
+- 	for (i = 0; i < QCA8084_CHANNEL_MAX; i++) {
+--		xpcs_ch = &(xpcs_data->xpcs_ch[channel]);
+-+		xpcs_ch = &xpcs_data->xpcs_ch[i];
+- 		if (channel == xpcs_ch->ch_id)
+- 			break;
+- 	}
+---- a/drivers/net/phy/qcom/qca808x.c
+-+++ b/drivers/net/phy/qcom/qca808x.c
+-@@ -1034,9 +1034,10 @@ static void qca8084_link_change_notify(s
+- 	 * 10G_QXGMII mode.
+- 	 */
+- 	if (phydev->interface == PHY_INTERFACE_MODE_10G_QXGMII) {
+--		shared_priv = phy_package_get_priv(phydev);
+- 		struct qca808x_priv *priv = phydev->priv;
+- 
+-+		shared_priv = phy_package_get_priv(phydev);
+-+
+- 		phy_modify_mmd(phydev, MDIO_MMD_AN, QCA8084_MMD7_IPG_OP,
+- 			       QCA8084_IPG_10_TO_11_EN,
+- 			       phydev->speed == SPEED_1000 ?
+diff --git a/target/linux/qualcommbe/patches-6.18/0704-remoteproc-qcom-q6v5-wcss-add-ipq9574-support.patch b/target/linux/qualcommbe/patches-6.18/0704-remoteproc-qcom-q6v5-wcss-add-ipq9574-support.patch
+index c56d5f300e..609b61cfc1 100644
+--- a/target/linux/qualcommbe/patches-6.18/0704-remoteproc-qcom-q6v5-wcss-add-ipq9574-support.patch
++++ b/target/linux/qualcommbe/patches-6.18/0704-remoteproc-qcom-q6v5-wcss-add-ipq9574-support.patch
+@@ -13,13 +13,11 @@ Changes since v1:
+  - disable clocks on init failures in q6v7_wcss_reset()
+  - Add Q6SS_CBCR_CLKEN macro
+ ---
+- drivers/remoteproc/qcom_q6v5_wcss.c | 253 +++++++++++++++++++++++++++-
+- 1 file changed, 246 insertions(+), 7 deletions(-)
++ drivers/remoteproc/qcom_q6v5_wcss.c | 258 +++++++++++++++++++++++++++-
++ 1 file changed, 251 insertions(+), 7 deletions(-)
+ 
+-Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+-===================================================================
+---- linux-6.18.35.orig/drivers/remoteproc/qcom_q6v5_wcss.c	2026-06-09 10:28:53.000000000 +0000
+-+++ linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c	2026-06-19 21:08:17.363575916 +0000
++--- a/drivers/remoteproc/qcom_q6v5_wcss.c
+++++ b/drivers/remoteproc/qcom_q6v5_wcss.c
+ @@ -31,6 +31,9 @@
+  #define Q6SS_MEM_PWR_CTL		0x0B0
+  #define Q6SS_STRAP_ACC			0x110
+@@ -70,7 +68,15 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  	WCSS_QCS404,
+  };
+  
+-@@ -128,6 +139,12 @@
++@@ -102,6 +113,7 @@ struct wcss_data {
++ 	int ssctl_id;
++ 	const struct rproc_ops *ops;
++ 	bool requires_force_stop;
+++	bool auto_boot;
++ };
++ 
++ struct q6v5_wcss {
++@@ -128,6 +140,12 @@ struct q6v5_wcss {
+  	struct clk *qdsp6ss_xo_cbcr;
+  	struct clk *qdsp6ss_core_gfmux;
+  	struct clk *lcc_bcr_sleep;
+@@ -83,7 +89,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  	struct regulator *cx_supply;
+  	struct qcom_sysmon *sysmon;
+  
+-@@ -236,6 +253,97 @@
++@@ -236,6 +254,97 @@ static int q6v5_wcss_reset(struct q6v5_w
+  	return 0;
+  }
+  
+@@ -181,7 +187,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  static int q6v5_wcss_start(struct rproc *rproc)
+  {
+  	struct q6v5_wcss *wcss = rproc->priv;
+-@@ -270,10 +378,18 @@
++@@ -270,10 +379,18 @@ static int q6v5_wcss_start(struct rproc
+  	if (ret)
+  		goto wcss_q6_reset;
+  
+@@ -203,7 +209,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  	if (ret)
+  		goto wcss_q6_reset;
+  
+-@@ -285,6 +401,7 @@
++@@ -285,6 +402,7 @@ static int q6v5_wcss_start(struct rproc
+  
+  wcss_q6_reset:
+  	reset_control_assert(wcss->wcss_q6_reset);
+@@ -211,7 +217,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  
+  wcss_reset:
+  	reset_control_assert(wcss->wcss_reset);
+-@@ -638,6 +755,41 @@
++@@ -638,6 +756,41 @@ static int q6v5_wcss_powerdown(struct q6
+  	return 0;
+  }
+  
+@@ -253,7 +259,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  static int q6v5_q6_powerdown(struct q6v5_wcss *wcss)
+  {
+  	int ret;
+-@@ -705,6 +857,26 @@
++@@ -705,6 +858,26 @@ static int q6v5_q6_powerdown(struct q6v5
+  	return 0;
+  }
+  
+@@ -280,7 +286,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  static int q6v5_wcss_stop(struct rproc *rproc)
+  {
+  	struct q6v5_wcss *wcss = rproc->priv;
+-@@ -719,11 +891,21 @@
++@@ -719,11 +892,21 @@ static int q6v5_wcss_stop(struct rproc *
+  		}
+  	}
+  
+@@ -304,7 +310,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  		ret = q6v5_wcss_powerdown(wcss);
+  		if (ret)
+  			return ret;
+-@@ -732,6 +914,7 @@
++@@ -732,6 +915,7 @@ static int q6v5_wcss_stop(struct rproc *
+  		ret = q6v5_q6_powerdown(wcss);
+  		if (ret)
+  			return ret;
+@@ -312,7 +318,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  	}
+  
+  	qcom_q6v5_unprepare(&wcss->q6v5);
+-@@ -837,7 +1020,9 @@
++@@ -837,7 +1021,9 @@ static int q6v5_wcss_init_mmio(struct q6
+  	if (!wcss->reg_base)
+  		return -ENOMEM;
+  
+@@ -323,7 +329,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  		wcss->rmb_base = devm_platform_ioremap_resource_byname(pdev, "rmb");
+  		if (IS_ERR(wcss->rmb_base))
+  			return PTR_ERR(wcss->rmb_base);
+-@@ -969,6 +1154,43 @@
++@@ -969,6 +1155,43 @@ static int q6v5_wcss_init_regulator(stru
+  	return 0;
+  }
+  
+@@ -367,7 +373,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  static int q6v5_wcss_probe(struct platform_device *pdev)
+  {
+  	const struct wcss_data *desc;
+-@@ -1001,7 +1223,8 @@
++@@ -1001,7 +1224,8 @@ static int q6v5_wcss_probe(struct platfo
+  	if (ret)
+  		return ret;
+  
+@@ -377,7 +383,7 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  		ret = q6v5_wcss_init_clock(wcss);
+  		if (ret)
+  			return ret;
+-@@ -1009,6 +1232,11 @@
++@@ -1009,6 +1233,11 @@ static int q6v5_wcss_probe(struct platfo
+  		ret = q6v5_wcss_init_regulator(wcss);
+  		if (ret)
+  			return ret;
+@@ -389,10 +395,21 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+  	}
+  
+  	ret = q6v5_wcss_init_reset(wcss, desc);
+-@@ -1071,6 +1299,16 @@
+- 	.requires_force_stop = true,
+- };
++@@ -1033,6 +1262,7 @@ static int q6v5_wcss_probe(struct platfo
++ 		}
++ 	}
+  
+++	rproc->auto_boot = desc->auto_boot;
++ 	ret = rproc_add(rproc);
++ 	if (ret)
++ 		goto remove_sysmon_subdev;
++@@ -1069,6 +1299,18 @@ static const struct wcss_data wcss_ipq80
++ 	.wcss_q6_reset_required = true,
++ 	.ops = &q6v5_wcss_ipq8074_ops,
++ 	.requires_force_stop = true,
+++	.auto_boot = false,
+++};
+++
+ +static const struct wcss_data wcss_ipq9574_res_init = {
+ +	.firmware_name = "IPQ9574/q6_fw.mdt",
+ +	.version = WCSS_IPQ9574,
+@@ -401,12 +418,16 @@ Index: linux-6.18.35/drivers/remoteproc/qcom_q6v5_wcss.c
+ +	.ssr_name = "q6wcss",
+ +	.ops = &q6v5_wcss_ipq8074_ops,
+ +	.requires_force_stop = true,
+-+};
+-+
+++	.auto_boot = false,
++ };
++ 
+  static const struct wcss_data wcss_qcs404_res_init = {
+- 	.crash_reason_smem = WCSS_CRASH_REASON,
+- 	.firmware_name = "wcnss.mdt",
+-@@ -1086,6 +1324,7 @@
++@@ -1082,10 +1324,12 @@ static const struct wcss_data wcss_qcs40
++ 	.ssctl_id = 0x12,
++ 	.ops = &q6v5_wcss_qcs404_ops,
++ 	.requires_force_stop = false,
+++	.auto_boot = true,
++ };
+  
+  static const struct of_device_id q6v5_wcss_of_match[] = {
+  	{ .compatible = "qcom,ipq8074-wcss-pil", .data = &wcss_ipq8074_res_init },
+diff --git a/target/linux/qualcommbe/patches-6.18/0707-net-phy-qca808x-disable-EEE-on-QCA8084-QXGMII.patch b/target/linux/qualcommbe/patches-6.18/0707-net-phy-qca808x-disable-EEE-on-QCA8084-QXGMII.patch
+new file mode 100644
+index 0000000000..a1fee1eece
+--- /dev/null
++++ b/target/linux/qualcommbe/patches-6.18/0707-net-phy-qca808x-disable-EEE-on-QCA8084-QXGMII.patch
+@@ -0,0 +1,38 @@
++Subject: [PATCH] net: phy: qca808x: disable EEE on QCA8084 QXGMII links
++
++QCA8084 links running over the 10G-QXGMII package path can report
++MAC-facing RX CRC and fragment errors when EEE is negotiated with the
++link partner. On a Xiaomi BE7000 WAN link, clearing the copper PHY EEE
++advertisement register and restarting autoneg stopped the raw XGMAC RX
++CRC/fragment counters from increasing, including under burst ping
++traffic.
++
++Disable EEE for QCA8084 PHYs using the 10G-QXGMII interface and program
++the C45 EEE advertisement immediately so that the setting is effective
++before autonegotiation.
++
++Signed-off-by: Igor Kravchenko <igor.kravchenko05@gmail.com>
++---
++ drivers/net/phy/qcom/qca808x.c | 11 +++++++++++
++ 1 file changed, 11 insertions(+)
++
++--- a/drivers/net/phy/qcom/qca808x.c
+++++ b/drivers/net/phy/qcom/qca808x.c
++@@ -1149,6 +1149,17 @@
++ 	else
++ 		qca808x_fill_possible_interfaces(phydev);
++
+++	if (phydev->interface == PHY_INTERFACE_MODE_10G_QXGMII) {
+++		/* EEE negotiated on the copper side can disturb the QCA8084
+++		 * QXGMII/XGMAC RX path, showing up as raw XGMAC CRC and
+++		 * fragment errors. Keep QXGMII package links out of EEE.
+++		 */
+++		phy_disable_eee(phydev);
+++		ret = genphy_c45_an_config_eee_aneg(phydev);
+++		if (ret < 0)
+++			return ret;
+++	}
+++
++ 	/* Configure the ADC to convert the signal using falling edge
++ 	 * instead of the default rising edge.
++ 	 */
+-- 
+2.39.5
+

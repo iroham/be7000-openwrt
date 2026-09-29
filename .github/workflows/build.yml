@@ -33,10 +33,13 @@ on:
     tags: ["v*", "debug-*"]
 
 env:
-  OWRT_REPO: https://github.com/kravasuper/openwrt.git
-  OWRT_BRANCH: xiaomi_be7000
-  OWRT_COMMIT: 790d036a
-  VERSION_STRING: r20260623-790d036a
+  # Upstream OpenWrt at the commit patches/port/BASE names; the BE7000 port
+  # itself is the series in patches/port/ (a step below checks the two agree).
+  OWRT_REPO: https://github.com/openwrt/openwrt.git
+  OWRT_COMMIT: d958caff0c9ffa215dceb0718caad7d4955d8954
+  VERSION_STRING: r20260929-d958caf
+  # userspace packages of this base are published under feed/<FEED_BASE>/
+  FEED_BASE: main-d958caf
   # The toolchain cache takes ~5 GB of the 10 GB Actions cache quota.
   CCACHE_MAXSIZE: 2G
   ARCH: aarch64_cortex-a73
@@ -80,11 +83,18 @@ jobs:
             gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
             python3-setuptools rsync swig unzip zlib1g-dev file wget time
 
-      - name: Check out the port
+      - name: Check out OpenWrt and apply the port
         run: |
-          git clone --branch "$OWRT_BRANCH" --single-branch "$OWRT_REPO" owrt
+          . repo/patches/port/BASE
+          [ "$OWRT_COMMIT" = "${{ env.OWRT_COMMIT }}" ] || {
+            echo "::error::OWRT_COMMIT in the workflow is not the one in patches/port/BASE ($OWRT_COMMIT)"; exit 1; }
+          git init -q owrt
           cd owrt
-          git checkout "$OWRT_COMMIT"
+          git remote add origin "$OWRT_REPO"
+          git fetch -q --depth 1 origin "$OWRT_COMMIT"
+          git checkout -q FETCH_HEAD
+          git -c user.name="Timofey Maykov" -c user.email="itnitro@gmail.com" am -q ../repo/patches/port/*.patch
+          git log --oneline -8
           # base-files wants a version string and the checkout is detached
           echo "$VERSION_STRING" > version
 
@@ -95,8 +105,12 @@ jobs:
           # ath12k lives in the mac80211 package, not in the kernel tree
           cp ../repo/patches/mac80211-ath12k/*.patch package/kernel/mac80211/patches/ath12k/
           for p in ../repo/patches/tree/*.patch; do
-            patch -p1 < "$p"
+            patch -p1 --dry-run -f < "$p" > /dev/null || { echo "::error::$p does not apply"; patch -p1 --dry-run -f < "$p"; exit 1; }
+            patch -p1 --no-backup-if-mismatch < "$p"
           done
+          if find . -name '*.rej' -o -name '*.orig' | grep -q .; then
+            echo "::error::rejected hunks left behind"; find . -name '*.rej' -o -name '*.orig'; exit 1
+          fi
           mkdir -p files
           cp -a ../repo/overlay-files/. files/
           # a debug-* tag ships extra diagnostics and experiments on top
@@ -136,6 +150,10 @@ jobs:
           for name in $(cut -d" " -f1 ../repo/feeds-pins.txt); do
             grep -q "^src-git\(-full\)\? $name .*\^" feeds.conf.default || { echo "pin for $name did not apply" >&2; exit 1; }
           done
+          # every git feed of the base must be pinned, not only the ones we list
+          if grep -E "^src-git(-full)? " feeds.conf.default | grep -v "\^"; then
+            echo "::error::unpinned feed in feeds.conf.default, add it to feeds-pins.txt"; exit 1
+          fi
           grep -q '^src-link awg ' feeds.conf.default || echo "src-link awg $PWD/awg-feed" >> feeds.conf.default
           ./scripts/feeds update -a
           ./scripts/feeds install -a
@@ -245,7 +263,8 @@ jobs:
           echo "VERMAGIC=$VERMAGIC" >> "$GITHUB_ENV"
           f=files/etc/apk/repositories.d/customfeeds.list
           sed -i "s|feed/targets/$TARGET/packages/packages.adb|feed/targets/$TARGET/$VERMAGIC/packages/packages.adb|" "$f"
-          grep "feed/targets" "$f"
+          sed -i "s|feed/$ARCH/|feed/$FEED_BASE/$ARCH/|" "$f"
+          grep "feed/" "$f"
           # what be7000-update and the LuCI page report as the installed version
           TAG="${{ github.ref_name }}"
           case "$TAG" in v*) VER="${TAG#v}"; VER="${VER%%-*}" ;; debug-*) VER="$TAG" ;; *) VER=dev ;; esac
@@ -255,6 +274,7 @@ jobs:
             echo "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "BUILD=${{ github.run_id }}"
             echo "KERNEL=$VERMAGIC"
+            echo "FEED=$FEED_BASE"
           } > files/etc/be7000-release
           cat files/etc/be7000-release
 
@@ -287,12 +307,13 @@ jobs:
           git clone --branch gh-pages --single-branch \
             "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" pages
           cd pages
+          # feed/$ARCH/ (no base) is the frozen feed of the 1.3.x images
           for d in awg base luci packages; do
             [ -d "../owrt/bin/packages/$ARCH/$d" ] || continue
-            mkdir -p "feed/$ARCH/$d"
-            rsync -a --delete "../owrt/bin/packages/$ARCH/$d/" "feed/$ARCH/$d/"
+            mkdir -p "feed/$FEED_BASE/$ARCH/$d"
+            rsync -a --delete "../owrt/bin/packages/$ARCH/$d/" "feed/$FEED_BASE/$ARCH/$d/"
           done
-          cp "../owrt/bin/packages/$ARCH/sha256sums" "feed/$ARCH/sha256sums"
+          cp "../owrt/bin/packages/$ARCH/sha256sums" "feed/$FEED_BASE/$ARCH/sha256sums"
           mkdir -p "feed/targets/$TARGET/$VERMAGIC/packages"
           rsync -a --delete "../owrt/bin/targets/$TARGET/packages/" "feed/targets/$TARGET/$VERMAGIC/packages/"
           git config user.name "github-actions[bot]"
@@ -301,7 +322,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "feed unchanged"
           else
-            n=$(find "feed/$ARCH" -name '*.apk' | wc -l)
+            n=$(find "feed/$FEED_BASE/$ARCH" -name '*.apk' | wc -l)
             k=$(find "feed/targets/$TARGET/$VERMAGIC" -name '*.apk' | wc -l)
             git commit -q -m "feed: $n userspace packages and $k kernel modules for $VERMAGIC (${{ github.ref_name }})"
             git push -q origin gh-pages

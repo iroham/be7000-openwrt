@@ -1,0 +1,3 @@
+# OpenWrt main commit the port series in this directory applies to
+OWRT_COMMIT=d958caff0c9ffa215dceb0718caad7d4955d8954
+OWRT_DATE=2026-09-29
