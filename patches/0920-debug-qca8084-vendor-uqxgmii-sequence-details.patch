@@ -1,4 +1,4 @@
-From: be7000-openwrt <noreply@example.com>
+From: Timofey Maykov <itnitro@gmail.com>
 Subject: [PATCH] debug: QCA8084 UQXGMII, the vendor sequence details mainline skips
 
 From the SSDK (mht_interface_ctrl.c, mht_interface_uqxgmii_mode_set) the

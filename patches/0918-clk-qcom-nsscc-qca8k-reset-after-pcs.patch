@@ -1,4 +1,4 @@
-From: be7000-openwrt <noreply@example.com>
+From: Timofey Maykov <itnitro@gmail.com>
 Subject: [PATCH] clk: qcom: nsscc-qca8k: optionally wait for the SoC PCS before the GPIO reset
 
 The vendor SSDK (commit 3c58ee12, "initialize manhattan after enabling

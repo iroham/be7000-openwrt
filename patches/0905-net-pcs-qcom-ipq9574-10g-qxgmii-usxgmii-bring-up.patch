@@ -1,4 +1,4 @@
-From: be7000-openwrt <noreply@example.com>
+From: Timofey Maykov <itnitro@gmail.com>
 Subject: [PATCH] net: pcs: qcom-ipq9574: give 10G-QXGMII the USXGMII UNIPHY bring-up
 
 Patches 0356-0361 (OpenWrt main, from the Askey SBE1V1K work) bring the

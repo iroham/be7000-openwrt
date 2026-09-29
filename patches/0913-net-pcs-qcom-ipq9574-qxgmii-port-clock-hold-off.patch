@@ -1,4 +1,4 @@
-From: be7000-openwrt <noreply@example.com>
+From: Timofey Maykov <itnitro@gmail.com>
 Subject: [PATCH] net: pcs: qcom-ipq9574: hold off all channel clocks across a 10G-QXGMII reconfiguration
 
 The SSDK disables the rx/tx clocks of every channel of the UNIPHY before

@@ -1,4 +1,4 @@
-From: be7000-openwrt <noreply@example.com>
+From: Timofey Maykov <itnitro@gmail.com>
 Subject: [PATCH] debug: program the stock UNIPHY SerDes values on both sides and log the lock timeline
 
 Experiment for the BE7000 dead RX (v3, uniphy17). The QCA8084 SerDes and the

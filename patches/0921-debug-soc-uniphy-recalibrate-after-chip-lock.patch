@@ -1,4 +1,4 @@
-From: be7000-openwrt <noreply@example.com>
+From: Timofey Maykov <itnitro@gmail.com>
 Subject: [PATCH] debug: redo the SoC UNIPHY0 bring-up (calibration) once the QCA8084 is locked
 
 On the failing BE7000 boards the SoC UNIPHY calibration result (0x1e8)
