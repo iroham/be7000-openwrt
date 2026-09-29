@@ -15,7 +15,9 @@
 
 SPLIT_ID=0x1008
 PARAM=/sys/module/ath12k/parameters/board_id
+# the PCI driver is ath12k_pci up to backports 6.x, ath12k_wifi7_pci from 7.x
 DRV=/sys/bus/pci/drivers/ath12k_pci
+[ -d /sys/bus/pci/drivers/ath12k_wifi7_pci ] && DRV=/sys/bus/pci/drivers/ath12k_wifi7_pci
 CAL_DIR=/lib/firmware/ath12k/QCN9274/hw2.0
 CAL_LEN=0x2d000
 
