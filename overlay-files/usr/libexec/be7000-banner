@@ -1,30 +1,42 @@
 #!/usr/bin/ucode
 // Builds /etc/banner: the stock OpenWrt banner from /rom plus the credits
-// from the same JSON the LuCI page (System, Credits) shows.
+// from the same JSON the LuCI page (System, Credits) shows. English when
+// LuCI is set to English (luci.main.lang), Russian otherwise.
 
-import { readfile, writefile } from 'fs';
+import { readfile, writefile, popen } from 'fs';
 
-const src = readfile('/rom/etc/banner') ?? readfile('/etc/banner.openwrt') ?? '';
+const src = readfile('/rom/etc/banner') ?? '';
 const data = json(readfile('/www/luci-static/resources/be7000-credits/credits.json') ?? '{}');
-const rel = readfile('/etc/be7000-release') ?? '';
-const ver = match(rel, /VERSION=([^\n]+)/)?.[1];
+const ver = match(readfile('/etc/be7000-release') ?? '', /VERSION=([^\n]+)/)?.[1];
+const p = popen('uci -q get luci.main.lang');
+const lang = match(trim(p?.read('all') ?? ''), /^en/) ? 'en' : 'ru';
+p?.close();
+
+const T = {
+	ru: { hello: 'Спасибо всем, без кого этой сборки бы не было',
+	      star: 'на его плате нашлась причина мёртвого Ethernet',
+	      links: 'Ссылки на всех в LuCI, Система, Благодарности' },
+	en: { hello: 'Thanks to everyone this build would not exist without',
+	      star: 'the cause of the dead Ethernet was found on his board',
+	      links: 'Links to everyone in LuCI, System, Credits' }
+}[lang];
 
 let out = src;
-if (!match(out, /\n$/))
+if (length(out) && !match(out, /\n$/))
 	out += '\n';
 
-out += `\n be7000-openwrt${ver ? ' ' + ver : ''}\n\n Спасибо всем, без кого этой сборки бы не было\n`;
+out += `\n be7000-openwrt${ver ? ' ' + ver : ''}\n\n ${T.hello}\n`;
 
 for (let g in data.groups ?? []) {
-	out += `\n  ${g.title.ru}\n`;
+	out += `\n  ${g.title[lang] ?? g.title.ru}\n`;
 	let rest = [];
-	for (let p in g.people) {
-		if (p.star)
-			out += `    ${p.name}, на его плате нашлась причина мёртвого Ethernet\n`;
+	for (let q in g.people) {
+		if (q.star)
+			out += `    ${q.name}, ${T.star}\n`;
 		else
-			push(rest, p.name);
+			push(rest, q.name);
 	}
-	// wrap the plain names at about 72 columns
+	// wrap the plain names at about 76 columns
 	let line = '    ';
 	for (let i, n in rest) {
 		let piece = n + (i < length(rest) - 1 ? ', ' : '');
@@ -38,6 +50,6 @@ for (let g in data.groups ?? []) {
 		out += line + '\n';
 }
 
-out += `\n Ссылки на всех в LuCI, Система, Благодарности\n ${replace(data.project ?? '', 'https://', '')}\n\n`;
+out += `\n ${T.links}\n ${replace(data.project ?? '', 'https://', '')}\n\n`;
 
 writefile('/etc/banner', out);
