@@ -1,0 +1,10 @@
+{
+	"luci-app-be7000-credits": {
+		"description": "Credits page",
+		"read": {
+			"file": {
+				"/etc/be7000-release": [ "read" ]
+			}
+		}
+	}
+}

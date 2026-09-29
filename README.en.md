@@ -1,12 +1,12 @@
 # OpenWrt for Xiaomi BE7000
 
-[Русская версия](README.md)
+[Русская версия](README.md) · <a href="#support-the-project"><img alt="Support the project" src="https://img.shields.io/badge/Support%20the%20project-Boosty%20%C2%B7%20crypto-F15F2C?style=flat-square"></a>
 
 Fresh OpenWrt from main for the Xiaomi BE7000 (RC06 board, IPQ9554 SoC), kernel 6.18, no kexec. The system boots straight from flash, the stock firmware stays in the other slot, and you can go back to it at any time.
 
 It is based on the kravasuper port (branch xiaomi_be7000, commit 790d036a). On top of it I added fixes to the Ethernet driver, without which the system on my board never got as far as the network ([patches.en.md](docs/patches.en.md)), and a set of services that make life with two slots and the factory bootloader predictable.
 
-The current version is **1.2.7**. Images are in [Releases](../../releases), checksums in sha256sums.txt. How to install it is in the section [Installation, updating, rollback](#installation-updating-rollback).
+The current version is **1.3.0**. Images are in [Releases](../../releases), checksums in sha256sums.txt. How to install it is in the section [Installation, updating, rollback](#installation-updating-rollback).
 
 ## Contents
 
@@ -18,6 +18,7 @@ The current version is **1.2.7**. Images are in [Releases](../../releases), chec
 - [Theme](#theme)
 - [License](#license)
 - [Thanks](#thanks)
+- [Support the project](#support-the-project)
 
 ## What has been tested
 
@@ -33,7 +34,7 @@ My own board: RC06, IPQ9554 rev 1.1, stock firmware 1.1.38, 1 GB of RAM.
 
 ## Known issues
 
-- **Ethernet does not work on some boards.** The system boots, Wi-Fi works, the ports bring up a link, but the MAC does not receive a single frame on any port. The log shows `BaseR link not up yet`. Stock works on the same boards, and the bootloader and SoC revision are the same as on working boards, so the problem is in how the driver brings up the link between the SoC (UNIPHY) and the QCA8084 port chip. If this is your case, get in over Wi-Fi (network OpenWrt-BE7000, password be7000openwrt). Test builds with a fix come out as pre-releases, the discussion is in [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) and in the 4PDA thread. What has been found out so far is in [patches.en.md](docs/patches.en.md#in-progress).
+- **Ethernet on some boards before 1.3.0.** The ports brought up a link, but the router did not receive a single frame. The cause was the kernel's RPM request for the l2 regulator, fixed in 1.3.0, details in [patches.en.md](docs/patches.en.md#ethernet-reception-on-some-boards). If the cable still does not work on your board, write in [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) or in the 4PDA thread, you can get in over Wi-Fi (network OpenWrt-BE7000, password be7000openwrt).
 - On 5 GHz there is one radio for the whole band; two independent 5 GHz radios, like 5G-1 and 5G-2 on stock, are not supported yet.
 - There is 19.4 MB of space for /overlay; for anything large it is better to move it to USB with the be7000-extroot command.
 - The kernel uses the mainline qcom-ppe rather than the vendor NSS, so acceleration is only at the PPE level.
@@ -91,4 +92,20 @@ The patches in patches are distributed under GPL-2.0-only, like the Linux kernel
 
 ## Thanks
 
-kravasuper for the port itself, everyone who wrote in the discussion about TLMM and XPCS for the hints, FOV5 for the shared volume idea, zerc00l, Denchik777, dima, fufliks862 and BurmecianKnight for the logs and patience.
+The full list with links is on the System, Credits page in LuCI, and the same list is in the SSH login greeting. Special thanks to zerc00l, who gave remote access to his router: the cause of the dead Ethernet was found on his board. And to kravasuper for the port everything stands on.
+
+## Support the project
+
+The build is made in spare time: debugging on other people's boards, dozens of test images, CI. If it was useful to you, you can support the work. Thank you!
+
+<a href="https://boosty.to/itnitro"><img alt="Boosty" src="https://img.shields.io/badge/Boosty-itnitro-F15F2C?style=for-the-badge&logo=boosty&logoColor=white"></a>
+
+| Method | Details |
+|------|-----------|
+| <img alt="USDT TON" src="https://img.shields.io/badge/USDT-TON-26A17B?style=for-the-badge&logo=tether&logoColor=white"> | `UQBZhwBuZCgQOtrgRGMu4PKiiOcf9dTKxRpapZt1oDn0m3yH` |
+| <img alt="USDT ETH ERC-20" src="https://img.shields.io/badge/USDT%20%2F%20ETH-ERC--20-627EEA?style=for-the-badge&logo=ethereum&logoColor=white"> | `0xeb05803030afB64C903C7BfB79d18957efD6bcCd` |
+| <img alt="SOL" src="https://img.shields.io/badge/SOL-Solana-9945FF?style=for-the-badge&logo=solana&logoColor=white"> | `GcKxgUeSfKnsPL9iEaYKJArosfYKMtE4W5wVDdHrRVTu` |
+| <img alt="BTC" src="https://img.shields.io/badge/BTC-Bitcoin-F7931A?style=for-the-badge&logo=bitcoin&logoColor=white"> | `bc1qcyd3kaa3y2cv2yn90rsa628y3ptz56zs05z2jq` |
+| <img alt="WeChat" src="https://img.shields.io/badge/WeChat-itnitro-07C160?style=for-the-badge&logo=wechat&logoColor=white"> | `itnitro` |
+
+<img src="docs/img/wechat-itnitro-qr.jpg" alt="WeChat itnitro" width="200">
