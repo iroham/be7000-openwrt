@@ -1,0 +1,8 @@
+#!/bin/sh /etc/rc.common
+# Restore the 5 GHz split (be7000-5g-split) before netifd sets up Wi-Fi
+
+START=19
+
+boot() {
+	/usr/sbin/be7000-5g-split boot
+}

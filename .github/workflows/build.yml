@@ -92,6 +92,8 @@ jobs:
         run: |
           cd owrt
           cp ../repo/patches/*.patch target/linux/qualcommbe/patches-6.18/
+          # ath12k lives in the mac80211 package, not in the kernel tree
+          cp ../repo/patches/mac80211-ath12k/*.patch package/kernel/mac80211/patches/ath12k/
           for p in ../repo/patches/tree/*.patch; do
             patch -p1 < "$p"
           done

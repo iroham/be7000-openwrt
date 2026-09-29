@@ -3,3 +3,6 @@ msgstr "Content-Type: text/plain; charset=UTF-8\n"
 
 msgid "Благодарности"
 msgstr "Credits"
+
+msgid "5 ГГц: два радио"
+msgstr "5 GHz: two radios"
