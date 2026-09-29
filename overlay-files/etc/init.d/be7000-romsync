@@ -89,6 +89,13 @@ reinstall_pending() {
 }
 
 start() {
+	# A local test build (/etc/be7000-test) boots once from the spare slot on
+	# the shared overlay of the working firmware. It must not rewrite that
+	# overlay's package database or reinstall packages into it.
+	if [ -e /rom/etc/be7000-test ]; then
+		logger -t be7000-romsync "test image, leaving the package database of the shared overlay alone"
+		return 0
+	fi
 	reconcile
 	reinstall_pending
 }
