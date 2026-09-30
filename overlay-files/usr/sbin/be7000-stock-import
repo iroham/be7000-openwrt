@@ -1,0 +1,323 @@
+#!/bin/sh
+# Take the settings stock Xiaomi firmware left behind: Wi-Fi names and
+# passwords, the WAN connection (PPPoE login, DHCP or a static address) and
+# the LAN address.
+#
+#   be7000-stock-import preview      what would be taken, passwords hidden
+#   be7000-stock-import apply        take it (backup first)
+#   be7000-stock-import undo         restore the settings from before apply
+#   be7000-stock-import status
+#   be7000-stock-import auto         first boot of a fresh install (init.d)
+#
+# Stock keeps its uci config in a LUKS1 container, sec_cfg/data.vol on its
+# settings volume (cfg on mtd28), see stock /lib/preinit/89_mount_sec_cfg.
+# The key is the SHA-512 of two sorted lines: "SN=..." from the bootloader
+# environment and "sec_cfg_nonce=<uuid>" (base64 in sec_cfg/iden, else the
+# sec_cfg_nonce variable). Everything here reads a copy of the container,
+# opened read-only and mounted read-only, so stock finds its settings as
+# they were if the router goes back.
+#
+# BE7000_STOCK_ROOT and BE7000_SN replace the volume root and the serial
+# number, for tests on a copy.
+
+STAMP=/etc/.be7000_stock_imported
+PENDING=/etc/be7000-stock-wifi.pending
+BACKUP=/etc/be7000-stock-import-backup.tar.gz
+WORK=/tmp/be7000-stock
+MAP=be7000_stock_ro
+LOG=/tmp/be7000-stock-import.log
+
+log() { echo "$*" >> $LOG; }
+die() { echo "$*" >&2; log "error: $*"; cleanup; exit 1; }
+
+cleanup() {
+	umount $WORK/mnt 2>/dev/null
+	cryptsetup close $MAP 2>/dev/null
+	[ -n "$LOOP" ] && losetup -d $LOOP 2>/dev/null
+	rm -rf $WORK/key $WORK/data.vol
+	[ -n "$VOLMNT" ] && { umount $VOLMNT 2>/dev/null; rmdir $VOLMNT 2>/dev/null; }
+	LOOP= VOLMNT=
+}
+
+# ROOT = root of the stock settings volume: /overlay when bigoverlay runs
+# on it, else the cfg volume mounted read-only for the moment (VOLMNT)
+stock_root() {
+	local n dev dir
+	ROOT=
+	[ -n "$BE7000_STOCK_ROOT" ] && { ROOT="$BE7000_STOCK_ROOT"; return 0; }
+	[ -e /overlay/sec_cfg/data.vol ] && { ROOT=/overlay; return 0; }
+	for n in /sys/class/ubi/ubi*_*/name; do
+		[ -e "$n" ] || continue
+		case "$(cat "$n")" in cfg|data) ;; *) continue ;; esac
+		dev=/dev/$(basename "$(dirname "$n")")
+		dir="$(mount | awk -v d="$dev" '$1 == d { print $3; exit }')"
+		if [ -n "$dir" ]; then
+			[ -e "$dir/sec_cfg/data.vol" ] && { ROOT="$dir"; return 0; }
+			continue
+		fi
+		VOLMNT=$WORK/vol
+		mkdir -p $VOLMNT
+		mount -t ubifs -o ro "$dev" $VOLMNT 2>/dev/null || { rmdir $VOLMNT; VOLMNT=; continue; }
+		[ -e $VOLMNT/sec_cfg/data.vol ] && { ROOT=$VOLMNT; return 0; }
+		umount $VOLMNT; rmdir $VOLMNT; VOLMNT=
+	done
+	return 1
+}
+
+make_key() {
+	local root="$1" sn nonce
+	sn="$BE7000_SN"
+	[ -n "$sn" ] || sn="$(fw_printenv -n SN 2>/dev/null)"
+	[ -n "$sn" ] || return 1
+	if [ -s "$root/sec_cfg/iden" ]; then
+		nonce="$(openssl base64 -d -in "$root/sec_cfg/iden" 2>/dev/null)"
+	else
+		nonce="$(fw_printenv sec_cfg_nonce 2>/dev/null)"
+	fi
+	# same bytes as stock: printf "%s\n%s\n" | sort | openssl dgst -sha512 -binary
+	printf "%s\n%s\n" "SN=$sn" "$nonce" | sort | openssl dgst -binary -sha512 > $WORK/key 2>/dev/null
+	[ -s $WORK/key ]
+}
+
+# open the stock config read-only under $WORK/mnt; C = its config dir
+open_stock() {
+	local vol
+	command -v cryptsetup >/dev/null || die "cryptsetup is missing"
+	mkdir -p $WORK/mnt
+	stock_root || die "no stock settings found (sec_cfg/data.vol)"
+	vol="$ROOT/sec_cfg/data.vol"
+	[ -s "$vol" ] || vol="$ROOT/usr/sec_cfg/data.vol"
+	[ -s "$vol" ] || die "no stock settings found (sec_cfg/data.vol)"
+	log "stock container $vol, sha256 $(sha256sum "$vol" | cut -c1-16)"
+	make_key "$ROOT" || die "cannot build the key (no SN in the bootloader environment?)"
+	# work on a copy: nothing here can write to the original
+	cp "$vol" $WORK/data.vol || die "cannot copy $vol"
+	modprobe loop 2>/dev/null; modprobe dm-crypt 2>/dev/null
+	LOOP="$(losetup -r -f --show $WORK/data.vol 2>/dev/null)" || die "no free loop device"
+	cryptsetup open --readonly --type luks1 --key-file $WORK/key "$LOOP" $MAP >/dev/null 2>&1 ||
+		die "the key does not open the stock container"
+	mount -t ext4 -o ro,noload /dev/mapper/$MAP $WORK/mnt 2>/dev/null ||
+		mount -o ro /dev/mapper/$MAP $WORK/mnt 2>/dev/null || die "cannot mount the stock container"
+	log "stock container sha256 after open $(sha256sum "$vol" | cut -c1-16)"
+	[ -d $WORK/mnt/etc/config ] && C=$WORK/mnt/etc/config || C=$WORK/mnt
+}
+
+sget() { uci -q -c "$C" get "$1"; }
+
+# stock encryption names to OpenWrt ones
+enc_map() {
+	case "$1" in
+	none|"") echo none ;;
+	*sae*psk*|*psk*sae*|*mixed*sae*|*sae*mixed*) echo sae-mixed ;;
+	*sae*) echo sae ;;
+	mixed*|*psk-mixed*|*psk+psk2*) echo psk-mixed ;;
+	*psk2*) echo psk2 ;;
+	*psk*) echo psk ;;
+	*) echo psk2 ;;
+	esac
+}
+
+# the stock wifi-iface of a band: misc.wireless.ifname_2G/_5G name it
+stock_iface() {
+	local band=$1 ifn s
+	ifn="$(sget misc.wireless.ifname_$band)"
+	[ -n "$ifn" ] || { [ $band = 2G ] && ifn=wl1 || ifn=wl0; }
+	for s in $(uci -q -c "$C" show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-iface$/\1/p"); do
+		[ "$(sget wireless.$s.ifname)" = "$ifn" ] && { echo $s; return 0; }
+	done
+	return 1
+}
+
+# key=value lines of what would be taken; secrets only when $1 = full
+collect() {
+	local full=$1 b s v mode proto
+	mode="$(sget xiaoqiang.common.NETMODE)"
+	echo "netmode=${mode:-router}"
+	for b in 2G 5G; do
+		s="$(stock_iface $b)" || continue
+		[ "$(sget wireless.$s.disabled)" = 1 ] && echo "wifi_${b}_disabled=1"
+		echo "wifi_${b}_ssid=$(sget wireless.$s.ssid)"
+		echo "wifi_${b}_encryption=$(enc_map "$(sget wireless.$s.encryption)")"
+		echo "wifi_${b}_hidden=$(sget wireless.$s.hidden)"
+		v="$(sget wireless.$s.key)"
+		[ $full = full ] && echo "wifi_${b}_key=$v" || echo "wifi_${b}_key=$([ -n "$v" ] && echo set)"
+	done
+	proto="$(sget network.wan.proto)"
+	echo "wan_proto=${proto:-dhcp}"
+	case "$proto" in
+	pppoe)
+		echo "wan_username=$(sget network.wan.username)"
+		v="$(sget network.wan.password)"
+		[ $full = full ] && echo "wan_password=$v" || echo "wan_password=$([ -n "$v" ] && echo set)"
+		v="$(sget network.wan.mtu)"; [ -n "$v" ] && echo "wan_mtu=$v"
+		;;
+	static)
+		for v in ipaddr netmask gateway; do echo "wan_$v=$(sget network.wan.$v)"; done
+		echo "wan_dns=$(sget network.wan.dns)"
+		;;
+	esac
+	echo "lan_ipaddr=$(sget network.lan.ipaddr)"
+	echo "lan_netmask=$(sget network.lan.netmask)"
+}
+
+json_preview() {
+	# key=value lines to one flat JSON object
+	awk -F= 'BEGIN { printf "{" } { k=$1; sub(/^[^=]*=/, ""); gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); printf "%s\"%s\":\"%s\"", (NR > 1 ? "," : ""), k, $0 } END { print "}" }'
+}
+
+# this router's access points of a band ("2g" / "5g"), MLO twins included
+ap_ifaces() {
+	local band=$1 s d
+	for s in $(uci -q show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-iface$/\1/p"); do
+		[ "$(uci -q get wireless.$s.mode)" = ap ] || continue
+		for d in $(uci -q get wireless.$s.device); do
+			[ "$(uci -q get wireless.$d.band)" = $band ] && { echo $s; break; }
+		done
+	done
+}
+
+apply_wifi() {
+	local f=$1 b band s v enc
+	. $f
+	for b in 2G 5G; do
+		eval "v=\$wifi_${b}_ssid"
+		[ -n "$v" ] || continue
+		[ $b = 2G ] && band=2g || band=5g
+		eval "enc=\$wifi_${b}_encryption"
+		for s in $(ap_ifaces $band); do
+			uci set wireless.$s.ssid="$v"
+			eval "uci set wireless.$s.key=\"\$wifi_${b}_key\""
+			# an MLO network stays WPA3, which it has to be
+			[ "$(uci -q get wireless.$s.mlo)" = 1 ] || uci set wireless.$s.encryption="$enc"
+			eval "[ \"\$wifi_${b}_hidden\" = 1 ] && uci set wireless.$s.hidden=1 || uci -q delete wireless.$s.hidden"
+			eval "[ \"\$wifi_${b}_disabled\" = 1 ] && uci set wireless.$s.disabled=1 || uci -q delete wireless.$s.disabled"
+		done
+	done
+	uci commit wireless
+}
+
+apply_net() {
+	local f=$1 v
+	. $f
+	# options of the previous protocol would confuse netifd
+	case "$wan_proto" in
+	pppoe|static|dhcp)
+		for v in ipaddr netmask gateway dns username password mtu; do
+			uci -q delete network.wan.$v
+		done ;;
+	esac
+	case "$wan_proto" in
+	pppoe)
+		uci set network.wan.proto=pppoe
+		uci set network.wan.username="$wan_username"
+		uci set network.wan.password="$wan_password"
+		[ -n "$wan_mtu" ] && uci set network.wan.mtu="$wan_mtu"
+		;;
+	static)
+		uci set network.wan.proto=static
+		uci set network.wan.ipaddr="$wan_ipaddr"
+		uci set network.wan.netmask="$wan_netmask"
+		uci set network.wan.gateway="$wan_gateway"
+		for v in $wan_dns; do uci add_list network.wan.dns="$v"; done
+		;;
+	dhcp) uci set network.wan.proto=dhcp ;;
+	esac
+	[ -n "$lan_ipaddr" ] && uci set network.lan.ipaddr="$lan_ipaddr"
+	[ -n "$lan_netmask" ] && uci set network.lan.netmask="$lan_netmask"
+	uci commit network
+}
+
+cmd_preview() {
+	open_stock
+	collect short | json_preview
+	cleanup
+}
+
+cmd_apply() {
+	local how=${1:-manual} t
+	open_stock
+	t=$WORK/values
+	collect full | sed "s/'/'\\\\''/g; s/^\([^=]*\)=\(.*\)$/\1='\2'/" > $t
+	cleanup
+	. $t
+	case "$netmode" in
+	router|"") ;;
+	*) rm -f $t; die "stock ran in mode $netmode, not as a router; nothing taken" ;;
+	esac
+	sysupgrade -b $BACKUP >/dev/null 2>&1 || { rm -f $t; die "cannot back up the current settings"; }
+	apply_net $t
+	if [ $how = auto ]; then
+		# first boot: the wireless config is generated later, once the
+		# radios are up; be7000-wifi-defaults applies this in place of
+		# its default network
+		grep "^wifi_" $t > $PENDING; chmod 600 $PENDING
+	else
+		apply_wifi $t
+	fi
+	rm -f $t
+	{
+		echo "date=$(date +%Y-%m-%dT%H:%M:%S)"
+		echo "how=$how"
+		echo "wifi_2g=${wifi_2G_ssid:+yes}"
+		echo "wifi_5g=${wifi_5G_ssid:+yes}"
+		echo "wan=$wan_proto"
+	} > $STAMP
+	log "applied ($how): wifi 2g ${wifi_2G_ssid:+yes} 5g ${wifi_5G_ssid:+yes}, wan $wan_proto"
+	logger -t be7000-stock-import "stock settings taken ($how): Wi-Fi, WAN $wan_proto, LAN"
+	echo "stock settings taken; the old ones are in $BACKUP"
+	# by hand on a running router: put them to use once LuCI has its answer
+	[ $how = manual ] && ( sleep 3; /etc/init.d/network reload; wifi reload ) </dev/null >/dev/null 2>&1 &
+}
+
+cmd_undo() {
+	[ -s $BACKUP ] || die "no backup from an import"
+	sysupgrade -r $BACKUP >/dev/null 2>&1 || die "cannot restore $BACKUP"
+	rm -f $STAMP
+	logger -t be7000-stock-import "settings from before the stock import restored"
+	echo "restored the settings from before the import; reboot to use them"
+}
+
+cmd_status() {
+	if [ -s $STAMP ]; then
+		echo '{"imported":true,'"$(sed 's/"/\\"/g; s/^\([^=]*\)=\(.*\)$/"\1":"\2"/' $STAMP | tr '\n' ',' | sed 's/,$//')"',"backup":'"$([ -s $BACKUP ] && echo true || echo false)"'}'
+	else
+		local have=false
+		stock_root && have=true
+		cleanup
+		echo '{"imported":false,"stock_settings":'$have'}'
+	fi
+}
+
+# called by be7000-wifi-defaults once the radios exist
+cmd_wifi_pending() {
+	[ -s $PENDING ] || return 1
+	apply_wifi $PENDING
+	rm -f $PENDING
+	logger -t be7000-stock-import "stock Wi-Fi names and passwords applied"
+}
+
+# first boot of a fresh install: take the stock settings once, before
+# netifd starts, and only while this router still has its defaults
+cmd_auto() {
+	[ -e /rom/etc/be7000-test ] && return 0
+	[ -e $STAMP ] || [ -e /etc/.be7000_stock_auto_done ] && return 0
+	touch /etc/.be7000_stock_auto_done
+	# set by be7000-wifi-defaults on the first boot and kept across
+	# upgrades: this is not a fresh install
+	[ -e /etc/.be7000_secure_defaults ] && return 0
+	[ "$(uci -q get network.wan.proto)" = dhcp ] || return 0
+	stock_root || { cleanup; return 0; }
+	cleanup
+	cmd_apply auto >/dev/null 2>&1 || logger -t be7000-stock-import "stock settings not taken: $(tail -1 $LOG)"
+}
+
+mkdir -p $WORK
+case "$1" in
+preview) cmd_preview ;;
+apply) cmd_apply manual ;;
+undo) cmd_undo ;;
+status) cmd_status ;;
+auto) cmd_auto ;;
+wifi-pending) cmd_wifi_pending ;;
+*) echo "usage: $0 preview|apply|undo|status" >&2; exit 1 ;;
+esac
