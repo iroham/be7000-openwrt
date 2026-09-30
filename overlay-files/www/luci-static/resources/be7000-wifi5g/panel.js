@@ -11,6 +11,7 @@
 
 var callStatus = rpc.declare({ object: 'be7000-wifi5g', method: 'status' });
 var callSet = rpc.declare({ object: 'be7000-wifi5g', method: 'set', params: [ 'mode' ] });
+var callCountry = rpc.declare({ object: 'be7000-wifi5g', method: 'set_country', params: [ 'country' ] });
 
 var PCI = '0002:01:00.0';
 
@@ -63,7 +64,11 @@ var T = {
 		busy: 'Переключаю режим. Wi-Fi 5 ГГц пропадёт примерно на полминуты, клиенты переподключатся сами.',
 		pending: 'Есть неприменённые изменения Wi-Fi. Сначала примените или отмените их.',
 		na: 'Недоступно: в этой сборке нет драйвера с поддержкой разделения.',
-		noEht: 'Сейчас у радио 5 ГГц код страны %s, и прошивка радиомодуля с ним выключает Wi-Fi 7. Точка работает как Wi-Fi 6. Чтобы вернуть Wi-Fi 7, смените код страны у радио 5 ГГц в его настройках ниже, например на US.',
+		noEht: 'Сейчас у радио 5 ГГц код страны %s, и прошивка радиомодуля с ним выключает Wi-Fi 7. Точка работает как Wi-Fi 6.',
+		toUS: 'Сменить на US',
+		countryTitle: 'Сменить код страны 5 ГГц на US?',
+		countryText: 'С кодом US прошивка радиомодуля включает Wi-Fi 7. Вместе с кодом меняются правила: список каналов, ширина и допустимая мощность будут как в США. Код меняется только у радио 5 ГГц, 2,4 ГГц останется как есть. Вернуть прежний код можно в настройках радио 5 ГГц ниже.',
+		countryDone: 'Код страны изменён, Wi-Fi 5 ГГц перезапускается.',
 		confirmTitle: 'Сменить режим 5 ГГц?',
 		confirmSplit: 'У нижнего радио появятся копии сетей 5 ГГц с теми же именами и паролями, каналы для начала 36 и 149. Их можно поменять ниже, в списке сетей.',
 		confirmSingle: 'Второе радио и его копии сетей будут удалены, останется одно радио на весь диапазон.',
@@ -118,7 +123,11 @@ var T = {
 		busy: 'Switching. 5 GHz Wi-Fi is down for about half a minute, clients reconnect by themselves.',
 		pending: 'There are unapplied Wi-Fi changes. Apply or revert them first.',
 		na: 'Not available: this build has no driver support for the split.',
-		noEht: 'The 5 GHz radio now has country code %s, and the radio firmware turns Wi-Fi 7 off for it. The access point runs as Wi-Fi 6. To get Wi-Fi 7 back, change the country code of the 5 GHz radio in its settings below, for example to US.',
+		noEht: 'The 5 GHz radio now has country code %s, and the radio firmware turns Wi-Fi 7 off for it. The access point runs as Wi-Fi 6.',
+		toUS: 'Switch to US',
+		countryTitle: 'Change the 5 GHz country code to US?',
+		countryText: 'With US the radio firmware turns Wi-Fi 7 on. The rules change with the code: channels, width and allowed power follow the US ones. Only the 5 GHz radio changes, 2.4 GHz stays as it is. You can set the previous code again in the 5 GHz radio settings below.',
+		countryDone: 'Country code changed, 5 GHz Wi-Fi restarts.',
 		confirmTitle: 'Change the 5 GHz mode?',
 		confirmSplit: 'The lower radio gets copies of the 5 GHz networks with the same names and passwords, channels start at 36 and 149. You can change them below, in the network list.',
 		confirmSingle: 'The second radio and its network copies are removed, one radio for the whole band stays.',
@@ -272,7 +281,11 @@ return baseclass.extend({
 		L.dom.content(root, [
 			E('h3', {}, tx.title),
 			E('p', { 'class': 'b5-lead' }, tx.lead),
-			st.no_eht ? E('p', { 'class': 'alert-message warning' }, tx.noEht.format(st.country5 || '?')) : '',
+			st.no_eht ? E('div', { 'class': 'alert-message warning' }, [
+				E('p', {}, tx.noEht.format(st.country5 || '?')),
+				E('button', { 'class': 'cbi-button cbi-button-action', 'disabled': blocked ? '' : null,
+					'click': ui.createHandlerFn(this, 'country', tx) }, tx.toUS)
+			]) : '',
 			E('div', { 'class': 'b5-modes' }, cards),
 			radios.length ? E('div', { 'class': 'b5-radios' }, radios.map(function(r) { return radioChip(tx, r); })) : '',
 			note ? E('div', { 'class': 'b5-act' }, E('span', { 'class': 'b5-note' }, note)) : ''
@@ -280,6 +293,25 @@ return baseclass.extend({
 
 		if (st.running)
 			window.setTimeout(L.bind(this.wait, this, root, tx, mode, null), 3000);
+	},
+
+	country: function(tx) {
+		return new Promise(function(resolve) {
+			ui.showModal(tx.countryTitle, [
+				E('p', {}, tx.countryText),
+				E('div', { 'class': 'right' }, [
+					E('button', { 'class': 'cbi-button', 'click': function() { ui.hideModal(); resolve(); } }, tx.cancel),
+					' ',
+					E('button', { 'class': 'cbi-button cbi-button-action important', 'click': function() {
+						callCountry('US').then(function(r) {
+							ui.showModal(r.ok ? tx.countryTitle : tx.failed, [ E('p', { 'class': r.ok ? 'spinning' : '' }, r.ok ? tx.countryDone : (r.output || '-')) ]);
+							window.setTimeout(function() { location.reload(); }, 20000);
+						});
+						resolve();
+					} }, tx.go)
+				])
+			]);
+		});
 	},
 
 	confirm: function(tx, from, to) {

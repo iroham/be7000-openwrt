@@ -11,7 +11,7 @@
 				"/usr/sbin/be7000-5g-split": [ "exec" ]
 			},
 			"ubus": {
-				"be7000-wifi5g": [ "set" ]
+				"be7000-wifi5g": [ "set", "set_country" ]
 			}
 		}
 	}

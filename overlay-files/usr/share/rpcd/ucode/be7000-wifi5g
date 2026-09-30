@@ -58,6 +58,28 @@ return {
 				};
 			}
 		},
+		set_country: {
+			args: { country: '' },
+			call: function(req) {
+				let cc = uc(req.args?.country ?? '');
+				if (!match(cc, /^[A-Z][A-Z]$/))
+					return { ok: false, output: 'country is two letters' };
+				// only the 5 GHz radios of the QCN9274: that is where the
+				// radio firmware drops Wi-Fi 7 for some countries
+				let c = cursor(), n = 0;
+				c.foreach('wireless', 'wifi-device', function(d) {
+					if (d.band == '5g' && index(d.path ?? '', 'pci') >= 0) {
+						c.set('wireless', d['.name'], 'country', cc);
+						n++;
+					}
+				});
+				if (!n)
+					return { ok: false, output: 'no 5 GHz radio' };
+				c.commit('wireless');
+				sh('(sleep 1; wifi up) </dev/null >/dev/null 2>&1 &');
+				return { ok: true, radios: n };
+			}
+		},
 		set: {
 			args: { mode: '', split: false },
 			call: function(req) {
