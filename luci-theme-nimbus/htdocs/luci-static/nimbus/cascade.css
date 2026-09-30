@@ -1889,11 +1889,24 @@ input[type="reset"]:hover {
 	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: .05em;
-	white-space: nowrap;
+	/* headers wrap, by syllable for one-word ones: a nowrap header row made
+	   wide tables (static leases, firewall zones, routes) push the row
+	   buttons out of the card */
+	white-space: normal;
+	-webkit-hyphens: auto;
+	hyphens: auto;
 	vertical-align: bottom;
 	padding-top: 6px;
 	padding-bottom: 9px;
 }
+
+/* lease tables carry long values without spaces (DUID, IPv6); let those
+   break rather than widen the table. Not everywhere: MACs and signal
+   levels in other tables would break for no reason. */
+#cbi-dhcp-__leases__ .td,
+#cbi-dhcp-__leases6__ .td,
+.table.leases .td,
+.table.leases6 .td { overflow-wrap: anywhere; }
 
 .table .tr:not(.table-titles):not(.cbi-section-table-titles) > .td:first-child { padding-left: 4px; }
 .table .tr > .th:first-child { padding-left: 4px; }
