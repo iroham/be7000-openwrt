@@ -22,6 +22,7 @@ DB_ROM=/rom/lib/apk/db
 WORLD=/etc/apk/world
 WORLD_ROM=/rom/etc/apk/world
 PENDING=/etc/be7000-reinstall
+FEED_HOST=timofey-maykov.github.io/be7000-openwrt
 
 kernel_of() {
 	grep -oE 'kernel=[0-9.]+~[0-9a-f]{32}' "$1" 2>/dev/null | head -1 | sed 's/.*~//'
@@ -71,19 +72,50 @@ reinstall_pending() {
 		sleep 15
 		# downloads from GitHub Pages occasionally get reset mid-way; a few
 		# tries are cheap, apk skips what is already there
-		local n=0 ok=0
+		local n=0 ok=0 p gone="" left=""
+		# Only our own feeds decide: when one of them is missing, nothing may be
+		# dropped below as "not in the feed". Another repository that is down
+		# (distfeeds) must not hold the reinstall back forever.
 		while [ $n -lt 5 ]; do
 			n=$((n + 1))
-			if apk update >/dev/null 2>&1 && apk add $(cat "$PENDING") >/tmp/be7000-reinstall.log 2>&1; then
-				ok=1; break
-			fi
+			apk update >/tmp/be7000-apk-update.log 2>&1
+			grep -q "$FEED_HOST" /etc/apk/repositories.d/*.list 2>/dev/null &&
+				! grep "$FEED_HOST" /tmp/be7000-apk-update.log | grep -q -i -E "unavailable|no such file|error|warning" &&
+				{ ok=1; break; }
 			sleep 20
 		done
-		if [ $ok = 1 ]; then
-			logger -t be7000-romsync "reinstalled after image change: $(cat "$PENDING" | tr '\n' ' ')"
+		if [ $ok = 0 ]; then
+			logger -t be7000-romsync "feed not reachable after $n tries, will retry next boot"
+			exit 0
+		fi
+		# A new OpenWrt base renames libraries (libubox20260523 and the like
+		# carry their ABI date), so the old names are not in the new feed and
+		# one of them fails the whole apk add. Drop what the feed does not
+		# have; apk pulls the current libraries in as dependencies anyway.
+		for p in $(cat "$PENDING"); do
+			if apk search -x "$p" 2>/dev/null | grep -q .; then
+				left="$left $p"
+			else
+				gone="$gone $p"
+			fi
+		done
+		[ -n "$gone" ] && logger -t be7000-romsync "not in the feed of this image, dropped:$gone"
+		if [ -z "$left" ] || apk add $left >/tmp/be7000-reinstall.log 2>&1; then
+			logger -t be7000-romsync "reinstalled after image change:$left"
 			rm -f "$PENDING"
+			exit 0
+		fi
+		# one bad package should not keep the others out
+		: > "$PENDING.new"
+		for p in $left; do
+			apk add "$p" >>/tmp/be7000-reinstall.log 2>&1 || echo "$p" >> "$PENDING.new"
+		done
+		if [ -s "$PENDING.new" ]; then
+			mv "$PENDING.new" "$PENDING"
+			logger -t be7000-romsync "reinstalled after image change, except (retry next boot): $(tr '\n' ' ' < "$PENDING")"
 		else
-			logger -t be7000-romsync "reinstall failed after $n tries, will retry next boot: $(tail -1 /tmp/be7000-reinstall.log)"
+			rm -f "$PENDING" "$PENDING.new"
+			logger -t be7000-romsync "reinstalled after image change:$left"
 		fi
 	) </dev/null >/dev/null 2>&1 &
 }
