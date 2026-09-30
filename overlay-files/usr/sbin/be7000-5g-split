@@ -123,7 +123,8 @@ mode_of() {
 }
 
 # stop the access points of the QCN9274 radios and wait until their
-# interfaces are gone
+# interfaces are gone. wifi down also turns autostart off for them, so
+# everything after a switch brings Wi-Fi back with wifi up, not reload.
 pci_radios_down() {
 	local s i=0
 	for s in $(uci -q show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p"); do
@@ -261,6 +262,13 @@ config_mlo_on() {
 		done
 	done
 	[ -n "$(mlo_ifaces)" ] || { echo "no enabled 5 GHz access point to join" >&2; return 1; }
+	# no neighbour scan on the lower radio: at 160 MHz its MLO link needs a
+	# DFS check, and a scan running at that moment makes the kernel refuse
+	# it (-EBUSY), so the link never comes up
+	if [ "$(uci -q get wireless.$low.noscan)" != 1 ]; then
+		uci set wireless.$low.noscan=1
+		uci set wireless.$low.be7000_noscan=1
+	fi
 	uci commit wireless
 }
 
@@ -272,6 +280,10 @@ config_mlo_off() {
 		uci -q delete wireless.$i.be7000_mlo_off
 	done
 	low="$(low_radio "$(main_radio)")"
+	if [ -n "$low" ] && [ "$(uci -q get wireless.$low.be7000_noscan)" = 1 ]; then
+		uci -q delete wireless.$low.noscan
+		uci -q delete wireless.$low.be7000_noscan
+	fi
 	if [ -n "$low" ] && uci -q get wireless.$low.be7000_htmode >/dev/null; then
 		uci set wireless.$low.htmode="$(uci -q get wireless.$low.be7000_htmode)"
 		uci -q delete wireless.$low.be7000_htmode
@@ -310,14 +322,14 @@ mlo_watch() {
 		uci set wireless.$low.be7000_htmode="$(uci -q get wireless.$low.htmode)"
 		uci set wireless.$low.htmode=EHT80
 		uci commit wireless
-		wifi reload
+		wifi up
 		mlo_wait 60 && return 0 ;;
 	esac
 	logger -t be7000-5g-split "MLO did not come up on both radios, back to two separate radios"
 	echo "MLO did not come up on both radios, back to two separate radios" >&2
 	save split
 	config_mlo_off
-	wifi reload
+	wifi up
 	return 1
 }
 
@@ -352,7 +364,7 @@ to_single() {
 	config_off
 	apply_fw 0 || return 1
 	sleep 5
-	wifi reload
+	wifi up
 	echo "5 GHz: one radio for the whole band"
 }
 
@@ -370,7 +382,7 @@ to_split() {
 		config_off
 		apply_fw 0
 		sleep 5
-		wifi reload
+		wifi up
 		return 1
 	fi
 	if [ $want = mlo ]; then
@@ -379,7 +391,7 @@ to_split() {
 		config_mlo_off
 	fi
 	sleep 5
-	wifi reload
+	wifi up
 	if [ $want = mlo ]; then
 		mlo_watch || return 1
 		echo "5 GHz: MLO, one Wi-Fi 7 network over both radios (36-64 and 149-165)"
@@ -429,7 +441,7 @@ case "$1" in
 				config_mlo_off
 				config_off
 				apply_fw 0
-				wifi reload
+				wifi up
 			elif [ $saved = mlo ]; then
 				sleep 30
 				mlo_watch
