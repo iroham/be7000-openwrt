@@ -44,11 +44,14 @@ return {
 	'be7000-wifi5g': {
 		status: {
 			call: function() {
-				let running = sh('ps w | grep -q "[b]e7000-5g-split o[nf]" && echo 1') == '1';
+				let running = sh('ps w | grep -q "[b]e7000-5g-split \\(o[nf]\\|mode [a-z]\\)" && echo 1') == '1';
+				let mode = sh(`${BIN} mode`);
 				return {
 					available: access(BIN) == true && access(PARAM) == true,
-					split: sh(`${BIN} status`) == 'on',
-					saved: sh('uci -q get be7000.wifi.split_5g') == '1',
+					mode,
+					split: mode != 'single',
+					saved: sh('uci -q get be7000.wifi.mode_5g') || (sh('uci -q get be7000.wifi.split_5g') == '1' ? 'split' : 'single'),
+					mlo_up: sh('iw dev 2>/dev/null | grep -c "MLD with links"') != '0',
 					running,
 					log: trim(readfile(LOG) ?? ''),
 					...eht_state()
@@ -56,15 +59,17 @@ return {
 			}
 		},
 		set: {
-			args: { split: false },
+			args: { mode: '', split: false },
 			call: function(req) {
 				if (access(BIN) != true)
 					return { ok: false, output: 'be7000-5g-split not found' };
-				let mode = req.args?.split ? 'on' : 'off';
-				// takes 20-40 s (firmware reload, wifi reload): run it detached
-				// and let the page poll status
-				sh(`(${BIN} ${mode}) >${LOG} 2>&1 </dev/null &`);
-				return { ok: true };
+				let mode = req.args?.mode;
+				if (index([ 'single', 'split', 'mlo' ], mode) < 0)
+					mode = req.args?.split ? 'split' : 'single';
+				// takes 20-90 s (firmware reload, wifi reload, MLO check): run
+				// it detached and let the page poll status
+				sh(`(${BIN} mode ${mode}) >${LOG} 2>&1 </dev/null &`);
+				return { ok: true, mode };
 			}
 		}
 	}

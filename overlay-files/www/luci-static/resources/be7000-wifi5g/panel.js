@@ -10,14 +10,14 @@
 // object be7000-wifi5g (/usr/share/rpcd/ucode/be7000-wifi5g).
 
 var callStatus = rpc.declare({ object: 'be7000-wifi5g', method: 'status' });
-var callSet = rpc.declare({ object: 'be7000-wifi5g', method: 'set', params: [ 'split' ] });
+var callSet = rpc.declare({ object: 'be7000-wifi5g', method: 'set', params: [ 'mode' ] });
 
 var PCI = '0002:01:00.0';
 
 var T = {
 	ru: {
 		title: 'Режим 5 ГГц',
-		lead: 'Радиомодуль 5 ГГц (QCN9274) работает как одно радио на весь диапазон или, как 5G-1 и 5G-2 в стоке, как два независимых радио. Режим можно сменить здесь, без перезагрузки роутера.',
+		lead: 'Радиомодуль 5 ГГц (QCN9274) работает как одно радио на весь диапазон, как два независимых радио (5G-1 и 5G-2 в стоке) или как два радио, объединённых в одну сеть Wi-Fi 7 с MLO. Режим можно сменить здесь, без перезагрузки роутера.',
 		now: 'Сейчас',
 		single: 'Одно радио',
 		split: 'Два радио',
@@ -31,8 +31,18 @@ var T = {
 		splitItems: [
 			'нижнее радио на каналах 36-64, верхнее от 149 и выше',
 			'у каждого свой канал и свои клиенты, работают одновременно',
+			'нижнему можно дать 160 МГц, верхнему до 80 МГц',
 			'каналы 100-144 в этом режиме недоступны'
 		],
+		mlo: 'MLO',
+		mloTag: 'одна сеть Wi-Fi 7 на оба радио',
+		mloItems: [
+			'устройство с Wi-Fi 7 держит связь сразу на двух каналах, 36 и 149',
+			'быстрее и стабильнее: помеха на одном канале не рвёт соединение',
+			'сеть только WPA3, устройства со старым WPA2 остаются на 2,4 ГГц',
+			'нижнему можно дать 160 МГц, верхнему 80 МГц'
+		],
+		mloDown: 'Сеть MLO сейчас не поднята.',
 		active: 'включён',
 		radios: 'Радио 5 ГГц сейчас',
 		ch: 'канал',
@@ -49,6 +59,7 @@ var T = {
 		off: 'выключено',
 		toSplit: 'Разделить на два радио',
 		toSingle: 'Вернуть одно радио',
+		toMlo: 'Включить MLO',
 		busy: 'Переключаю режим. Wi-Fi 5 ГГц пропадёт примерно на полминуты, клиенты переподключатся сами.',
 		pending: 'Есть неприменённые изменения Wi-Fi. Сначала примените или отмените их.',
 		na: 'Недоступно: в этой сборке нет драйвера с поддержкой разделения.',
@@ -56,7 +67,9 @@ var T = {
 		confirmTitle: 'Сменить режим 5 ГГц?',
 		confirmSplit: 'У нижнего радио появятся копии сетей 5 ГГц с теми же именами и паролями, каналы для начала 36 и 149. Их можно поменять ниже, в списке сетей.',
 		confirmSingle: 'Второе радио и его копии сетей будут удалены, останется одно радио на весь диапазон.',
+		confirmMlo: 'Каждая сеть 5 ГГц станет одной сетью MLO на оба радио, с тем же именем и паролем, но только WPA3. Обычные сети 5 ГГц на это время выключатся и вернутся при смене режима. При 160 МГц на нижнем радио его звено поднимается примерно через минуту, после проверки на радары. Если сеть MLO не поднимется на обоих радио, роутер сам вернётся к двум отдельным радио.',
 		confirmNote: 'Wi-Fi 5 ГГц пропадёт примерно на полминуты. Выбор переживает перезагрузку и обновление.',
+		mloLink: 'звено MLO',
 		cancel: 'Отмена',
 		go: 'Переключить',
 		failed: 'Не получилось',
@@ -64,7 +77,7 @@ var T = {
 	},
 	en: {
 		title: '5 GHz mode',
-		lead: 'The 5 GHz module (QCN9274) runs as one radio for the whole band or, like 5G-1 and 5G-2 on stock, as two independent radios. You can change the mode here, the router does not reboot.',
+		lead: 'The 5 GHz module (QCN9274) runs as one radio for the whole band, as two independent radios (5G-1 and 5G-2 on stock) or as two radios joined into one Wi-Fi 7 network with MLO. You can change the mode here, the router does not reboot.',
 		now: 'Now',
 		single: 'One radio',
 		split: 'Two radios',
@@ -78,8 +91,18 @@ var T = {
 		splitItems: [
 			'lower radio on channels 36-64, upper from 149 up',
 			'each has its own channel and clients, both run at once',
+			'the lower one can take 160 MHz, the upper one up to 80 MHz',
 			'channels 100-144 are not available in this mode'
 		],
+		mlo: 'MLO',
+		mloTag: 'one Wi-Fi 7 network over both radios',
+		mloItems: [
+			'a Wi-Fi 7 device keeps a link on two channels at once, 36 and 149',
+			'faster and steadier: interference on one channel does not drop the connection',
+			'WPA3 only, devices limited to WPA2 stay on 2.4 GHz',
+			'the lower one can take 160 MHz, the upper one 80 MHz'
+		],
+		mloDown: 'The MLO network is not up right now.',
 		active: 'active',
 		radios: '5 GHz radios now',
 		ch: 'channel',
@@ -91,6 +114,7 @@ var T = {
 		off: 'off',
 		toSplit: 'Split into two radios',
 		toSingle: 'Back to one radio',
+		toMlo: 'Turn MLO on',
 		busy: 'Switching. 5 GHz Wi-Fi is down for about half a minute, clients reconnect by themselves.',
 		pending: 'There are unapplied Wi-Fi changes. Apply or revert them first.',
 		na: 'Not available: this build has no driver support for the split.',
@@ -98,7 +122,9 @@ var T = {
 		confirmTitle: 'Change the 5 GHz mode?',
 		confirmSplit: 'The lower radio gets copies of the 5 GHz networks with the same names and passwords, channels start at 36 and 149. You can change them below, in the network list.',
 		confirmSingle: 'The second radio and its network copies are removed, one radio for the whole band stays.',
+		confirmMlo: 'Every 5 GHz network becomes one MLO network over both radios, same name and password, WPA3 only. The plain 5 GHz networks are switched off meanwhile and come back when you change the mode. At 160 MHz on the lower radio its link comes up after about a minute, once the radar check is done. If the MLO network does not come up on both radios, the router goes back to two separate radios by itself.',
 		confirmNote: '5 GHz Wi-Fi is down for about half a minute. The choice survives reboots and updates.',
+		mloLink: 'MLO link',
 		cancel: 'Cancel',
 		go: 'Switch',
 		failed: 'Failed',
@@ -127,6 +153,8 @@ var CSS = `
 .b5-sub{color:var(--nb-muted,#888)}
 .b5-act{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
 .b5-note{font-size:13px;color:var(--nb-muted,#888)}
+.b5-mode{display:flex;flex-direction:column}
+.b5-card-act{margin-top:auto;padding-top:12px}
 `;
 
 function lang() {
@@ -169,11 +197,12 @@ function radioState() {
 	});
 }
 
-function modeCard(tx, key, on) {
+function modeCard(tx, key, on, btn) {
 	return E('div', { 'class': 'b5-mode' + (on ? ' on' : '') }, [
 		E('h4', {}, [ tx[key], on ? E('span', { 'class': 'b5-badge' }, tx.active) : '' ]),
 		E('div', { 'class': 'b5-tag' }, tx[key + 'Tag']),
-		E('ul', {}, tx[key + 'Items'].map(function(s) { return E('li', {}, s); }))
+		E('ul', {}, tx[key + 'Items'].map(function(s) { return E('li', {}, s); })),
+		btn ? E('div', { 'class': 'b5-card-act' }, btn) : ''
 	]);
 }
 
@@ -210,51 +239,62 @@ return baseclass.extend({
 	},
 
 	draw: function(root, tx, st, radios) {
-		var split = !!st.split;
-		var btn = E('button', {
-			'class': 'cbi-button ' + (split ? 'cbi-button-neutral' : 'cbi-button-action important'),
-			'click': ui.createHandlerFn(this, 'confirm', tx, split)
-		}, split ? tx.toSingle : tx.toSplit);
-		var note = '';
+		var mode = st.mode || (st.split ? 'split' : 'single');
+		var note = '', blocked = false;
 
 		if (!st.available) {
-			btn.disabled = true;
+			blocked = true;
 			note = tx.na;
 		}
 		else if (st.running) {
-			btn.disabled = true;
+			blocked = true;
 			note = tx.busy;
 		}
 		else if (pendingWifiChanges()) {
-			btn.disabled = true;
+			blocked = true;
 			note = tx.pending;
 		}
+		else if (mode == 'mlo' && !st.mlo_up) {
+			note = tx.mloDown;
+		}
+
+		var label = { single: tx.toSingle, split: tx.toSplit, mlo: tx.toMlo };
+		var cards = [ 'single', 'split', 'mlo' ].map(L.bind(function(key) {
+			var on = (mode == key);
+			var btn = on ? '' : E('button', {
+				'class': 'cbi-button ' + (key == 'single' ? 'cbi-button-neutral' : 'cbi-button-action important'),
+				'disabled': blocked ? '' : null,
+				'click': ui.createHandlerFn(this, 'confirm', tx, mode, key)
+			}, label[key]);
+			return modeCard(tx, key, on, btn);
+		}, this));
 
 		L.dom.content(root, [
 			E('h3', {}, tx.title),
 			E('p', { 'class': 'b5-lead' }, tx.lead),
 			st.no_eht ? E('p', { 'class': 'alert-message warning' }, tx.noEht.format(st.country5 || '?')) : '',
-			E('div', { 'class': 'b5-modes' }, [ modeCard(tx, 'single', !split), modeCard(tx, 'split', split) ]),
+			E('div', { 'class': 'b5-modes' }, cards),
 			radios.length ? E('div', { 'class': 'b5-radios' }, radios.map(function(r) { return radioChip(tx, r); })) : '',
-			E('div', { 'class': 'b5-act' }, [ btn, note ? E('span', { 'class': 'b5-note' }, note) : '' ])
+			note ? E('div', { 'class': 'b5-act' }, E('span', { 'class': 'b5-note' }, note)) : ''
 		]);
 
 		if (st.running)
-			window.setTimeout(L.bind(this.wait, this, root, tx, split), 3000);
+			window.setTimeout(L.bind(this.wait, this, root, tx, mode, null), 3000);
 	},
 
-	confirm: function(tx, split) {
+	confirm: function(tx, from, to) {
+		var text = { single: tx.confirmSingle, split: tx.confirmSplit, mlo: tx.confirmMlo };
 		return new Promise(L.bind(function(resolve) {
 			ui.showModal(tx.confirmTitle, [
-				E('p', {}, split ? tx.confirmSingle : tx.confirmSplit),
+				E('p', {}, text[to]),
 				E('p', {}, tx.confirmNote),
 				E('div', { 'class': 'right' }, [
 					E('button', { 'class': 'cbi-button', 'click': function() { ui.hideModal(); resolve(); } }, tx.cancel),
 					' ',
 					E('button', { 'class': 'cbi-button cbi-button-action important', 'click': L.bind(function() {
 						ui.showModal(tx.confirmTitle, [ E('p', { 'class': 'spinning' }, tx.busy) ]);
-						callSet(!split).then(L.bind(function() {
-							this.wait(null, tx, split);
+						callSet(to).then(L.bind(function() {
+							this.wait(null, tx, from, to);
 						}, this));
 						resolve();
 					}, this) }, tx.go)
@@ -265,12 +305,13 @@ return baseclass.extend({
 
 	// poll until the switch is done, then reload: the wireless config has
 	// new or removed radios and the list below has to be built again
-	wait: function(root, tx, was) {
+	wait: function(root, tx, was, want) {
 		var tries = 0;
 		var tick = function() {
 			L.resolveDefault(callStatus(), {}).then(function(st) {
 				if (!st.running && tries > 1) {
-					if (!!st.split == was) {
+					var now = st.mode || (st.split ? 'split' : 'single');
+					if (want ? now != want : now == was) {
 						ui.showModal(tx.failed, [
 							E('pre', {}, st.log || '-'),
 							E('div', { 'class': 'right' }, E('button', { 'class': 'cbi-button', 'click': function() { location.reload(); } }, 'OK'))
