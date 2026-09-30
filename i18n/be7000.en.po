@@ -79,8 +79,8 @@ msgstr "in use"
 msgid "Перенести сюда"
 msgstr "Move here"
 
-msgid "Всё, что роутер помнит между перезагрузками, лежит в /overlay: настройки, установленные пакеты, списки. Встроенного места немного, поэтому его можно перенести на USB-диск."
-msgstr "Everything the router keeps across reboots lives in /overlay: settings, installed packages, lists. The built-in space is small, so it can be moved to a USB disk."
+msgid "Всё, что роутер помнит между перезагрузками, лежит в /overlay. Это настройки, установленные пакеты и списки. Встроенного места немного, поэтому его можно перенести на USB-диск."
+msgstr "Everything the router keeps across reboots lives in /overlay. That is settings, installed packages and lists. The built-in space is small, so it can be moved to a USB disk."
 
 msgid "Сейчас"
 msgstr "Now"
@@ -403,8 +403,8 @@ msgstr "Switch and reboot"
 msgid "Не удалось определить текущий слот."
 msgstr "Could not tell the running slot."
 
-msgid "На флеше два слота для прошивки. Загрузчик запускает один из них, второй ждёт: обычно там заводская прошивка, и на неё можно вернуться в любой момент. Прошивка, которая загрузилась, сама делает свой слот основным."
-msgstr "The flash has two firmware slots. The bootloader starts one of them, the other one waits: usually it holds the factory firmware, and you can go back to it at any time. The firmware that boots makes its own slot the one that boots next time."
+msgid "На флеше два слота для прошивки. Загрузчик запускает один из них, а второй ждёт. Обычно во втором лежит заводская прошивка, и на неё можно вернуться в любой момент. Прошивка, которая загрузилась, сама делает свой слот основным."
+msgstr "The flash has two firmware slots. The bootloader starts one of them and the other one waits. Usually the other one holds the factory firmware, and you can go back to it at any time. The firmware that boots makes its own slot the main one."
 
 msgid "Флаги загрузчика"
 msgstr "Bootloader flags"
@@ -436,8 +436,8 @@ msgstr "on"
 msgid "Соединения между локальной сетью и интернетом после первых пакетов ведёт PPE. Работает для PPPoE, DHCP и статического адреса. Клиентам Wi-Fi пакеты всё равно проходят через процессор один раз, заметный выигрыш у проводных клиентов."
 msgstr "After the first packets, connections between the LAN and the internet are carried by the PPE. Works with PPPoE, DHCP and a static address. For Wi-Fi clients packets still pass the CPU once, the visible gain is for wired clients."
 
-msgid "Сейчас в железе соединений: %d"
-msgstr "Connections in hardware now: %d"
+msgid "Соединений через PPE сейчас %d"
+msgstr "Connections through the PPE now %d"
 
 msgid "Применяется сразу."
 msgstr "Applies at once."
@@ -472,11 +472,11 @@ msgstr "Besides the ARM cores, the IPQ9554 has a separate network block, the PPE
 msgid "Поддержка разгрузки в Beam WRT построена на открытой работе для OpenWrt и наших исправлениях к ней. Она ещё не принята в основной OpenWrt, поэтому здесь она экспериментальная."
 msgstr "Offload support in Beam WRT is built on open work for OpenWrt plus our fixes to it. It is not in mainline OpenWrt yet, so here it is experimental."
 
-msgid "Первые пакеты каждого соединения, как обычно, проходят межсетевой экран на процессоре. Когда соединение установлено, ядро записывает его в таблицу PPE, и дальше пакеты этого соединения PPE пересылает сам, с подменой адресов и портов. Это штатная функция OpenWrt «аппаратная разгрузка потоков» (flow offloading), включение здесь то же самое, что галка в настройках межсетевого экрана."
-msgstr "The first packets of every connection pass the firewall on the CPU as usual. Once the connection is established, the kernel writes it into the PPE table, and from then on the PPE forwards its packets itself, rewriting addresses and ports. This is the standard OpenWrt hardware flow offloading, turning it on here is the same as the checkbox in the firewall settings."
+msgid "Первые пакеты каждого соединения, как обычно, проходят межсетевой экран на процессоре. Когда соединение установлено, ядро записывает его в таблицу PPE, и дальше PPE пересылает его пакеты сам, с подменой адресов и портов. Это обычная функция OpenWrt, она называется аппаратной разгрузкой потоков (flow offloading). Включить её здесь то же самое, что поставить галку в настройках межсетевого экрана."
+msgstr "The first packets of every connection pass the firewall on the CPU as usual. Once the connection is established, the kernel writes it into the PPE table, and from then on the PPE forwards its packets itself, rewriting addresses and ports. This is a regular OpenWrt feature called hardware flow offloading. Turning it on here is the same as ticking the box in the firewall settings."
 
-msgid "Что разгружается:"
-msgstr "What is offloaded:"
+msgid "Что разгружается"
+msgstr "What is offloaded"
 
 msgid "IPv4 с NAT и IPv6"
 msgstr "IPv4 with NAT and IPv6"
@@ -490,14 +490,14 @@ msgstr "an uplink over PPPoE, DHCP or a static address"
 msgid "провайдерский VLAN на WAN"
 msgstr "an ISP VLAN on the WAN"
 
-msgid "Что остаётся на процессоре:"
-msgstr "What stays on the CPU:"
+msgid "Что остаётся на процессоре"
+msgstr "What stays on the CPU"
 
 msgid "первые пакеты каждого соединения и всё, что межсетевой экран не пропустил"
 msgstr "the first packets of every connection and everything the firewall did not let through"
 
-msgid "клиенты Wi-Fi: PPE находит соединение и делает NAT, но передать пакет в радиомодуль напрямую не может, пакет один раз проходит через процессор"
-msgstr "Wi-Fi clients: the PPE finds the connection and does the NAT, but cannot hand the packet to the radio directly, so it passes the CPU once"
+msgid "клиенты Wi-Fi. PPE находит соединение и делает NAT, но передать пакет в радиомодуль напрямую не может, поэтому пакет один раз проходит через процессор"
+msgstr "Wi-Fi clients. The PPE finds the connection and does the NAT, but it cannot hand the packet to the radio directly, so the packet passes the CPU once"
 
 msgid "туннели и VPN на самом роутере (WireGuard, AmneziaWG, OpenVPN, L2TP)"
 msgstr "tunnels and VPNs on the router itself (WireGuard, AmneziaWG, OpenVPN, L2TP)"
@@ -514,11 +514,11 @@ msgstr "The switch is read when the driver loads, so a change applies after the 
 msgid "С чем не дружит"
 msgstr "What does not mix with it"
 
-msgid "SQM и другие ограничители скорости: разгруженные соединения идут мимо очередей, ограничение перестаёт работать. Используйте либо SQM, либо разгрузку."
-msgstr "SQM and other rate limiters: offloaded connections bypass the queues and the limit stops working. Use either SQM or offload."
+msgid "SQM и другие ограничители скорости. Разгруженные соединения идут мимо очередей, и ограничение перестаёт работать. Используйте что-то одно, SQM или разгрузку."
+msgstr "SQM and other rate limiters. Offloaded connections bypass the queues and the limit stops working. Use one or the other, SQM or offload."
 
-msgid "Счётчики трафика по соединениям, nlbwmon и подобные: пакеты, которые переслал PPE, в них не попадают или попадают с опозданием."
-msgstr "Per-connection traffic counters, nlbwmon and the like: packets forwarded by the PPE are missing from them or show up late."
+msgid "Счётчики трафика по соединениям, например nlbwmon. Пакеты, которые переслал PPE, в них не попадают или попадают с опозданием."
+msgstr "Per-connection traffic counters such as nlbwmon. Packets forwarded by the PPE are missing from them or show up late."
 
 msgid "Правила межсетевого экрана, добавленные после установки соединения, не действуют на уже разгруженные соединения до их завершения."
 msgstr "Firewall rules added after a connection is established do not apply to already offloaded connections until they end."
@@ -529,8 +529,8 @@ msgstr "Multiple spanning trees (MSTP) are not supported by the PPE bridge, only
 msgid "Как проверить, что работает"
 msgstr "How to check it works"
 
-msgid "При включённом NAT в карточке выше видно число соединений в железе. В консоли то же самое показывает команда"
-msgstr "With NAT on, the card above shows the number of connections in hardware. In the console the same comes from"
+msgid "Когда NAT включён, в карточке выше видно, сколько соединений идёт через PPE. В консоли то же самое показывает команда ниже."
+msgstr "With NAT on, the card above shows how many connections go through the PPE. In the console the command below shows the same."
 
 msgid "При большой загрузке с проводного клиента нагрузка процессора (Статус, Обзор) должна остаться низкой."
 msgstr "During a big download from a wired client the CPU load (Status, Overview) should stay low."
@@ -538,17 +538,17 @@ msgstr "During a big download from a wired client the CPU load (Status, Overview
 msgid "Если что-то пошло не так"
 msgstr "If something goes wrong"
 
-msgid "Выключите переключатель на этой странице. NAT выключается сразу, мост после перезагрузки. Если страница недоступна, из консоли:"
-msgstr "Turn the switch off on this page. NAT turns off at once, the bridge after a reboot. If the page is not reachable, from the console:"
+msgid "Выключите разгрузку на этой странице. NAT выключается сразу, мост после перезагрузки. Если страница не открывается, выполните в консоли команды ниже."
+msgstr "Turn offload off on this page. NAT turns off at once, the bridge after a reboot. If the page does not open, run the commands below in the console."
 
-msgid "Напишите о проблеме в тему Beam WRT на 4PDA или в issues на GitHub, приложите вывод команды"
-msgstr "Report the problem in the Beam WRT topic on 4PDA or in GitHub issues, with the output of"
+msgid "Напишите о проблеме в тему Beam WRT на 4PDA или в issues на GitHub и приложите вывод этой команды."
+msgstr "Report the problem in the Beam WRT topic on 4PDA or in GitHub issues, with the output of this command."
 
 msgid "Что такое слоты"
 msgstr "What slots are"
 
-msgid "На флеше роутера два раздела для прошивки: слот 0 (rootfs) и слот 1 (rootfs_1). В каждом лежит своё ядро и своя система. Xiaomi сделала так для безопасных обновлений: новая версия пишется в свободный слот, а если она не загрузится, роутер вернётся на старую."
-msgstr "The router flash has two firmware partitions: slot 0 (rootfs) and slot 1 (rootfs_1). Each holds its own kernel and system. Xiaomi did this for safe updates: a new version is written to the free slot, and if it does not boot, the router goes back to the old one."
+msgid "На флеше роутера два раздела для прошивки, слот 0 (rootfs) и слот 1 (rootfs_1). В каждом лежит своё ядро и своя система. Xiaomi сделала так для безопасных обновлений. Новая версия пишется в свободный слот, а если она не загрузится, роутер вернётся на старую."
+msgstr "The router flash has two firmware partitions, slot 0 (rootfs) and slot 1 (rootfs_1). Each holds its own kernel and system. Xiaomi did this for safe updates. A new version is written to the free slot, and if it does not boot, the router goes back to the old one."
 
 msgid "Beam WRT при установке из стока занимает один слот, заводская прошивка остаётся во втором. Поэтому вернуться на сток можно без прошивки и без программатора, простым переключением."
 msgstr "When installed from stock, Beam WRT takes one slot and the factory firmware stays in the other. So you can go back to stock without flashing and without a programmer, with a plain switch."
@@ -568,17 +568,17 @@ msgstr "Every firmware that boots completely writes its own slot there and reset
 msgid "Если слот не загружается, загрузчик считает попытки. После шести неудачных подряд на седьмом включении он сам берёт другой слот."
 msgstr "If a slot does not boot, the bootloader counts the attempts. After six failed ones in a row it takes the other slot on the seventh power-on."
 
-msgid "Для обновлений есть разовая попытка: загрузчик один раз пробует второй слот, и если прошивка там не подтвердила загрузку, следующее включение возвращает прежний слот."
-msgstr "For updates there is a one-shot try: the bootloader tries the other slot once, and if the firmware there did not confirm its boot, the next power-on goes back to the previous slot."
+msgid "Для обновлений есть разовая попытка. Загрузчик один раз пробует второй слот, и если прошивка там не подтвердила загрузку, при следующем включении он вернётся на прежний слот."
+msgstr "For updates there is a one-shot try. The bootloader tries the other slot once, and if the firmware there did not confirm its boot, the next power-on goes back to the previous slot."
 
 msgid "Что делает кнопка переключения"
 msgstr "What the switch button does"
 
-msgid "Кнопка «Посмотреть, что там» подключает второй слот только на чтение и показывает, какая прошивка в нём лежит. Переключить можно только на слот, где есть прошивка, которая загрузится."
-msgstr "\"See what is there\" attaches the other slot read-only and shows which firmware it holds. You can only switch to a slot with firmware that will boot."
+msgid "Кнопка \"Посмотреть, что там\" подключает второй слот только на чтение и показывает, какая прошивка в нём лежит. Переключить можно только на слот, где лежит прошивка, которая загрузится."
+msgstr "The \"See what is there\" button attaches the other slot read-only and shows which firmware it holds. You can only switch to a slot with firmware that will boot."
 
-msgid "«Сделать основным и перезагрузить» записывает второй слот в flag_last_success, сбрасывает счётчики и перезагружает роутер. Переключение насовсем: загрузившаяся прошивка сама закрепит свой слот, и обратно роутер не вернётся, пока вы не переключите его снова уже из той прошивки."
-msgstr "\"Make it the main one and reboot\" writes the other slot into flag_last_success, resets the counters and reboots the router. The switch is for good: the firmware that boots makes its own slot the main one, and the router does not come back until you switch again from that firmware."
+msgid "Кнопка \"Сделать основным и перезагрузить\" записывает второй слот в flag_last_success, сбрасывает счётчики и перезагружает роутер. Переключение действует насовсем. Загрузившаяся прошивка сама закрепит свой слот, и роутер не вернётся обратно, пока вы не переключите его снова уже из той прошивки."
+msgstr "The \"Make it the main one and reboot\" button writes the other slot into flag_last_success, resets the counters and reboots the router. The switch is for good. The firmware that boots locks its own slot, and the router does not come back until you switch again from that firmware."
 
 msgid "При переходе на сток страница проверяет, есть ли у стока сохранённые настройки. Если нет, сток при первой загрузке заполнит их заводскими значениями, как после сброса."
 msgstr "When switching to stock the page checks whether stock has saved settings. If not, stock fills them with factory values on its first boot, as after a reset."
@@ -586,32 +586,32 @@ msgstr "When switching to stock the page checks whether stock has saved settings
 msgid "Как вернуться обратно"
 msgstr "How to come back"
 
-msgid "Из другой сборки Beam WRT: откройте в ней эту же страницу и переключите слот."
-msgstr "From another Beam WRT build: open this same page there and switch the slot."
+msgid "Из другой сборки Beam WRT откройте в ней эту же страницу и переключите слот."
+msgstr "From another Beam WRT build, open this same page there and switch the slot."
 
-msgid "Из заводской прошивки, если в ней включён SSH:"
-msgstr "From the factory firmware, if SSH is enabled there:"
+msgid "Из заводской прошивки, если в ней включён SSH, выполните команды ниже."
+msgstr "From the factory firmware with SSH on, run the commands below."
 
-msgid "Из заводской прошивки без SSH: установите Beam WRT заново скриптом из архива релиза, как в первый раз. Настройки Beam WRT сохранятся."
-msgstr "From the factory firmware without SSH: install Beam WRT again with the script from the release archive, as the first time. Beam WRT settings are kept."
+msgid "Из заводской прошивки без SSH установите Beam WRT заново скриптом из архива релиза, как в первый раз. Настройки Beam WRT сохранятся."
+msgstr "From the factory firmware without SSH, install Beam WRT again with the script from the release archive, as the first time. Beam WRT settings are kept."
 
-msgid "Если роутер не загружается совсем: выключите и включите питание семь раз подряд, каждый раз дав ему полминуты. На седьмой раз загрузчик сам возьмёт другой слот."
-msgstr "If the router does not boot at all: power it off and on seven times in a row, giving it half a minute each time. On the seventh time the bootloader takes the other slot itself."
+msgid "Если роутер не загружается совсем, выключите и включите питание семь раз подряд, каждый раз давая ему полминуты. На седьмой раз загрузчик сам возьмёт другой слот."
+msgstr "If the router does not boot at all, power it off and on seven times in a row, giving it half a minute each time. On the seventh time the bootloader takes the other slot itself."
 
-msgid "flag_last_success: какой слот загружается (0 или 1)."
-msgstr "flag_last_success: which slot boots (0 or 1)."
+msgid "flag_last_success показывает, какой слот загружается, 0 или 1."
+msgstr "flag_last_success shows which slot boots, 0 or 1."
 
-msgid "flag_ota_reboot: 1 значит, что следующая загрузка будет разовой попыткой второго слота."
-msgstr "flag_ota_reboot: 1 means the next boot is a one-shot try of the other slot."
+msgid "flag_ota_reboot равен 1, когда следующая загрузка будет разовой попыткой второго слота."
+msgstr "flag_ota_reboot is 1 when the next boot is a one-shot try of the other slot."
 
-msgid "flag_boot_success: подтверждение разовой попытки."
-msgstr "flag_boot_success: confirmation of the one-shot try."
+msgid "flag_boot_success подтверждает разовую попытку."
+msgstr "flag_boot_success confirms the one-shot try."
 
-msgid "flag_try_sys1_failed и flag_try_sys2_failed: счётчики неудачных попыток слота 0 и слота 1. Больше пяти значит, что загрузчик уйдёт на другой слот."
-msgstr "flag_try_sys1_failed and flag_try_sys2_failed: failed attempt counters of slot 0 and slot 1. Above five means the bootloader moves to the other slot."
+msgid "flag_try_sys1_failed и flag_try_sys2_failed считают неудачные попытки слота 0 и слота 1. Когда счётчик больше пяти, загрузчик уходит на другой слот."
+msgstr "flag_try_sys1_failed and flag_try_sys2_failed count failed attempts of slot 0 and slot 1. When a counter is above five, the bootloader moves to the other slot."
 
-msgid "flag_format_overlay: 1 значит, что сток при следующей загрузке заполнит свои настройки заводскими значениями."
-msgstr "flag_format_overlay: 1 means stock fills its settings with factory values on its next boot."
+msgid "flag_format_overlay равен 1, когда заводская прошивка при следующей загрузке заполнит свои настройки значениями по умолчанию."
+msgstr "flag_format_overlay is 1 when the factory firmware fills its settings with defaults on its next boot."
 
 msgid "Чего не делать"
 msgstr "What not to do"
@@ -619,8 +619,8 @@ msgstr "What not to do"
 msgid "Не записывайте прошивку в слот %d, из которого роутер сейчас работает."
 msgstr "Do not write firmware into slot %d, the one the router runs from now."
 
-msgid "Не стирайте разделы art, bdata и загрузчика: там калибровка радио, MAC-адреса и серийный номер именно этого роутера, заменить их нечем."
-msgstr "Do not erase the art, bdata and bootloader partitions: they hold the radio calibration, MAC addresses and serial number of this very router, and nothing can replace them."
+msgid "Не стирайте разделы art, bdata и загрузчика. В них калибровка радио, MAC-адреса и серийный номер именно этого роутера, заменить их нечем."
+msgstr "Do not erase the art, bdata and bootloader partitions. They hold the radio calibration, MAC addresses and serial number of this very router, and nothing can replace them."
 
-msgid "Не меняйте флаги вручную, если не уверены: неверное значение может оставить роутер на семь неудачных включений."
-msgstr "Do not change the flags by hand unless you are sure: a wrong value can leave the router for seven failed power-ons."
+msgid "Не меняйте флаги вручную, если не уверены. С неверным значением роутер может не загружаться семь включений подряд."
+msgstr "Do not change the flags by hand unless you are sure. With a wrong value the router may fail to boot for seven power-ons in a row."
