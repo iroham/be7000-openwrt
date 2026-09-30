@@ -1,0 +1,10 @@
+#!/bin/sh /etc/rc.common
+# Keep the extroot entry where fstools reads it. A sysupgrade creates the
+# slot's rootfs_data anew and the entry made by be7000-extroot use goes with
+# it; this puts it back from the live settings (see be7000-extroot boot-sync).
+# After bigoverlay (11), so /overlay is already where it is going to stay.
+START=12
+
+boot() {
+	/usr/sbin/be7000-extroot boot-sync
+}
