@@ -68,7 +68,8 @@ return {
 					mode = req.args?.split ? 'split' : 'single';
 				// takes 20-90 s (firmware reload, wifi reload, MLO check): run
 				// it detached and let the page poll status
-				sh(`(${BIN} mode ${mode}) >${LOG} 2>&1 </dev/null &`);
+				// a switch that hangs somewhere must not leave the page waiting forever
+				sh(`(timeout 300 ${BIN} mode ${mode} || echo "switch stopped or failed, rc $?") >${LOG} 2>&1 </dev/null &`);
 				return { ok: true, mode };
 			}
 		}
