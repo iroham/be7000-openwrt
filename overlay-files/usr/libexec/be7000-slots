@@ -1,0 +1,129 @@
+#!/bin/sh
+# The two firmware slots of the BE7000 for the Slots page.
+#
+#   be7000-slots status          current slot, the one the bootloader picks, flags
+#   be7000-slots info <0|1>      what the other slot holds (read-only look)
+#   be7000-slots switch <0|1>    make that slot the one that boots, for good
+#
+# Slot 0 is mtd "rootfs", slot 1 "rootfs_1". The stock bootloader boots
+# flag_last_success; each system confirms itself at the end of its boot
+# (stock boot_check and our be7000-bootconfirm both set flag_last_success
+# to their own slot), so a switch is always for good: from stock the way
+# back is the same flag change, see the page text. The running slot is
+# never attached or written here.
+
+JSON=1
+
+mtd_of() { [ "$1" = 0 ] && echo rootfs || echo rootfs_1; }
+
+current() {
+	local a
+	for a in $(cat /proc/cmdline); do
+		case "$a" in
+		ubi.mtd=rootfs) echo 0; return 0 ;;
+		ubi.mtd=rootfs_1) echo 1; return 0 ;;
+		esac
+	done
+	return 1
+}
+
+env() { fw_printenv -n "$1" 2>/dev/null; }
+
+jstr() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n'; }
+
+cmd_status() {
+	local cur
+	cur="$(current)" || cur=-1
+	printf '{"current":%s,"last_success":"%s","ota_reboot":"%s","boot_success":"%s","try_sys1_failed":"%s","try_sys2_failed":"%s","format_overlay":"%s","this":"%s"}\n' \
+		"$cur" "$(env flag_last_success)" "$(env flag_ota_reboot)" "$(env flag_boot_success)" \
+		"$(env flag_try_sys1_failed)" "$(env flag_try_sys2_failed)" "$(env flag_format_overlay)" \
+		"$(jstr "$(sed -n "s/^DISTRIB_DESCRIPTION='\(.*\)'$/\1/p" /etc/openwrt_release)")"
+}
+
+# read-only look into the other slot: attach, expose the squashfs through
+# ubiblock, mount it read-only, read the version files, undo everything
+cmd_info() {
+	local slot="$1" cur mtdn dev n vol blk mnt=/tmp/be7000-slot-look kind="" ver="" rc=0
+	cur="$(current)" || { echo '{"error":"no ubi.mtd=rootfs* on the command line"}'; return 1; }
+	case "$slot" in 0|1) ;; *) echo '{"error":"slot is 0 or 1"}'; return 1 ;; esac
+	[ "$slot" = "$cur" ] && { echo '{"error":"that is the running slot"}'; return 1; }
+	mtdn="$(grep "\"$(mtd_of $slot)\"" /proc/mtd | cut -d: -f1 | sed 's/mtd//')"
+	[ -n "$mtdn" ] || { echo '{"error":"no such mtd"}'; return 1; }
+	for n in /sys/class/ubi/ubi[0-9]*; do
+		[ "$(cat $n/mtd_num 2>/dev/null)" = "$mtdn" ] && { echo '{"error":"slot already attached"}'; return 1; }
+	done
+	ubiattach -m "$mtdn" -d 9 >/dev/null 2>&1 || { printf '{"slot":%s,"kind":"empty"}\n' "$slot"; return 0; }
+	for n in /sys/class/ubi/ubi9_*; do
+		[ "$(cat $n/name 2>/dev/null)" = ubi_rootfs ] && vol=$(basename $n)
+	done
+	if [ -n "$vol" ]; then
+		ubiblock --create /dev/$vol >/dev/null 2>&1
+		blk=/dev/ubiblock${vol#ubi}
+		mkdir -p $mnt
+		if mount -t squashfs -o ro $blk $mnt 2>/dev/null; then
+			if [ -s $mnt/usr/share/xiaoqiang/xiaoqiang_version ]; then
+				kind=stock
+				ver="$(sed -n "s/^option ROM '\(.*\)'$/\1/p; s/^\s*option ROM '\(.*\)'$/\1/p" $mnt/usr/share/xiaoqiang/xiaoqiang_version | head -1)"
+			elif [ -s $mnt/etc/openwrt_release ]; then
+				kind=openwrt
+				ver="$(sed -n "s/^DISTRIB_DESCRIPTION='\(.*\)'$/\1/p" $mnt/etc/openwrt_release)"
+				[ -e $mnt/etc/be7000-test ] && kind=test
+			else
+				kind=unknown
+			fi
+			umount $mnt
+		else
+			kind=unknown
+		fi
+		rmdir $mnt 2>/dev/null
+		ubiblock --remove /dev/$vol >/dev/null 2>&1
+	else
+		kind=unknown
+	fi
+	ubidetach -d 9 >/dev/null 2>&1 || rc=1
+	printf '{"slot":%s,"kind":"%s","version":"%s","detached":%s}\n' "$slot" "$kind" "$(jstr "$ver")" "$([ $rc = 0 ] && echo true || echo false)"
+}
+
+# stock keeps its settings next to ours on mtd28; decide whether it should
+# repopulate them from its ROM (same logic as scripts/rollback-to-stock.sh)
+stock_settings_flag() {
+	case "$(grep ' /overlay ' /proc/mounts | cut -d' ' -f1)" in
+	/dev/ubi1_*)
+		if [ -s /overlay/sec_cfg/data.vol ] || [ -s /overlay/usr/sec_cfg/data.vol ] \
+		   || [ -n "$(ls /overlay/etc/config 2>/dev/null)" ]; then
+			[ -n "$(env flag_format_overlay)" ] && fw_setenv flag_format_overlay
+		else
+			fw_setenv flag_format_overlay 1
+		fi
+		;;
+	esac
+}
+
+cmd_switch() {
+	local slot="$1" cur kind
+	cur="$(current)" || { echo "no ubi.mtd=rootfs* on the command line" >&2; return 1; }
+	case "$slot" in 0|1) ;; *) echo "slot is 0 or 1" >&2; return 1 ;; esac
+	[ "$slot" = "$cur" ] && { echo "slot $slot is already running" >&2; return 1; }
+	kind="$(cmd_info "$slot" | sed -n 's/.*"kind":"\([a-z]*\)".*/\1/p')"
+	case "$kind" in
+	stock) stock_settings_flag ;;
+	openwrt|test) ;;
+	*) echo "slot $slot holds no firmware this can boot ($kind)" >&2; return 1 ;;
+	esac
+	fw_setenv flag_try_sys1_failed 0 || return 1
+	fw_setenv flag_try_sys2_failed 0
+	fw_setenv flag_ota_reboot 0
+	fw_setenv flag_boot_success 1
+	fw_setenv flag_boot_rootfs "$slot"
+	fw_setenv flag_last_success "$slot"
+	[ "$(env flag_last_success)" = "$slot" ] || { echo "the bootloader environment did not take the change" >&2; return 1; }
+	logger -t be7000-slots "slot $slot ($kind) boots from now on"
+	echo "slot $slot ($kind) boots from now on"
+}
+
+case "$1" in
+status) cmd_status ;;
+info) cmd_info "$2" ;;
+switch) cmd_switch "$2" ;;
+*) echo "usage: $0 status | info <0|1> | switch <0|1>" >&2; exit 1 ;;
+esac

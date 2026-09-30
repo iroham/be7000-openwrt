@@ -1,0 +1,15 @@
+{
+	"luci-app-be7000-slots": {
+		"description": "The two firmware slots",
+		"read": {
+			"ubus": {
+				"be7000-slots": [ "status", "info" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"be7000-slots": [ "switch" ]
+			}
+		}
+	}
+}

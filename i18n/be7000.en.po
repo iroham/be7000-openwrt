@@ -327,3 +327,84 @@ msgstr "What is in %s"
 
 msgid "Проверка новых версий этой сборки на GitHub и установка без ручной загрузки файлов. Модули ядра и пакеты фида после обновления подхватываются под новое ядро сами."
 msgstr "Checks GitHub for new versions of this build and installs them without downloading files by hand. Kernel modules and feed packages are picked up for the new kernel by themselves after the update."
+
+msgid "Слоты"
+msgstr "Slots"
+
+msgid "Заводская прошивка Xiaomi"
+msgstr "Xiaomi factory firmware"
+
+msgid "Beam WRT или другой OpenWrt"
+msgstr "Beam WRT or another OpenWrt"
+
+msgid "Тестовая сборка Beam WRT"
+msgstr "Beam WRT test build"
+
+msgid "Пусто"
+msgstr "Empty"
+
+msgid "Не удалось определить"
+msgstr "Could not tell"
+
+msgid "Содержимое не проверялось."
+msgstr "Not looked into yet."
+
+msgid "Посмотреть, что там"
+msgstr "See what is there"
+
+msgid "Слот %d"
+msgstr "Slot %d"
+
+msgid "работает сейчас"
+msgstr "running now"
+
+msgid "загружается по умолчанию"
+msgstr "boots by default"
+
+msgid "Сделать основным и перезагрузить"
+msgstr "Make it the one that boots and reboot"
+
+msgid "Роутер загрузит заводскую прошивку, и она сама станет основной. Настройки Beam WRT останутся на месте."
+msgstr "The router boots the factory firmware, and it makes itself the one that boots. The Beam WRT settings stay where they are."
+
+msgid "Вернуться на Beam WRT из стока можно так. Если в стоке включён SSH, выполните"
+msgstr "To come back to Beam WRT from stock, with SSH enabled on stock, run"
+
+msgid "Или поставьте Beam WRT заново скриптом из архива релиза, настройки сохранятся."
+msgstr "Or install Beam WRT again with the script from the release archive, the settings are kept."
+
+msgid "Роутер загрузит %s из слота %d, и эта прошивка станет основной."
+msgstr "The router boots %s from slot %d, and that firmware becomes the one that boots."
+
+msgid "прошивку"
+msgstr "the firmware"
+
+msgid "Вернуться можно на этой же странице той прошивки."
+msgstr "You can come back from the same page of that firmware."
+
+msgid "Сделать слот %d основным?"
+msgstr "Make slot %d the one that boots?"
+
+msgid "Переключаю слот"
+msgstr "Switching the slot"
+
+msgid "Закрыть"
+msgstr "Close"
+
+msgid "Перезагрузка"
+msgstr "Rebooting"
+
+msgid "Роутер перезагружается в слот %d. Эта страница больше не ответит."
+msgstr "The router reboots into slot %d. This page will not answer any more."
+
+msgid "Переключить и перезагрузить"
+msgstr "Switch and reboot"
+
+msgid "Не удалось определить текущий слот."
+msgstr "Could not tell the running slot."
+
+msgid "На флеше два слота для прошивки. Загрузчик запускает один из них, второй ждёт: обычно там заводская прошивка, и на неё можно вернуться в любой момент. Прошивка, которая загрузилась, сама делает свой слот основным."
+msgstr "The flash has two firmware slots. The bootloader starts one of them, the other one waits: usually it holds the factory firmware, and you can go back to it at any time. The firmware that boots makes its own slot the one that boots next time."
+
+msgid "Флаги загрузчика"
+msgstr "Bootloader flags"

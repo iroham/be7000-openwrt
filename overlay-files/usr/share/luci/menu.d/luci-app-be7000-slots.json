@@ -1,0 +1,13 @@
+{
+	"admin/system/slots": {
+		"title": "Слоты",
+		"order": 46,
+		"action": {
+			"type": "view",
+			"path": "be7000-slots/slots"
+		},
+		"depends": {
+			"acl": [ "luci-app-be7000-slots" ]
+		}
+	}
+}
