@@ -77,6 +77,28 @@ current_overlay_device() {
 	mount | awk '$3 == "/overlay" { print $1; exit }'
 }
 
+# In use: mounted, or an active swap partition (swap does not show in mount).
+dev_in_use() {
+	mount | grep -q "^$1 " && return 0
+	grep -q "^$1 " /proc/swaps 2>/dev/null && return 0
+	return 1
+}
+
+# A whole disk is busy when any of its partitions is in use.
+children_busy() {
+	local d
+	case "$1" in
+	/dev/sd[a-z]) ;;
+	/dev/mmcblk[0-9]) ;;
+	*) return 1 ;;
+	esac
+	for d in "$1"[0-9]* "$1"p[0-9]*; do
+		[ -b "$d" ] || continue
+		dev_in_use "$d" && return 0
+	done
+	return 1
+}
+
 
 # A partition whose whole disk is in use is not safe to touch: after the disk
 # was re-partitioned the kernel can still expose stale partition nodes that now
@@ -88,7 +110,7 @@ parent_busy() {
 	/dev/mmcblk[0-9]p[0-9]*) parent="$(echo "$dev" | sed 's/p[0-9]*$//')" ;;
 	*) return 1 ;;
 	esac
-	mount | grep -q "^$parent " && return 0
+	dev_in_use "$parent" && return 0
 	return 1
 }
 
@@ -120,8 +142,10 @@ cmd_list() {
 		size="$(awk -v n="$name" '$4 == n { printf "%.1f GB", $3/1024/1024 }' /proc/partitions)"
 		model=""
 		[ -r "/sys/class/block/$name/device/model" ] && model="$(cat "/sys/class/block/$name/device/model")"
-		if mount | grep -q "^$d "; then
-			echo "$d  ${size:-?}  $model  (mounted, skipped)"
+		if dev_in_use "$d"; then
+			echo "$d  ${size:-?}  $model  (in use, skipped)"
+		elif children_busy "$d"; then
+			echo "$d  ${size:-?}  $model  (partitions in use, skipped)"
 		elif parent_busy "$d"; then
 			echo "$d  ${size:-?}  $model  (whole disk in use, skipped)"
 		else
@@ -143,7 +167,8 @@ cmd_list_json() {
 		model=""
 		[ -r "/sys/class/block/$name/device/model" ] && model="$(tr -d '\r' < "/sys/class/block/$name/device/model" | sed 's/[[:space:]]*$//' | sed 's/"/\\"/g')"
 		mounted=false
-		mount | grep -q "^$d " && mounted=true
+		dev_in_use "$d" && mounted=true
+		children_busy "$d" && mounted=true
 		parent_busy "$d" && mounted=true
 		[ $first = 1 ] || printf ','
 		first=0
@@ -168,7 +193,8 @@ cmd_use() {
 	local dev="$1" yes="$2" do_reboot="$3" uuid
 	[ -n "$dev" ] || die "usage: be7000-extroot use <device> [--yes] [--reboot]"
 	[ -b "$dev" ] || die "$dev is not a block device"
-	mount | grep -q "^$dev " && die "$dev is mounted, unmount it first"
+	dev_in_use "$dev" && die "$dev is mounted or used as swap, free it first"
+	children_busy "$dev" && die "partitions of $dev are mounted or used as swap, a whole disk in use cannot be formatted"
 	parent_busy "$dev" && die "the whole disk this partition sits on is mounted, so this node may be stale; unmount it first"
 	case "$dev" in
 	/dev/ubi*|/dev/mtd*) die "$dev is internal flash, not an external disk" ;;
