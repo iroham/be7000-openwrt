@@ -1727,9 +1727,16 @@ input[type="reset"]:hover {
 	flex: 1 1 auto;
 	min-width: 0;
 	max-width: none;
+	white-space: nowrap;
+}
+
+/* not on the dropdown: its open list is positioned inside it and would be
+   cut off (MAC list of a static lease, DNS servers and the like); its own
+   closed row already clips through .cbi-dropdown > ul */
+.cbi-dynlist > .add-item > input,
+.cbi-dynlist > .add-item > button {
 	overflow: hidden;
 	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 .cbi-dynlist > .add-item > .cbi-button-add { flex: 0 0 auto; }
