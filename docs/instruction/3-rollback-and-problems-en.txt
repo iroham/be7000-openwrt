@@ -1,38 +1,72 @@
-Going back to stock, and when something goes wrong
+Going back to the factory firmware, and what to do when something goes wrong
 
-Rollback from a running OpenWrt
-Copy rollback-to-stock.sh to the router, run it and reboot:
+
+Going back from the running firmware
+
+The easiest way is the System, Slots page. On the other slot press "See what is there", then "Make it the main one and reboot". The same page explains in full how the bootloader picks a slot and how to come back to Beam WRT later.
+
+You can also use the script. Copy rollback-to-stock.sh to the router, run it and reboot the router.
 
 scp -O rollback-to-stock.sh root@192.168.1.1:/tmp/
 ssh root@192.168.1.1 "sh /tmp/rollback-to-stock.sh && reboot"
 
-The script flashes nothing, it switches the boot slot to the other slot where stock is. OpenWrt stays in its slot. Stock comes up with its own settings. This works over Wi-Fi too.
-In 1.2.6, 1.2.7 and the debug builds the rollback script itself reset stock to factory settings. Stock keeps them in an encrypted sec_cfg container, the old script did not know that and decided there were none. If your copy of the script comes from one of those, take the fixed scripts/rollback-to-stock.sh from the repository.
-If stock came up with empty settings after going back (web interface without settings, SSH does not start, xmir-patcher says "dropbear is found, but it cannot run"), a version from 1.2 to 1.2.5 was installed before, those formatted the stock settings partition. A normal factory reset fixes it: hold the reset button for about ten seconds, or over telnet: nvram set restore_defaults=1 && nvram commit && reboot -f.
-MIWIFIRepairTool also brings stock back, nothing is lost with it either.
+Neither the page nor the script flashes anything. They only switch the boot to the other slot, where the factory firmware is. Beam WRT stays in its slot and the factory firmware boots with its own settings. This works over Wi-Fi too.
 
-If OpenWrt does not boot
-The installer from 1.2.3 on hands the slot over the same way a normal Xiaomi update does, and if OpenWrt did not come up, the very next power-on brings stock back.
+The script from 1.2.6, 1.2.7 and the debug builds reset the factory firmware to its defaults. It keeps its settings encrypted, the old script did not know that and decided there were none. If your script comes from those versions, take the fixed scripts/rollback-to-stock.sh from the repository.
+
+Sometimes the factory firmware comes back with empty settings after the switch. The web interface is empty, SSH does not start, xmir-patcher says "dropbear is found, but it cannot run". That means one of the versions from 1.2 to 1.2.5 was installed before, they erased the factory settings partition. A normal reset fixes it. Hold the reset button for about ten seconds, or run the command below over telnet.
+
+nvram set restore_defaults=1 && nvram commit && reboot -f
+
+MIWIFIRepairTool also brings the factory firmware back, nothing is lost with it either.
+
+
+Coming back from the factory firmware to Beam WRT
+
+If SSH is on in the factory firmware, switch the boot back. The Slots page shows which slot holds Beam WRT, note it before you switch.
+
+nvram set flag_last_success=<Beam WRT slot>
+nvram set flag_boot_rootfs=<Beam WRT slot>
+nvram set flag_ota_reboot=0
+nvram commit
+reboot
+
+Without SSH, install Beam WRT again as in 1-install-en.txt. Your Beam WRT settings are kept.
+
+
+If the firmware does not boot
+
+The installer since 1.2.3 hands the slot over the same way a normal Xiaomi update does. If the firmware did not boot, the next power-on takes the router back to the factory firmware.
+
 With older versions the bootloader switches the slot only on the seventh power-on in a row. Power off and on, and wait about thirty seconds after each power-on.
-Power cycling does not help once OpenWrt has booted successfully: it has confirmed its slot. Use the rollback script above.
+
+Once the firmware has booted successfully, cutting the power does not help, it has already locked its slot. Then use the Slots page or the rollback script.
+
 
 The router booted but does not answer
-First check the computer's address: 192.168.1.2 for OpenWrt, 192.168.31.2 for stock, mask 255.255.255.0, empty gateway. A common mistake is giving the computer the same address as the router.
-No wired network but Wi-Fi works: on some boards Ethernet does not work after flashing, this is being worked on. Connect over Wi-Fi (network OpenWrt-BE7000, password be7000openwrt), collect the output and post it in the thread or in a GitHub issue:
+
+First check the address. If the settings were taken from the factory firmware during the install, Beam WRT usually stays at its address 192.168.31.1. If not, it is at 192.168.1.1. When the computer gets no address by itself, give it one from the same network, 192.168.31.2 or 192.168.1.2, mask 255.255.255.0 and an empty gateway. A common mistake is giving the computer the same address as the router.
+
+No wired network while Wi-Fi works. The cause that broke the cable on some boards was found and fixed in 1.3.0. If you still see it, connect over Wi-Fi, collect the output of the command below and post it in the thread or in a GitHub issue. Wi-Fi has the name and password from the factory firmware, or OpenWrt-BE7000 with password be7000openwrt.
 
 dmesg | grep -i -E "10gbase-r|baser|xpcs|qca8084|link is"
 
-Failsafe mode: while the white LED blinks, press reset several times, the router comes up at 192.168.1.1 without settings and without a password. From there you can collect a log (logread, ip addr, dmesg).
-If you compared the partition with the image using mtd verify and the hashes differ, that is normal, ubiformat writes its own structure, the partition never matches the file byte for byte.
+There is a failsafe mode. While the white LED blinks, press reset several times. The router comes up at 192.168.1.1 without settings and without a password, and you can collect a log there with logread, ip addr and dmesg.
+
+If you compared the partition with the image using mtd verify and the checksums differ, that is normal. ubiformat writes the partition its own way, it never matches the file byte for byte.
+
 
 Boot log in flash
-Since 1.2.4 the image writes its boot log to flash by itself: dmesg to the crash_syslog partition (mtd27), and if the kernel crashes, the last 64 KB of its output to crash (mtd26). Both can be read from stock. Back on stock, run over SSH or telnet
+
+Since 1.2.4 the firmware writes its boot log to flash by itself. The dmesg output goes to the crash_syslog partition (mtd27), and if the kernel crashes, the last 64 KB of its output go to the crash partition (mtd26). Both can be read from the factory firmware. Go back to it and run two commands over SSH or telnet.
 
 dd if=/dev/mtd27 bs=64k 2>/dev/null | strings > /tmp/bootlog.txt
 dd if=/dev/mtd26 bs=64k 2>/dev/null | strings > /tmp/oops.txt
 
-and send these files. If the first one is empty, the system did not even reach preinit.
+Send these files. If the first one is empty, the system did not even get through the very start of the boot.
+
 
 Never do this
-Do not write anything to the bootloader partitions (APPSBL and APPSBL_1).
-The UART on the board is 1.8 V. Do not transmit into the console with a 3.3 V adapter. Reading is fine if you connect the board's TX to the adapter's RX and ground, it works most reliably with an FT232R.
+
+Do not write anything to the bootloader partitions APPSBL and APPSBL_1.
+The UART on the board runs at 1.8 V. Do not transmit into the console with a 3.3 V adapter. Reading is fine, connect the board TX to the adapter RX and ground to ground. It works most reliably with an FT232R adapter.

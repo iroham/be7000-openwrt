@@ -17,23 +17,25 @@ The first line measures client to router, the second router to client. Four stre
 
 Memory. `MemTotal` and `MemAvailable` from `/proc/meminfo` 10 minutes after boot, with every service of the build and Wi-Fi on both bands.
 
-The conditions go next to the numbers: channel, width, signal at the client, 5 GHz mode. Without them numbers cannot be compared.
+The conditions go next to the numbers. That is the channel, the width, the signal at the client and the 5 GHz mode. Without them numbers cannot be compared.
 
 ## Results
 
-Build dev2-20260930 (OpenWrt main d958caf, kernel 6.18.52), September 30, 2026. Client: a MacBook with Wi-Fi 7 (802.11be), in the same room as the router.
+A 1.4.0 test build (OpenWrt main d958caf, kernel 6.18.52), September 30, 2026. The client is a MacBook with Wi-Fi 7 (802.11be), in the same room as the router.
 
 | 5 GHz mode | Client channel | Signal | Client → router | Router → client | Router CPU |
 |---|---|---|---|---|---|
 | One radio | 149, 80 MHz, EHT | -51 dBm | 211 Mbit/s | 545 Mbit/s | 8 % / 5 % |
 | MLO, 36 at 160 MHz and 149 at 80 MHz | 149, 80 MHz, EHT, one link | -54 dBm | 81 Mbit/s | 441 Mbit/s | 6 % / 4 % |
 
+![5 GHz Wi-Fi speed in one-radio and MLO mode](img/bench-wifi-5g-en.svg)
+
 In two-radio and MLO mode the radio firmware splits the four chains of the QCN9274 in half, two per radio. That is why one client is faster in one-radio mode. Two radios and MLO pay off with many clients on different channels. The MacBook joins the MLO network on one link, not as an MLD, so it cannot show two links adding up.
 
-Memory: 881,336 kB total, 509,712 kB available.
+Memory is 881,336 kB in total, 509,712 kB of it available.
 
 ## Not measured yet
 
-- Routing and NAT: needs a second wired computer, and the test bench WAN runs at 100 Mbit/s.
+- Routing and NAT on a wired connection. There is no way to run such a measurement yet.
 - A client that joins MLO on two links at once.
-- Numbers with hardware NAT offload, once it exists.
+- Numbers with hardware NAT offload. Offload is there now (Network, Hardware offload), and the visible gain is expected for wired clients. There is no way to run such a measurement yet. If you can, send a measurement with the method above, with offload and without.

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 440" width="720" height="440" role="img" aria-label="5 GHz Wi-Fi speed in one-radio and MLO mode">
+<style>
+.bg{fill:#fcfcfb}.t1{fill:#0b0b0b}.t2{fill:#52514e}.grid{stroke:#e4e3de}.axis{stroke:#b9b8b2}
+.s1{fill:#2a78d6}.s2{fill:#eb6834}.s3{fill:#1baf7a}
+text{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+@media (prefers-color-scheme: dark){.bg{fill:#1a1a19}.t1{fill:#ffffff}.t2{fill:#c3c2b7}.grid{stroke:#34332f}.axis{stroke:#5b5a55}
+.s1{fill:#3987e5}.s2{fill:#d95926}.s3{fill:#199e70}}
+</style>
+<rect class="bg" width="720" height="440" rx="12"/>
+<text class="t1" x="24" y="36" font-size="18" font-weight="600">5 GHz Wi-Fi speed in one-radio and MLO mode</text>
+<text class="t2" x="24" y="58" font-size="13">MacBook with Wi-Fi 7 in the same room as the router, iperf3, 4 streams, 15 s</text>
+<rect class="s1" x="24" y="74" width="12" height="12" rx="3"/><text class="t2" x="42" y="85" font-size="13">Client → router</text>
+<rect class="s2" x="190" y="74" width="12" height="12" rx="3"/><text class="t2" x="208" y="85" font-size="13">Router → client</text>
+<line class="grid" x1="70" x2="680" y1="362.0" y2="362.0" stroke-width="1"/>
+<text class="t2" x="62" y="366.0" font-size="12" text-anchor="end">0</text>
+<line class="grid" x1="70" x2="680" y1="323.6666666666667" y2="323.6666666666667" stroke-width="1"/>
+<text class="t2" x="62" y="327.6666666666667" font-size="12" text-anchor="end">100</text>
+<line class="grid" x1="70" x2="680" y1="285.3333333333333" y2="285.3333333333333" stroke-width="1"/>
+<text class="t2" x="62" y="289.3333333333333" font-size="12" text-anchor="end">200</text>
+<line class="grid" x1="70" x2="680" y1="247.0" y2="247.0" stroke-width="1"/>
+<text class="t2" x="62" y="251.0" font-size="12" text-anchor="end">300</text>
+<line class="grid" x1="70" x2="680" y1="208.66666666666666" y2="208.66666666666666" stroke-width="1"/>
+<text class="t2" x="62" y="212.66666666666666" font-size="12" text-anchor="end">400</text>
+<line class="grid" x1="70" x2="680" y1="170.33333333333334" y2="170.33333333333334" stroke-width="1"/>
+<text class="t2" x="62" y="174.33333333333334" font-size="12" text-anchor="end">500</text>
+<line class="grid" x1="70" x2="680" y1="132.0" y2="132.0" stroke-width="1"/>
+<text class="t2" x="62" y="136.0" font-size="12" text-anchor="end">600</text>
+<text class="t2" x="24" y="122" font-size="12">Mbit/s</text>
+<g><title>One radio, Client → router: 211 Mbit/s</title><path class="s1" d="M151.5,362.0 L151.5,285.1166666666667 Q151.5,281.1166666666667 155.5,281.1166666666667 L217.5,281.1166666666667 Q221.5,281.1166666666667 221.5,285.1166666666667 L221.5,362.0 Z"/></g>
+<text class="t1" x="186.5" y="275.1166666666667" font-size="13" font-weight="600" text-anchor="middle">211</text>
+<g><title>One radio, Router → client: 545 Mbit/s</title><path class="s2" d="M223.5,362.0 L223.5,157.08333333333334 Q223.5,153.08333333333334 227.5,153.08333333333334 L289.5,153.08333333333334 Q293.5,153.08333333333334 293.5,157.08333333333334 L293.5,362.0 Z"/></g>
+<text class="t1" x="258.5" y="147.08333333333334" font-size="13" font-weight="600" text-anchor="middle">545</text>
+<text class="t1" x="222.5" y="384" font-size="14" text-anchor="middle">One radio</text>
+<text class="t2" x="222.5" y="402" font-size="12" text-anchor="middle">149, 80 MHz, -51 dBm</text>
+<g><title>MLO, Client → router: 81 Mbit/s</title><path class="s1" d="M456.5,362.0 L456.5,334.95 Q456.5,330.95 460.5,330.95 L522.5,330.95 Q526.5,330.95 526.5,334.95 L526.5,362.0 Z"/></g>
+<text class="t1" x="491.5" y="324.95" font-size="13" font-weight="600" text-anchor="middle">81</text>
+<g><title>MLO, Router → client: 441 Mbit/s</title><path class="s2" d="M528.5,362.0 L528.5,196.95 Q528.5,192.95 532.5,192.95 L594.5,192.95 Q598.5,192.95 598.5,196.95 L598.5,362.0 Z"/></g>
+<text class="t1" x="563.5" y="186.95" font-size="13" font-weight="600" text-anchor="middle">441</text>
+<text class="t1" x="527.5" y="384" font-size="14" text-anchor="middle">MLO</text>
+<text class="t2" x="527.5" y="402" font-size="12" text-anchor="middle">one link on 149, 80 MHz, -54 dBm</text>
+<line class="axis" x1="70" x2="680" y1="362" y2="362" stroke-width="1"/>
+</svg>

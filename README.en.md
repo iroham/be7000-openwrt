@@ -9,9 +9,11 @@ Firmware for the Xiaomi BE7000 based on OpenWrt.
 
 Beam WRT is fresh OpenWrt from main for the Xiaomi BE7000 (RC06 board, IPQ9554 SoC), kernel 6.18, no kexec. Up to 1.3.1 the build was simply called be7000-openwrt, after the repository. The system boots straight from flash, the stock firmware stays in the other slot, and you can go back to it at any time.
 
-It is based on the kravasuper port (branch xiaomi_be7000, commit 790d036a). On top of it I added fixes to the Ethernet driver, without which the system on my board never got as far as the network ([patches.en.md](docs/patches.en.md)), and a set of services that make life with two slots and the factory bootloader predictable.
+**What the firmware can do, what is new in 1.4.0 and how it differs from others is collected on [features.en.md](docs/features.en.md).**
 
-The current version is **1.3.1**. Images are in [Releases](../../releases), checksums in sha256sums.txt. How to install it is in the section [Installation, updating, rollback](#installation-updating-rollback).
+Since 1.4.0 it is based on OpenWrt main (commit d958caf, September 29, 2026) with the kravasuper port on top, as the patch series in patches/port. Up to 1.4.0 the build sat on the kravasuper branch xiaomi_be7000, commit 790d036a. On top of it I added fixes to the Ethernet driver, without which the system on my board never got as far as the network ([patches.en.md](docs/patches.en.md)), and a set of services that make life with two slots and the factory bootloader predictable.
+
+The current version is **1.4.0**. Images are in [Releases](../../releases), checksums in sha256sums.txt. How to install it is in the section [Installation, updating, rollback](#installation-updating-rollback).
 
 ## Contents
 
@@ -40,7 +42,7 @@ My own board: RC06, IPQ9554 rev 1.1, stock firmware 1.1.38, 1 GB of RAM.
 ## Known issues
 
 - **Ethernet on some boards before 1.3.0.** The ports brought up a link, but the router did not receive a single frame. The cause was the kernel's RPM request for the l2 regulator, fixed in 1.3.0, details in [patches.en.md](docs/patches.en.md#ethernet-reception-on-some-boards). If the cable still does not work on your board, write in [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) or in the 4PDA thread, you can get in over Wi-Fi (network OpenWrt-BE7000, password be7000openwrt).
-- 5 GHz is one radio for the whole band by default. It can be split into two independent ones, like 5G-1 and 5G-2 on stock (36-64 and 149-165), in the 5 GHz mode block at the top of Network, Wireless or with be7000-5g-split on, details in [patches.en.md](docs/patches.en.md#5-ghz-two-radios).
+- 5 GHz is one radio for the whole band by default. It can be split into two independent ones, like 5G-1 and 5G-2 on stock (36-64 and 149-165), in the 5 GHz mode block at the top of Network, Wireless or with be7000-5g-split on, details in [patches.en.md](docs/patches.en.md#two-radios-on-5-ghz).
 - There is 19.4 MB of space for /overlay; for anything large it is better to move it to USB with the be7000-extroot command.
 - The kernel uses the mainline qcom-ppe rather than the vendor NSS, so acceleration is only at the PPE level.
 - The port lags behind OpenWrt main, updating the base may require reworking the patches.
@@ -58,7 +60,7 @@ Do not touch the bootloader (0:APPSBL and 0:APPSBL_1) under any circumstances, i
 
 ## What is in the image
 
-OpenWrt SNAPSHOT r20260623-790d036a, kernel 6.18.36, architecture aarch64_cortex-a73, apk packages. The feeds are pinned to the same date (feeds-pins.txt). The exact package list is in the manifest file, the build config in config.buildinfo.
+OpenWrt main r20260929-d958caf, kernel 6.18.52, Wi-Fi drivers from backports 7.2, architecture aarch64_cortex-a73, apk packages. The feeds are pinned to the same date (feeds-pins.txt). The exact package list is in the manifest file, the build config in config.buildinfo.
 
 Notable items: the qcom-ppe module with PPE acceleration, firewall4 and nftables, PPPoE, dnsmasq-full, WireGuard and AmneziaWG, tc and ifb for shaping, the ath11k (2.4 GHz) and ath12k (5 GHz) drivers with firmware, full wpad, LuCI with https and Russian language, USB storage support, iperf3. The kmod-ath11k-ahb package was not in the port's profile, I added it; without it the built-in 2.4 GHz radio is left without a driver.
 
@@ -78,6 +80,8 @@ Packages install out of the box. The official mirror builds qualcommbe for corte
 
 ## Documentation
 
+- [cookbook.en.md](docs/cookbook.en.md): recipes, modem, phone over USB, Docker, 5 GHz modes and MLO, settings from stock, slots, updating
+- [benchmarks.en.md](docs/benchmarks.en.md): measurements and how to repeat them
 - [patches.en.md](docs/patches.en.md): what was added to the port and why, patches in progress
 - [bootloader.en.md](docs/bootloader.en.md): flash slots, how the bootloader picks a slot, when it brings up the network
 - [storage.en.md](docs/storage.en.md): space for settings and packages, the volume shared with stock, moving to USB
