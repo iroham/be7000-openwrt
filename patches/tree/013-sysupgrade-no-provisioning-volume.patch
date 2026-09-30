@@ -1,0 +1,28 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: sysupgrade: no provisioning volume on the BE7000
+
+Since OpenWrt 725a1dc534 sysupgrade creates a provisioning UBI volume by
+default. On the BE7000 it is created before the kernel volume and takes
+volume 0, where the stock bootloader looks for the kernel, so an upgraded
+slot does not boot any more: amber LED, and only after seven power
+cycles the bootloader falls back to the other slot. Seen upgrading a
+local build from a 1.4.0 candidate; images written from a factory.ubi or
+upgraded from 1.3.x (old sysupgrade) were fine.
+
+---
+diff --git a/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh b/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh
+index df15bd4914..647f52d1de 100644
+--- a/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh
++++ b/target/linux/qualcommbe/ipq95xx/base-files/lib/upgrade/platform.sh
+@@ -55,6 +55,11 @@ be7000_do_upgrade() {
+ 	echo "Writing OpenWrt image to Xiaomi OpenWrt UBI slot $target_part (slot $target_slot)"
+ 	CI_UBIPART="$target_part"
+ 	CI_ROOTPART="ubi_rootfs"
++	# sysupgrade creates a "provisioning" volume by default since OpenWrt
++	# 725a1dc534. It is made before the kernel volume and takes volume 0,
++	# and the stock bootloader loads the kernel from volume 0: the slot
++	# never boots again (amber LED until the bootloader gives up on it).
++	UPGRADE_OPT_ADD_PROVISIONING=0
+ 	nand_detach_ubi "$target_part" || return 1
+ 	ubiformat "/dev/mtd$mtdnum" -y || return 1
+ 	nand_do_flash_file "$image" "fwtool -q -i /tmp/sysupgrade.meta -T $image" || return 1
