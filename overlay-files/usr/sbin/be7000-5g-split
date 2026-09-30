@@ -18,9 +18,10 @@
 # mlo runs the same two radios as split and joins them in one Wi-Fi 7
 # network (an MLD with a link on each radio). Every 5 GHz network gets an
 # MLO twin over both radios; the per-radio copies stay in the config, only
-# switched off, so going back restores them exactly. 802.11be MLO requires
-# WPA3 with management frame protection, so the twin is SAE only; devices
-# limited to WPA2 stay on 2.4 GHz. The lower radio may run 160 MHz: its
+# switched off, so going back restores them exactly. The twin runs WPA3
+# compatibility mode (sae-compat): the SAE-EXT-KEY and GCMP-256 that MLO
+# asks for go in an RSN Override element, WPA2 clients still join one
+# link. The lower radio may run 160 MHz: its
 # link then waits a minute for the DFS channel check (hostapd needs tree
 # patch 012 for that); if it does not come up, 80 MHz is tried once.
 
@@ -250,8 +251,11 @@ config_mlo_on() {
 		for o in mode ssid key network hidden isolate macfilter maclist wmm; do
 			v="$(uci -q get wireless.$i.$o)" && uci set wireless.$n.$o="$v"
 		done
-		uci set wireless.$n.encryption=sae
-		uci set wireless.$n.ieee80211w=2
+		# WPA3 compatibility mode: WPA2/WPA3 in the base RSN element for
+		# every client, and SAE-EXT-KEY with GCMP-256 in an RSN Override
+		# element for Wi-Fi 7 ones, which is what MLO asks for. A WPA2-only
+		# device joins one link instead of dropping to 2.4 GHz.
+		uci set wireless.$n.encryption=sae-compat
 		uci set wireless.$n.mlo=1
 		uci set wireless.$n.be7000_mlo=1
 		for o in $i ${i}_low; do

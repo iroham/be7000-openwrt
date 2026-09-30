@@ -39,7 +39,7 @@ var T = {
 		mloItems: [
 			'устройство с Wi-Fi 7 держит связь сразу на двух каналах, 36 и 149',
 			'быстрее и стабильнее: помеха на одном канале не рвёт соединение',
-			'сеть только WPA3, устройства со старым WPA2 остаются на 2,4 ГГц',
+			'старые устройства тоже подключаются, одним звеном',
 			'нижнему можно дать 160 МГц, верхнему 80 МГц'
 		],
 		mloDown: 'Сеть MLO сейчас не поднята.',
@@ -67,7 +67,7 @@ var T = {
 		confirmTitle: 'Сменить режим 5 ГГц?',
 		confirmSplit: 'У нижнего радио появятся копии сетей 5 ГГц с теми же именами и паролями, каналы для начала 36 и 149. Их можно поменять ниже, в списке сетей.',
 		confirmSingle: 'Второе радио и его копии сетей будут удалены, останется одно радио на весь диапазон.',
-		confirmMlo: 'Каждая сеть 5 ГГц станет одной сетью MLO на оба радио, с тем же именем и паролем, но только WPA3. Обычные сети 5 ГГц на это время выключатся и вернутся при смене режима. При 160 МГц на нижнем радио его звено поднимается примерно через минуту, после проверки на радары. Если сеть MLO не поднимется на обоих радио, роутер сам вернётся к двум отдельным радио.',
+		confirmMlo: 'Каждая сеть 5 ГГц станет одной сетью MLO на оба радио, с тем же именем и паролем. Обычные сети 5 ГГц на это время выключатся и вернутся при смене режима. При 160 МГц на нижнем радио его звено поднимается примерно через минуту, после проверки на радары. Если сеть MLO не поднимется на обоих радио, роутер сам вернётся к двум отдельным радио.',
 		confirmNote: 'Wi-Fi 5 ГГц пропадёт примерно на полминуты. Выбор переживает перезагрузку и обновление.',
 		mloLink: 'звено MLO',
 		cancel: 'Отмена',
@@ -99,7 +99,7 @@ var T = {
 		mloItems: [
 			'a Wi-Fi 7 device keeps a link on two channels at once, 36 and 149',
 			'faster and steadier: interference on one channel does not drop the connection',
-			'WPA3 only, devices limited to WPA2 stay on 2.4 GHz',
+			'older devices join too, on one link',
 			'the lower one can take 160 MHz, the upper one 80 MHz'
 		],
 		mloDown: 'The MLO network is not up right now.',
@@ -122,7 +122,7 @@ var T = {
 		confirmTitle: 'Change the 5 GHz mode?',
 		confirmSplit: 'The lower radio gets copies of the 5 GHz networks with the same names and passwords, channels start at 36 and 149. You can change them below, in the network list.',
 		confirmSingle: 'The second radio and its network copies are removed, one radio for the whole band stays.',
-		confirmMlo: 'Every 5 GHz network becomes one MLO network over both radios, same name and password, WPA3 only. The plain 5 GHz networks are switched off meanwhile and come back when you change the mode. At 160 MHz on the lower radio its link comes up after about a minute, once the radar check is done. If the MLO network does not come up on both radios, the router goes back to two separate radios by itself.',
+		confirmMlo: 'Every 5 GHz network becomes one MLO network over both radios, same name and password. The plain 5 GHz networks are switched off meanwhile and come back when you change the mode. At 160 MHz on the lower radio its link comes up after about a minute, once the radar check is done. If the MLO network does not come up on both radios, the router goes back to two separate radios by itself.',
 		confirmNote: '5 GHz Wi-Fi is down for about half a minute. The choice survives reboots and updates.',
 		mloLink: 'MLO link',
 		cancel: 'Cancel',
