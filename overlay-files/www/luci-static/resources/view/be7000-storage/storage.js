@@ -28,7 +28,8 @@ function waitJob() {
 }
 
 function mb(kb) {
-	if (!kb)
+	// 0 is a real answer (a full overlay), only a missing value is unknown
+	if (kb == null || isNaN(kb))
 		return '—';
 	return _('%.1f МБ').format(kb / 1024);
 }
