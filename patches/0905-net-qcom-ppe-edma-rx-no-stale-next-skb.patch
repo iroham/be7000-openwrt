@@ -1,0 +1,48 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: [PATCH] net: qcom-ppe: edma rx: do not reuse a stale next skb
+
+edma_rx_reap() reads the skb of the next descriptor only on the
+delivery and the scatter paths. When a frame is dropped, for example
+because its source port is unknown, the loop jumps to next_rx_desc
+with next_skb still pointing at the skb it has just freed, and the
+next round unmaps and handles that freed skb again.
+
+Read next_skb right after the next descriptor, once per round.
+
+Signed-off-by: Timofey Maykov <itnitro@gmail.com>
+---
+Index: linux-6.18.52/drivers/net/ethernet/qualcomm/ppe/edma_rx.c
+===================================================================
+--- linux-6.18.52.orig/drivers/net/ethernet/qualcomm/ppe/edma_rx.c
++++ linux-6.18.52/drivers/net/ethernet/qualcomm/ppe/edma_rx.c
+@@ -693,6 +693,11 @@ static int edma_rx_reap(struct edma_rxde
+ 		/* Get the next Rx descriptor. */
+ 		next_rxdesc_pri = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx);
+ 
++		/* Take the next skb here, so the paths below that drop the
++		 * frame and jump to next_rx_desc do not leave a stale one.
++		 */
++		next_skb = (struct sk_buff *)EDMA_RXDESC_OPAQUE_GET(next_rxdesc_pri);
++
+ 		/* Handle linear packets or initial segments first. */
+ 		if (likely(!(rxdesc_ring->head))) {
+ 			struct edma_port_priv *port_priv;
+@@ -750,9 +755,6 @@ static int edma_rx_reap(struct edma_rxde
+ 
+ 				/* Handle linear packets. */
+ 				if (likely(!EDMA_RXDESC_MORE_BIT_GET(rxdesc_pri))) {
+-					next_skb =
+-						(struct sk_buff *)EDMA_RXDESC_OPAQUE_GET(next_rxdesc_pri);
+-
+ 					delivered = edma_rx_handle_linear_packets(rxdesc_ring,
+ 										  rxdesc_pri, skb);
+ 					if (unlikely(!delivered))
+@@ -763,8 +765,6 @@ static int edma_rx_reap(struct edma_rxde
+ 			}
+ 		}
+ 
+-		next_skb = (struct sk_buff *)EDMA_RXDESC_OPAQUE_GET(next_rxdesc_pri);
+-
+ 		/* Handle scatter frame processing for first/middle/last segments. */
+ 		page_mode ? edma_rx_handle_nr_frags(rxdesc_ring, rxdesc_pri, skb) :
+ 			edma_rx_handle_frag_list(rxdesc_ring, rxdesc_pri, skb);

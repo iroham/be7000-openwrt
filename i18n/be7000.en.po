@@ -408,3 +408,219 @@ msgstr "The flash has two firmware slots. The bootloader starts one of them, the
 
 msgid "Флаги загрузчика"
 msgstr "Bootloader flags"
+
+msgid "Не удалось применить"
+msgstr "Could not apply"
+
+msgid "Выключить"
+msgstr "Turn off"
+
+msgid "Включить"
+msgstr "Turn on"
+
+msgid "Аппаратная разгрузка"
+msgstr "Hardware offload"
+
+msgid "Маршрутизацию и NAT может выполнять сетевой процессор PPE вместо основного процессора. Функция экспериментальная и по умолчанию выключена. Если после включения что-то перестало работать, выключите её здесь."
+msgstr "Routing and NAT can be done by the PPE network engine instead of the main CPU. The feature is experimental and off by default. If something stops working after you turn it on, turn it off here."
+
+msgid "В этой сборке нет драйвера PPE с поддержкой разгрузки."
+msgstr "This build has no PPE driver with offload support."
+
+msgid "NAT и маршрутизация"
+msgstr "NAT and routing"
+
+msgid "включено"
+msgstr "on"
+
+msgid "Соединения между локальной сетью и интернетом после первых пакетов ведёт PPE. Работает для PPPoE, DHCP и статического адреса. Клиентам Wi-Fi пакеты всё равно проходят через процессор один раз, заметный выигрыш у проводных клиентов."
+msgstr "After the first packets, connections between the LAN and the internet are carried by the PPE. Works with PPPoE, DHCP and a static address. For Wi-Fi clients packets still pass the CPU once, the visible gain is for wired clients."
+
+msgid "Сейчас в железе соединений: %d"
+msgstr "Connections in hardware now: %d"
+
+msgid "Применяется сразу."
+msgstr "Applies at once."
+
+msgid "Мост LAN-портов"
+msgstr "LAN port bridge"
+
+msgid "работает"
+msgstr "active"
+
+msgid "нужна перезагрузка"
+msgstr "reboot needed"
+
+msgid "Трафик между проводными LAN-портами коммутирует PPE, не задействуя процессор. Wi-Fi остаётся в программном мосте."
+msgstr "Traffic between the wired LAN ports is switched by the PPE without the CPU. Wi-Fi stays in the software bridge."
+
+msgid "Изменение применится после перезагрузки роутера."
+msgstr "The change applies after the router reboots."
+
+msgid "Применяется после перезагрузки."
+msgstr "Applies after a reboot."
+
+msgid "Как это устроено"
+msgstr "How it works"
+
+msgid "Что такое PPE"
+msgstr "What the PPE is"
+
+msgid "В процессоре IPQ9554 кроме ядер ARM есть отдельный сетевой блок PPE (packet processing engine). Он умеет сам коммутировать кадры между портами и маршрутизировать пакеты с NAT по таблице соединений, не нагружая основной процессор. Заводская прошивка Xiaomi им пользуется, в обычном OpenWrt он до сих пор простаивает."
+msgstr "Besides the ARM cores, the IPQ9554 has a separate network block, the PPE (packet processing engine). It can switch frames between ports and route packets with NAT from a connection table on its own, without loading the main CPU. The Xiaomi factory firmware uses it, in regular OpenWrt it still sits idle."
+
+msgid "Поддержка разгрузки в Beam WRT построена на открытой работе для OpenWrt и наших исправлениях к ней. Она ещё не принята в основной OpenWrt, поэтому здесь она экспериментальная."
+msgstr "Offload support in Beam WRT is built on open work for OpenWrt plus our fixes to it. It is not in mainline OpenWrt yet, so here it is experimental."
+
+msgid "Первые пакеты каждого соединения, как обычно, проходят межсетевой экран на процессоре. Когда соединение установлено, ядро записывает его в таблицу PPE, и дальше пакеты этого соединения PPE пересылает сам, с подменой адресов и портов. Это штатная функция OpenWrt «аппаратная разгрузка потоков» (flow offloading), включение здесь то же самое, что галка в настройках межсетевого экрана."
+msgstr "The first packets of every connection pass the firewall on the CPU as usual. Once the connection is established, the kernel writes it into the PPE table, and from then on the PPE forwards its packets itself, rewriting addresses and ports. This is the standard OpenWrt hardware flow offloading, turning it on here is the same as the checkbox in the firewall settings."
+
+msgid "Что разгружается:"
+msgstr "What is offloaded:"
+
+msgid "IPv4 с NAT и IPv6"
+msgstr "IPv4 with NAT and IPv6"
+
+msgid "TCP и UDP"
+msgstr "TCP and UDP"
+
+msgid "подключение к провайдеру через PPPoE, DHCP или статический адрес"
+msgstr "an uplink over PPPoE, DHCP or a static address"
+
+msgid "провайдерский VLAN на WAN"
+msgstr "an ISP VLAN on the WAN"
+
+msgid "Что остаётся на процессоре:"
+msgstr "What stays on the CPU:"
+
+msgid "первые пакеты каждого соединения и всё, что межсетевой экран не пропустил"
+msgstr "the first packets of every connection and everything the firewall did not let through"
+
+msgid "клиенты Wi-Fi: PPE находит соединение и делает NAT, но передать пакет в радиомодуль напрямую не может, пакет один раз проходит через процессор"
+msgstr "Wi-Fi clients: the PPE finds the connection and does the NAT, but cannot hand the packet to the radio directly, so it passes the CPU once"
+
+msgid "туннели и VPN на самом роутере (WireGuard, AmneziaWG, OpenVPN, L2TP)"
+msgstr "tunnels and VPNs on the router itself (WireGuard, AmneziaWG, OpenVPN, L2TP)"
+
+msgid "трафик самого роутера"
+msgstr "traffic of the router itself"
+
+msgid "Когда включено, PPE сам пересылает кадры между проводными портами LAN, изучает MAC-адреса и VLAN, а процессор видит только широковещательный трафик и адреса, которых PPE не знает. Имеет смысл, если между устройствами на кабеле ходит много трафика, например к NAS. Wi-Fi-интерфейсы остаются в программном мосте."
+msgstr "When on, the PPE forwards frames between the wired LAN ports itself and learns MAC addresses and VLANs, and the CPU sees only broadcasts and addresses the PPE does not know. It makes sense when wired devices exchange a lot of traffic, for example with a NAS. Wi-Fi interfaces stay in the software bridge."
+
+msgid "Выключатель задаётся при загрузке драйвера, поэтому изменение применяется после перезагрузки роутера."
+msgstr "The switch is read when the driver loads, so a change applies after the router reboots."
+
+msgid "С чем не дружит"
+msgstr "What does not mix with it"
+
+msgid "SQM и другие ограничители скорости: разгруженные соединения идут мимо очередей, ограничение перестаёт работать. Используйте либо SQM, либо разгрузку."
+msgstr "SQM and other rate limiters: offloaded connections bypass the queues and the limit stops working. Use either SQM or offload."
+
+msgid "Счётчики трафика по соединениям, nlbwmon и подобные: пакеты, которые переслал PPE, в них не попадают или попадают с опозданием."
+msgstr "Per-connection traffic counters, nlbwmon and the like: packets forwarded by the PPE are missing from them or show up late."
+
+msgid "Правила межсетевого экрана, добавленные после установки соединения, не действуют на уже разгруженные соединения до их завершения."
+msgstr "Firewall rules added after a connection is established do not apply to already offloaded connections until they end."
+
+msgid "Несколько деревьев связующего дерева (MSTP) мостом PPE не поддерживаются, работает одно общее."
+msgstr "Multiple spanning trees (MSTP) are not supported by the PPE bridge, only one common tree works."
+
+msgid "Как проверить, что работает"
+msgstr "How to check it works"
+
+msgid "При включённом NAT в карточке выше видно число соединений в железе. В консоли то же самое показывает команда"
+msgstr "With NAT on, the card above shows the number of connections in hardware. In the console the same comes from"
+
+msgid "При большой загрузке с проводного клиента нагрузка процессора (Статус, Обзор) должна остаться низкой."
+msgstr "During a big download from a wired client the CPU load (Status, Overview) should stay low."
+
+msgid "Если что-то пошло не так"
+msgstr "If something goes wrong"
+
+msgid "Выключите переключатель на этой странице. NAT выключается сразу, мост после перезагрузки. Если страница недоступна, из консоли:"
+msgstr "Turn the switch off on this page. NAT turns off at once, the bridge after a reboot. If the page is not reachable, from the console:"
+
+msgid "Напишите о проблеме в тему Beam WRT на 4PDA или в issues на GitHub, приложите вывод команды"
+msgstr "Report the problem in the Beam WRT topic on 4PDA or in GitHub issues, with the output of"
+
+msgid "Что такое слоты"
+msgstr "What slots are"
+
+msgid "На флеше роутера два раздела для прошивки: слот 0 (rootfs) и слот 1 (rootfs_1). В каждом лежит своё ядро и своя система. Xiaomi сделала так для безопасных обновлений: новая версия пишется в свободный слот, а если она не загрузится, роутер вернётся на старую."
+msgstr "The router flash has two firmware partitions: slot 0 (rootfs) and slot 1 (rootfs_1). Each holds its own kernel and system. Xiaomi did this for safe updates: a new version is written to the free slot, and if it does not boot, the router goes back to the old one."
+
+msgid "Beam WRT при установке из стока занимает один слот, заводская прошивка остаётся во втором. Поэтому вернуться на сток можно без прошивки и без программатора, простым переключением."
+msgstr "When installed from stock, Beam WRT takes one slot and the factory firmware stays in the other. So you can go back to stock without flashing and without a programmer, with a plain switch."
+
+msgid "Настройки хранятся отдельно от слотов. У Beam WRT они на разделе данных и общие для любой сборки Beam WRT в любом слоте. Сток хранит свои настройки в зашифрованном виде там же, Beam WRT их не трогает."
+msgstr "Settings are kept apart from the slots. Beam WRT keeps them on the data partition, shared by any Beam WRT build in either slot. Stock keeps its own settings encrypted in the same place, Beam WRT does not touch them."
+
+msgid "Как загрузчик выбирает слот"
+msgstr "How the bootloader picks a slot"
+
+msgid "Загрузчик запускает слот, записанный в flag_last_success."
+msgstr "The bootloader starts the slot written in flag_last_success."
+
+msgid "Каждая прошивка, которая загрузилась до конца, сама записывает туда свой слот и сбрасывает счётчик неудачных попыток. И Beam WRT, и сток делают это при каждой загрузке."
+msgstr "Every firmware that boots completely writes its own slot there and resets the failed attempt counter. Both Beam WRT and stock do this on every boot."
+
+msgid "Если слот не загружается, загрузчик считает попытки. После шести неудачных подряд на седьмом включении он сам берёт другой слот."
+msgstr "If a slot does not boot, the bootloader counts the attempts. After six failed ones in a row it takes the other slot on the seventh power-on."
+
+msgid "Для обновлений есть разовая попытка: загрузчик один раз пробует второй слот, и если прошивка там не подтвердила загрузку, следующее включение возвращает прежний слот."
+msgstr "For updates there is a one-shot try: the bootloader tries the other slot once, and if the firmware there did not confirm its boot, the next power-on goes back to the previous slot."
+
+msgid "Что делает кнопка переключения"
+msgstr "What the switch button does"
+
+msgid "Кнопка «Посмотреть, что там» подключает второй слот только на чтение и показывает, какая прошивка в нём лежит. Переключить можно только на слот, где есть прошивка, которая загрузится."
+msgstr "\"See what is there\" attaches the other slot read-only and shows which firmware it holds. You can only switch to a slot with firmware that will boot."
+
+msgid "«Сделать основным и перезагрузить» записывает второй слот в flag_last_success, сбрасывает счётчики и перезагружает роутер. Переключение насовсем: загрузившаяся прошивка сама закрепит свой слот, и обратно роутер не вернётся, пока вы не переключите его снова уже из той прошивки."
+msgstr "\"Make it the main one and reboot\" writes the other slot into flag_last_success, resets the counters and reboots the router. The switch is for good: the firmware that boots makes its own slot the main one, and the router does not come back until you switch again from that firmware."
+
+msgid "При переходе на сток страница проверяет, есть ли у стока сохранённые настройки. Если нет, сток при первой загрузке заполнит их заводскими значениями, как после сброса."
+msgstr "When switching to stock the page checks whether stock has saved settings. If not, stock fills them with factory values on its first boot, as after a reset."
+
+msgid "Как вернуться обратно"
+msgstr "How to come back"
+
+msgid "Из другой сборки Beam WRT: откройте в ней эту же страницу и переключите слот."
+msgstr "From another Beam WRT build: open this same page there and switch the slot."
+
+msgid "Из заводской прошивки, если в ней включён SSH:"
+msgstr "From the factory firmware, if SSH is enabled there:"
+
+msgid "Из заводской прошивки без SSH: установите Beam WRT заново скриптом из архива релиза, как в первый раз. Настройки Beam WRT сохранятся."
+msgstr "From the factory firmware without SSH: install Beam WRT again with the script from the release archive, as the first time. Beam WRT settings are kept."
+
+msgid "Если роутер не загружается совсем: выключите и включите питание семь раз подряд, каждый раз дав ему полминуты. На седьмой раз загрузчик сам возьмёт другой слот."
+msgstr "If the router does not boot at all: power it off and on seven times in a row, giving it half a minute each time. On the seventh time the bootloader takes the other slot itself."
+
+msgid "flag_last_success: какой слот загружается (0 или 1)."
+msgstr "flag_last_success: which slot boots (0 or 1)."
+
+msgid "flag_ota_reboot: 1 значит, что следующая загрузка будет разовой попыткой второго слота."
+msgstr "flag_ota_reboot: 1 means the next boot is a one-shot try of the other slot."
+
+msgid "flag_boot_success: подтверждение разовой попытки."
+msgstr "flag_boot_success: confirmation of the one-shot try."
+
+msgid "flag_try_sys1_failed и flag_try_sys2_failed: счётчики неудачных попыток слота 0 и слота 1. Больше пяти значит, что загрузчик уйдёт на другой слот."
+msgstr "flag_try_sys1_failed and flag_try_sys2_failed: failed attempt counters of slot 0 and slot 1. Above five means the bootloader moves to the other slot."
+
+msgid "flag_format_overlay: 1 значит, что сток при следующей загрузке заполнит свои настройки заводскими значениями."
+msgstr "flag_format_overlay: 1 means stock fills its settings with factory values on its next boot."
+
+msgid "Чего не делать"
+msgstr "What not to do"
+
+msgid "Не записывайте прошивку в слот %d, из которого роутер сейчас работает."
+msgstr "Do not write firmware into slot %d, the one the router runs from now."
+
+msgid "Не стирайте разделы art, bdata и загрузчика: там калибровка радио, MAC-адреса и серийный номер именно этого роутера, заменить их нечем."
+msgstr "Do not erase the art, bdata and bootloader partitions: they hold the radio calibration, MAC addresses and serial number of this very router, and nothing can replace them."
+
+msgid "Не меняйте флаги вручную, если не уверены: неверное значение может оставить роутер на семь неудачных включений."
+msgstr "Do not change the flags by hand unless you are sure: a wrong value can leave the router for seven failed power-ons."

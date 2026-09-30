@@ -1,0 +1,91 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: [PATCH] net: qcom-ppe: write whole rows of multi-word tables
+
+A row of a multi-word PPE table takes effect only when the whole row
+is written. A regmap_update_bits() on one word of such a row is lost,
+and the next full-row read-modify-write then stores the stale word.
+
+On the Xiaomi BE7000 this left every port of the L3_VP_PORT table
+without its L3 interface and every ingress L3 interface without its
+router MAC bit, so no packet took the routed path: flows were installed
+but never hit, and the traffic went to the CPU with "L3 no-route".
+
+Update single words of the L3_VP_PORT and IN_L3_IF rows through a read
+and a write of the complete row.
+
+Signed-off-by: Timofey Maykov <itnitro@gmail.com>
+---
+--- a/drivers/net/ethernet/qualcomm/ppe/ppe_flow.c
++++ b/drivers/net/ethernet/qualcomm/ppe/ppe_flow.c
+@@ -277,6 +277,29 @@ int ppe_flow_stats_get(struct ppe_device
+ 	return 0;
+ }
+ 
++/* Multi-word PPE table rows take effect only when the whole row is
++ * written; a write to a single word of a row is lost. Update one word
++ * of a row through a read and a write of the complete row.
++ */
++static int ppe_tbl_word_update(struct ppe_device *ppe_dev, u32 row,
++			       unsigned int words, unsigned int word,
++			       u32 mask, u32 val)
++{
++	u32 buf[4];
++	int ret;
++
++	if (words > ARRAY_SIZE(buf) || word >= words)
++		return -EINVAL;
++
++	ret = regmap_bulk_read(ppe_dev->regmap, row, buf, words);
++	if (ret)
++		return ret;
++
++	buf[word] = (buf[word] & ~mask) | (val & mask);
++
++	return regmap_bulk_write(ppe_dev->regmap, row, buf, words);
++}
++
+ /**
+  * ppe_my_mac_set - Program a router MAC address
+  * @ppe_dev: PPE device
+@@ -313,9 +336,9 @@ int ppe_my_mac_set(struct ppe_device *pp
+ 		 */
+ 		for (i = 0; i < PPE_IN_L3_IF_TBL_ENTRIES; i++) {
+ 			reg = PPE_IN_L3_IF_TBL_ADDR +
+-			      PPE_IN_L3_IF_TBL_INC * i + sizeof(u32);
+-			ret = regmap_update_bits(ppe_dev->regmap, reg,
+-						 my_mac_mask, 0);
++			      PPE_IN_L3_IF_TBL_INC * i;
++			ret = ppe_tbl_word_update(ppe_dev, reg, 3, 1,
++						  my_mac_mask, 0);
+ 			if (ret)
+ 				return ret;
+ 		}
+@@ -404,16 +427,15 @@ int ppe_l3_if_set(struct ppe_device *ppe
+ int ppe_l3_if_my_mac_set(struct ppe_device *ppe_dev, int index, int my_mac,
+ 			 bool enable)
+ {
+-	u32 reg = PPE_IN_L3_IF_TBL_ADDR + PPE_IN_L3_IF_TBL_INC * index +
+-		  sizeof(u32);
++	u32 reg = PPE_IN_L3_IF_TBL_ADDR + PPE_IN_L3_IF_TBL_INC * index;
+ 	u32 mask;
+ 
+ 	if (my_mac < 0 || my_mac >= PPE_MY_MAC_TBL_ENTRIES)
+ 		return -EINVAL;
+ 
+ 	mask = FIELD_PREP(PPE_IN_L3_IF_W1_MAC_BITMAP, BIT(my_mac));
+-	return regmap_update_bits(ppe_dev->regmap, reg, mask,
+-				  enable ? mask : 0);
++	return ppe_tbl_word_update(ppe_dev, reg, 3, 1, mask,
++				   enable ? mask : 0);
+ }
+ 
+ int ppe_l3_if_clear(struct ppe_device *ppe_dev, int index)
+@@ -559,7 +581,7 @@ int ppe_port_l3_if_set(struct ppe_device
+ 		val = PPE_L3_VP_PORT_W0_L3_IF_VALID |
+ 		      FIELD_PREP(PPE_L3_VP_PORT_W0_L3_IF_INDEX, l3_if);
+ 
+-	return regmap_update_bits(ppe_dev->regmap, reg, mask, val);
++	return ppe_tbl_word_update(ppe_dev, reg, 4, 0, mask, val);
+ }
+ 
+ /**
