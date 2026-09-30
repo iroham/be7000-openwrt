@@ -281,9 +281,16 @@ cmd_status() {
 	if [ -s $STAMP ]; then
 		echo '{"imported":true,'"$(sed 's/"/\\"/g; s/^\([^=]*\)=\(.*\)$/"\1":"\2"/' $STAMP | tr '\n' ',' | sed 's/,$//')"',"backup":'"$([ -s $BACKUP ] && echo true || echo false)"'}'
 	else
-		local have=false
-		stock_root && have=true
-		cleanup
+		# LuCI asks every few seconds; stock settings do not appear while
+		# the router runs, so look once per boot
+		local have
+		have="$(cat /tmp/be7000-stock.present 2>/dev/null)"
+		if [ -z "$have" ]; then
+			have=false
+			stock_root && have=true
+			cleanup
+			echo $have > /tmp/be7000-stock.present
+		fi
 		echo '{"imported":false,"stock_settings":'$have'}'
 	fi
 }
