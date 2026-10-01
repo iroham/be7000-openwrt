@@ -100,6 +100,23 @@ reinstall_pending() {
 			fi
 		done
 		[ -n "$gone" ] && logger -t be7000-romsync "not in the feed of this image, dropped:$gone"
+		# Such names also have to leave the world file, or apk refuses every
+		# add with "no such package". Check the whole file, not only this
+		# list, so a router left with stale names by an older run recovers.
+		local stale=""
+		for p in $(names_of "$WORLD"); do
+			apk info -e "$p" >/dev/null 2>&1 && continue
+			apk search -x "$p" 2>/dev/null | grep -q . && continue
+			stale="$stale $p"
+		done
+		if [ -n "$stale" ]; then
+			for p in $stale; do
+				awk -v p="$p" '{ n = $0; sub(/[=<>~].*/, "", n) } n != p' "$WORLD" > "$WORLD.tmp" &&
+					cat "$WORLD.tmp" > "$WORLD"
+				rm -f "$WORLD.tmp"
+			done
+			logger -t be7000-romsync "removed from the world file, not in any feed:$stale"
+		fi
 		if [ -z "$left" ] || apk add $left >/tmp/be7000-reinstall.log 2>&1; then
 			logger -t be7000-romsync "reinstalled after image change:$left"
 			rm -f "$PENDING"
