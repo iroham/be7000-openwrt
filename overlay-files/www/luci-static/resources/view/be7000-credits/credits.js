@@ -17,17 +17,24 @@ var LOGO = [
 var TEXT = {
 	ru: {
 		hello: 'Спасибо всем, без кого этой сборки бы не было.',
-		star: 'на его плате нашлась причина',
+		star: 'на этой плате нашлась причина',
 		more: 'исходники, релизы и обсуждение',
 		support: 'поддержать проект',
 		crypto: 'криптовалюта и WeChat'
 	},
 	en: {
 		hello: 'Thanks to everyone this build would not exist without.',
-		star: 'the fix was found on his board',
+		star: 'the cause was found on that board',
 		more: 'sources, releases and discussion',
 		support: 'support the project',
 		crypto: 'crypto and WeChat'
+	},
+	zh: {
+		hello: '感谢所有人，没有你们就没有这个固件。',
+		star: '在这块主板上找到了原因',
+		more: '源代码、发布版本和讨论',
+		support: '支持本项目',
+		crypto: '加密货币和微信'
 	}
 };
 
@@ -64,9 +71,10 @@ return view.extend({
 	render: function(data) {
 		var d = data[0];
 		var ver = (String(data[1]).match(/^VERSION=(.+)$/m) || [])[1];
-		var lang = /^en/i.test(document.documentElement.lang || '') ? 'en' : 'ru';
+		var l = document.documentElement.lang || '';
+		var lang = /^zh/i.test(l) ? 'zh' : /^en/i.test(l) ? 'en' : 'ru';
 		var tx = TEXT[lang];
-		var t = function(o) { return o[lang] || o.ru; };
+		var t = function(o) { return o[lang] || o.en || o.ru; };
 		var body = [];
 
 		body.push(E('div', { 'class': 'bct-logo' }, LOGO));

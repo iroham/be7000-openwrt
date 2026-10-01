@@ -1,6 +1,7 @@
 #!/bin/sh
 # Every string our LuCI pages pass to _() must have an English entry in
-# i18n/be7000.en.po, and the committed .lmo must be built from that .po.
+# i18n/be7000.en.po and a Chinese one in i18n/be7000.zh-cn.po, and the
+# committed .lmo files must be built from those .po files.
 #   scripts/i18n-check.sh [path/to/po2lmo]
 cd "$(dirname "$0")/.." || exit 1
 PO=i18n/be7000.en.po
@@ -32,10 +33,23 @@ for f, v in missing:
 sys.exit(1 if missing else 0)
 PY
 
+# The Chinese catalogue must carry every msgid of the English one.
+python3 - "$PO" i18n/be7000.zh-cn.po <<'PY' || fail=1
+import re, sys
+ids = lambda p: set(re.findall(r'^msgid "(.*)"$', open(p, encoding='utf-8').read(), re.M))
+miss = ids(sys.argv[1]) - ids(sys.argv[2])
+for m in sorted(miss):
+    print('missing in zh-cn: %s' % m)
+sys.exit(1 if miss else 0)
+PY
+
 if [ -n "${1:-}" ] && [ -x "$1" ]; then
-	tmp=$(mktemp)
-	"$1" "$PO" "$tmp" && cmp -s "$tmp" "$LMO" || { echo "$LMO is not built from $PO"; fail=1; }
-	rm -f "$tmp"
+	for l in en zh-cn; do
+		tmp=$(mktemp)
+		"$1" i18n/be7000.$l.po "$tmp" && cmp -s "$tmp" overlay-files/usr/lib/lua/luci/i18n/be7000.$l.lmo ||
+			{ echo "be7000.$l.lmo is not built from be7000.$l.po"; fail=1; }
+		rm -f "$tmp"
+	done
 fi
 
 [ $fail = 0 ] && echo "i18n ok"

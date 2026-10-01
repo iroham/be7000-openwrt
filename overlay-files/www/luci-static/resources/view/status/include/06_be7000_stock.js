@@ -16,11 +16,11 @@ var callUndo = rpc.declare({ object: 'be7000-stock', method: 'undo' });
 var TEXT = {
 	ru: {
 		title: 'Настройки стока',
-		found: 'На роутере остались настройки заводской прошивки: сети Wi-Fi и подключение к интернету. Их можно перенести сюда, чтобы не вводить заново.',
+		found: 'На роутере остались настройки заводской прошивки, сети Wi-Fi и подключение к интернету. Их можно перенести сюда, чтобы не вводить заново.',
 		look: 'Посмотреть и перенести',
 		taken: 'Настройки перенесены со стока %s.',
 		takenAuto: 'Настройки перенесены со стока автоматически при первой загрузке, %s.',
-		what: 'Перенесено: %s.',
+		what: 'Перенесено %s.',
 		wifi: 'Wi-Fi',
 		wan: 'интернет (%s)',
 		undo: 'Отменить перенос',
@@ -50,11 +50,11 @@ var TEXT = {
 	},
 	en: {
 		title: 'Stock settings',
-		found: 'The factory firmware left its settings on this router: Wi-Fi networks and the internet connection. You can take them over instead of entering them again.',
+		found: 'The factory firmware left its settings on this router, the Wi-Fi networks and the internet connection. You can take them over instead of entering them again.',
 		look: 'Review and take over',
 		taken: 'Settings taken from stock on %s.',
 		takenAuto: 'Settings taken from stock automatically on the first boot, %s.',
-		what: 'Taken: %s.',
+		what: 'Taken over %s.',
 		wifi: 'Wi-Fi',
 		wan: 'internet (%s)',
 		undo: 'Undo',
@@ -81,11 +81,46 @@ var TEXT = {
 		done: 'Done',
 		failed: 'Failed',
 		close: 'Close'
+	},
+	zh: {
+		title: '原厂固件设置',
+		found: '这台路由器上保留着原厂固件的设置，包括 Wi-Fi 网络和互联网连接。可以把它们导入到这里，不必重新输入。',
+		look: '查看并导入',
+		taken: '已于 %s 从原厂固件导入设置。',
+		takenAuto: '首次启动时已自动从原厂固件导入设置，%s。',
+		what: '已导入 %s。',
+		wifi: 'Wi-Fi',
+		wan: '互联网（%s）',
+		undo: '撤销导入',
+		undoDone: '已恢复之前的设置。请重启路由器使其生效。',
+		previewTitle: '将要导入的内容',
+		band2: 'Wi-Fi 2.4 GHz',
+		band5: 'Wi-Fi 5 GHz',
+		name: '名称',
+		enc: '加密',
+		key: '密码',
+		set: '已设置',
+		none: '无',
+		hidden: '隐藏网络',
+		off: '已关闭',
+		wanRow: '互联网',
+		login: '用户名',
+		lan: '路由器地址',
+		notRouter: '原厂固件不是以路由器模式运行的（%s），没有可导入的内容。',
+		applyNote: '导入前会先保存当前设置，因此可以撤销。Wi-Fi 和互联网会重新启动。',
+		lanNote: '路由器地址将变为 %s，导入后请通过该地址打开 LuCI。',
+		cancel: '取消',
+		go: '导入',
+		working: '正在导入设置',
+		done: '完成',
+		failed: '失败',
+		close: '关闭'
 	}
 };
 
 function lang() {
-	return /^en/i.test(document.documentElement.lang || '') ? 'en' : 'ru';
+	var l = document.documentElement.lang || '';
+	return /^zh/i.test(l) ? 'zh' : /^en/i.test(l) ? 'en' : 'ru';
 }
 
 function row(label, value) {

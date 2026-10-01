@@ -5,7 +5,8 @@
 			"id": "boards",
 			"title": {
 				"ru": "Проверяли на проблемных платах",
-				"en": "Tested on failing boards"
+				"en": "Tested on failing boards",
+				"zh": "在有问题的主板上测试"
 			},
 			"people": [
 				{
@@ -13,50 +14,57 @@
 					"site": "4PDA",
 					"url": "https://4pda.to/forum/index.php?showuser=6802658",
 					"star": true,
-					"ru": "Дал удалённый доступ к своему роутеру, и на его плате нашлась причина мёртвого Ethernet. До этого десятки перепрошивок и дампы стока и OpenWrt с одной платы.",
-					"en": "Gave remote access to his router, and the cause of the dead Ethernet was found on his board. Before that, dozens of reflashes and stock and OpenWrt dumps from the same board."
+					"ru": "Удалённый доступ к роутеру, и на этой плате нашлась причина мёртвого Ethernet. До этого десятки перепрошивок и дампы стока и OpenWrt с одной платы.",
+					"en": "Remote access to the router, and the cause of the dead Ethernet was found on that board. Before that, dozens of reflashes and stock and OpenWrt dumps from the same board.",
+					"zh": "提供了路由器的远程访问，正是在这块主板上找到了以太网失效的原因。在此之前，在同一块主板上做了几十次刷机，并提供了原厂固件和 OpenWrt 的转储。"
 				},
 				{
 					"name": "Denchik777",
 					"site": "4PDA",
 					"url": "https://4pda.to/forum/index.php?showuser=587396",
 					"ru": "Первый дамп стока и вывод регуляторов, проверял каждую отладочную сборку на рабочей плате.",
-					"en": "The first stock dump and regulator output, checked every debug build on a working board."
+					"en": "The first stock dump and regulator output, checked every debug build on a working board.",
+					"zh": "提供了第一份原厂固件转储和稳压器输出，并在正常主板上测试了每一个调试版本。"
 				},
 				{
 					"name": "BurmecianKnight",
 					"site": "GitHub",
 					"url": "https://github.com/BurmecianKnight",
 					"ru": "Тесты в issue #1, дамп загрузчика, замеры линии на стоке и на каждой сборке.",
-					"en": "Tests in issue #1, a bootloader dump, lane measurements on stock and on every build."
+					"en": "Tests in issue #1, a bootloader dump, lane measurements on stock and on every build.",
+					"zh": "在 issue #1 中做了测试，提供了引导程序转储，并在原厂固件和每个版本上测量了链路。"
 				},
 				{
 					"name": "fufliks862",
 					"site": "4PDA",
 					"url": "https://4pda.to/forum/index.php?showuser=12493086",
 					"ru": "Первые отладочные логи, по ним стало видно, что линия поднимается только в одну сторону.",
-					"en": "The first debug logs, which showed that the lane came up in one direction only."
+					"en": "The first debug logs, which showed that the lane came up in one direction only.",
+					"zh": "提供了第一批调试日志，从中看出链路只在一个方向上建立。"
 				},
 				{
 					"name": "dima-dior1999",
 					"site": "4PDA",
 					"url": "https://4pda.to/forum/index.php?showuser=2822472",
 					"ru": "Первые сообщения о плате без сети и помощь другим в теме.",
-					"en": "The first reports of a board without network, and help to others in the thread."
+					"en": "The first reports of a board without network, and help to others in the thread.",
+					"zh": "最早报告了没有网络的主板，并在讨论帖中帮助其他人。"
 				},
 				{
 					"name": "xiaoqi2020",
 					"site": "GitHub",
 					"url": "https://github.com/xiaoqi2020",
 					"ru": "Логи с платы без сети в issue #4.",
-					"en": "Logs from a board without network in issue #4."
+					"en": "Logs from a board without network in issue #4.",
+					"zh": "在 issue #4 中提供了没有网络的主板的日志。"
 				},
 				{
 					"name": "tera2null",
 					"site": "GitHub",
 					"url": "https://github.com/tera2null",
 					"ru": "Плата с ошибками приёма и откат на сток в issue #3.",
-					"en": "A board with receive errors and the rollback to stock in issue #3."
+					"en": "A board with receive errors and the rollback to stock in issue #3.",
+					"zh": "在 issue #3 中报告了有接收错误的主板以及回退到原厂固件的情况。"
 				}
 			]
 		},
@@ -64,7 +72,8 @@
 			"id": "bugs",
 			"title": {
 				"ru": "Нашли и помогли исправить",
-				"en": "Found and helped fix"
+				"en": "Found and helped fix",
+				"zh": "发现问题并协助修复"
 			},
 			"people": [
 				{
@@ -72,14 +81,16 @@
 					"site": "4PDA",
 					"url": "https://4pda.to/forum/index.php?showuser=1995297",
 					"ru": "extroot поверх общего тома и каталог стеков Docker.",
-					"en": "extroot over the shared volume and the Docker stacks directory."
+					"en": "extroot over the shared volume and the Docker stacks directory.",
+					"zh": "发现了共享卷上的 extroot 和 Docker 堆栈目录的问题。"
 				},
 				{
 					"name": "FOV5",
 					"site": "4PDA",
 					"url": "https://4pda.to/forum/index.php?showuser=3121811",
 					"ru": "Подсказал хранить настройки OpenWrt в томе стока, с 1.2.6 откат на сток их не стирает.",
-					"en": "Suggested keeping OpenWrt settings in the stock volume, since 1.2.6 a rollback to stock no longer wipes them."
+					"en": "Suggested keeping OpenWrt settings in the stock volume, since 1.2.6 a rollback to stock no longer wipes them.",
+					"zh": "建议把 OpenWrt 的设置保存在原厂固件的卷中，从 1.2.6 起回退到原厂固件不再清除这些设置。"
 				}
 			]
 		},
@@ -87,7 +98,8 @@
 			"id": "base",
 			"title": {
 				"ru": "На чьей работе стоит сборка",
-				"en": "Whose work this build stands on"
+				"en": "Whose work this build stands on",
+				"zh": "本固件所依赖的工作"
 			},
 			"people": [
 				{
@@ -95,35 +107,40 @@
 					"site": "GitHub",
 					"url": "https://github.com/kravasuper/openwrt",
 					"ru": "Дерево OpenWrt на ядре 6.18 для BE7000, основа сборки, и исправление DMA приёма EDMA.",
-					"en": "The OpenWrt tree on kernel 6.18 for the BE7000 that this build is based on, and the EDMA receive DMA fix."
+					"en": "The OpenWrt tree on kernel 6.18 for the BE7000 that this build is based on, and the EDMA receive DMA fix.",
+					"zh": "本固件所基于的 BE7000 OpenWrt 6.18 内核源码树，以及 EDMA 接收 DMA 的修复。"
 				},
 				{
 					"name": "dima424658",
 					"site": "GitHub",
 					"url": "https://github.com/openwrt/openwrt/pull/20604",
 					"ru": "Первый запрос в OpenWrt с поддержкой BE7000.",
-					"en": "The first pull request adding BE7000 support to OpenWrt."
+					"en": "The first pull request adding BE7000 support to OpenWrt.",
+					"zh": "第一个为 OpenWrt 添加 BE7000 支持的 pull request。"
 				},
 				{
 					"name": "Kenneth Kasilag",
 					"site": "GitHub",
 					"url": "https://github.com/openwrt/openwrt/pull/24033",
-					"ru": "Серия исправлений UNIPHY и USXGMII для IPQ9574.",
-					"en": "The UNIPHY and USXGMII fix series for IPQ9574."
+					"ru": "Серия исправлений UNIPHY и USXGMII для IPQ9574, а также серия патчей разгрузки PPE, на которой построен аппаратный NAT в 1.4.0.",
+					"en": "The UNIPHY and USXGMII fix series for IPQ9574, and the PPE offload series that the hardware NAT in 1.4.0 is built on.",
+					"zh": "IPQ9574 的 UNIPHY 和 USXGMII 修复补丁系列，以及 1.4.0 硬件 NAT 加速所基于的 PPE 加速补丁系列。"
 				},
 				{
 					"name": "Alta Labs Route10",
 					"site": "GitHub",
 					"url": "https://github.com/openwrt/openwrt/pull/25322",
 					"ru": "Порт Route10 (SkytheFolf), подсказка про сброс QCA8084 со стороны nsscc.",
-					"en": "The Route10 port (SkytheFolf), the hint about resetting the QCA8084 from nsscc."
+					"en": "The Route10 port (SkytheFolf), the hint about resetting the QCA8084 from nsscc.",
+					"zh": "Route10 的移植（SkytheFolf），以及通过 nsscc 复位 QCA8084 的提示。"
 				},
 				{
 					"name": "OpenWrt",
 					"site": "openwrt.org",
 					"url": "https://openwrt.org",
 					"ru": "Сама система, LuCI и все пакеты.",
-					"en": "The system itself, LuCI and all the packages."
+					"en": "The system itself, LuCI and all the packages.",
+					"zh": "系统本身、LuCI 以及所有软件包。"
 				}
 			]
 		}
@@ -132,7 +149,8 @@
 		"url": "https://boosty.to/itnitro",
 		"more": {
 			"ru": "https://github.com/timofey-maykov/be7000-openwrt#поддержать-проект",
-			"en": "https://github.com/timofey-maykov/be7000-openwrt/blob/main/README.en.md#support-the-project"
+			"en": "https://github.com/timofey-maykov/be7000-openwrt/blob/main/README.en.md#support-the-project",
+			"zh": "https://github.com/timofey-maykov/be7000-openwrt/blob/main/README.en.md#support-the-project"
 		}
 	}
 }

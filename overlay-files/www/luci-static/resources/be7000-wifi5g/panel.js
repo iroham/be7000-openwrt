@@ -39,7 +39,7 @@ var T = {
 		mloTag: 'одна сеть Wi-Fi 7 на оба радио',
 		mloItems: [
 			'устройство с Wi-Fi 7 держит связь сразу на двух каналах, 36 и 149',
-			'быстрее и стабильнее: помеха на одном канале не рвёт соединение',
+			'быстрее и стабильнее, помеха на одном канале не рвёт соединение',
 			'старые устройства тоже подключаются, одним звеном',
 			'нижнему можно дать 160 МГц, верхнему 80 МГц'
 		],
@@ -63,11 +63,11 @@ var T = {
 		toMlo: 'Включить MLO',
 		busy: 'Переключаю режим. Wi-Fi 5 ГГц пропадёт примерно на полминуты, клиенты переподключатся сами.',
 		pending: 'Есть неприменённые изменения Wi-Fi. Сначала примените или отмените их.',
-		na: 'Недоступно: в этой сборке нет драйвера с поддержкой разделения.',
+		na: 'Недоступно. В этой сборке нет драйвера с поддержкой разделения.',
 		noEht: 'Сейчас у радио 5 ГГц код страны %s, и прошивка радиомодуля с ним выключает Wi-Fi 7. Точка работает как Wi-Fi 6.',
 		toUS: 'Сменить на US',
 		countryTitle: 'Сменить код страны 5 ГГц на US?',
-		countryText: 'С кодом US прошивка радиомодуля включает Wi-Fi 7. Вместе с кодом меняются правила: список каналов, ширина и допустимая мощность будут как в США. Код меняется только у радио 5 ГГц, 2,4 ГГц останется как есть. Вернуть прежний код можно в настройках радио 5 ГГц ниже.',
+		countryText: 'С кодом US прошивка радиомодуля включает Wi-Fi 7. Вместе с кодом меняются правила. Список каналов, ширина и допустимая мощность будут как в США. Код меняется только у радио 5 ГГц, 2,4 ГГц останется как есть. Вернуть прежний код можно в настройках радио 5 ГГц ниже.',
 		countryDone: 'Код страны изменён, Wi-Fi 5 ГГц перезапускается.',
 		confirmTitle: 'Сменить режим 5 ГГц?',
 		confirmSplit: 'У нижнего радио появятся копии сетей 5 ГГц с теми же именами и паролями, каналы для начала 36 и 149. Их можно поменять ниже, в списке сетей.',
@@ -103,7 +103,7 @@ var T = {
 		mloTag: 'one Wi-Fi 7 network over both radios',
 		mloItems: [
 			'a Wi-Fi 7 device keeps a link on two channels at once, 36 and 149',
-			'faster and steadier: interference on one channel does not drop the connection',
+			'faster and steadier, interference on one channel does not drop the connection',
 			'older devices join too, on one link',
 			'the lower one can take 160 MHz, the upper one 80 MHz'
 		],
@@ -122,11 +122,11 @@ var T = {
 		toMlo: 'Turn MLO on',
 		busy: 'Switching. 5 GHz Wi-Fi is down for about half a minute, clients reconnect by themselves.',
 		pending: 'There are unapplied Wi-Fi changes. Apply or revert them first.',
-		na: 'Not available: this build has no driver support for the split.',
+		na: 'Not available. This build has no driver support for the split.',
 		noEht: 'The 5 GHz radio now has country code %s, and the radio firmware turns Wi-Fi 7 off for it. The access point runs as Wi-Fi 6.',
 		toUS: 'Switch to US',
 		countryTitle: 'Change the 5 GHz country code to US?',
-		countryText: 'With US the radio firmware turns Wi-Fi 7 on. The rules change with the code: channels, width and allowed power follow the US ones. Only the 5 GHz radio changes, 2.4 GHz stays as it is. You can set the previous code again in the 5 GHz radio settings below.',
+		countryText: 'With US the radio firmware turns Wi-Fi 7 on. The rules change with the code. Channels, width and allowed power follow the US ones. Only the 5 GHz radio changes, 2.4 GHz stays as it is. You can set the previous code again in the 5 GHz radio settings below.',
 		countryDone: 'Country code changed, 5 GHz Wi-Fi restarts.',
 		confirmTitle: 'Change the 5 GHz mode?',
 		confirmSplit: 'The lower radio gets copies of the 5 GHz networks with the same names and passwords, channels start at 36 and 149. You can change them below, in the network list.',
@@ -138,6 +138,65 @@ var T = {
 		go: 'Switch',
 		failed: 'Failed',
 		done: 'Done, reloading the page'
+	},
+	zh: {
+		title: '5 GHz 模式',
+		lead: '5 GHz 无线模块（QCN9274）可以作为覆盖整个频段的单个射频工作，也可以作为两个独立射频（相当于原厂固件中的 5G-1 和 5G-2），或者作为通过 MLO 合并成一个 Wi-Fi 7 网络的两个射频。可以在这里切换模式，路由器无需重启。',
+		now: '当前',
+		single: '单射频',
+		split: '双射频',
+		singleTag: '相当于原厂的 5G',
+		splitTag: '相当于原厂的 5G-1 和 5G-2',
+		singleItems: [
+			'整个 5 GHz 频段一个接入点',
+			'所有信道可用，包括 DFS 100-144',
+			'信道宽度最高 160 MHz'
+		],
+		splitItems: [
+			'低频射频使用 36-64 信道，高频射频使用 149 及以上',
+			'各自有独立的信道和客户端，同时工作',
+			'低频射频可用 160 MHz，高频射频最高 80 MHz',
+			'此模式下 100-144 信道不可用'
+		],
+		mlo: 'MLO',
+		mloTag: '两个射频组成一个 Wi-Fi 7 网络',
+		mloItems: [
+			'Wi-Fi 7 设备同时在 36 和 149 两个信道上保持连接',
+			'更快更稳定，一个信道受干扰时连接不会中断',
+			'旧设备也能连接，使用其中一条链路',
+			'低频射频可用 160 MHz，高频射频 80 MHz'
+		],
+		mloDown: 'MLO 网络当前未启动。',
+		active: '已启用',
+		radios: '当前 5 GHz 射频',
+		ch: '信道',
+		low: '低频',
+		high: '高频',
+		one: '5 GHz 射频',
+		mhz: 'MHz',
+		clients: function(n) { return '个客户端'; },
+		off: '已关闭',
+		toSplit: '拆分为两个射频',
+		toSingle: '恢复为单射频',
+		toMlo: '开启 MLO',
+		busy: '正在切换。5 GHz Wi-Fi 会中断约半分钟，客户端会自动重新连接。',
+		pending: '有尚未应用的 Wi-Fi 更改。请先应用或撤销。',
+		na: '不可用。此固件中没有支持拆分的驱动。',
+		noEht: '当前 5 GHz 射频的国家代码是 %s，无线模块固件在此代码下会关闭 Wi-Fi 7，接入点以 Wi-Fi 6 方式工作。',
+		toUS: '改为 US',
+		countryTitle: '将 5 GHz 国家代码改为 US 吗？',
+		countryText: '使用 US 代码时，无线模块固件会开启 Wi-Fi 7。规则会随代码一起改变，信道、宽度和允许的功率都按美国标准。只修改 5 GHz 射频的代码，2.4 GHz 保持不变。之后可以在下方 5 GHz 射频的设置中改回原来的代码。',
+		countryDone: '国家代码已更改，5 GHz Wi-Fi 正在重启。',
+		confirmTitle: '切换 5 GHz 模式吗？',
+		confirmSplit: '低频射频会得到 5 GHz 网络的副本，名称和密码相同，初始信道为 36 和 149。可以在下方的网络列表中修改。',
+		confirmSingle: '第二个射频及其网络副本会被删除，只保留覆盖整个频段的单个射频。',
+		confirmMlo: '每个 5 GHz 网络都会变成覆盖两个射频的 MLO 网络，名称和密码不变。期间普通的 5 GHz 网络会关闭，切换模式时恢复。低频射频使用 160 MHz 时，其链路要在雷达检测完成后约一分钟才会启动。如果 MLO 网络不能在两个射频上都启动，路由器会自动回到两个独立射频。',
+		confirmNote: '5 GHz Wi-Fi 会中断约半分钟。所选模式在重启和更新后保持不变。',
+		mloLink: 'MLO 链路',
+		cancel: '取消',
+		go: '切换',
+		failed: '失败',
+		done: '完成，正在刷新页面'
 	}
 };
 
@@ -167,7 +226,8 @@ var CSS = `
 `;
 
 function lang() {
-	return /^en/i.test(document.documentElement.lang || '') ? 'en' : 'ru';
+	var l = document.documentElement.lang || '';
+	return /^zh/i.test(l) ? 'zh' : /^en/i.test(l) ? 'en' : 'ru';
 }
 
 // 5 GHz wifi-devices of the QCN9274 with channel, width and client count
