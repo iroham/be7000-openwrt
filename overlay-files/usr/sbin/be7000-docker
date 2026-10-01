@@ -18,11 +18,20 @@ MIN_FREE_MB=1024
 
 die() { echo "$*" >&2; exit 1; }
 
-# messages follow the LuCI language (luci.main.lang): English for en*, else Russian
-EN=0
-case "$(uci -q get luci.main.lang)" in en*) EN=1 ;; esac
-# t <russian> <english>
-t() { [ "$EN" = 1 ] && echo "$2" || echo "$1"; }
+# Messages follow the LuCI language.
+LANG_UI=ru
+case "$(uci -q get luci.main.lang)" in
+	en*) LANG_UI=en ;;
+	zh*) LANG_UI=zh ;;
+esac
+# t <russian> <english> <chinese>
+t() {
+	case "$LANG_UI" in
+		en) echo "$2" ;;
+		zh) echo "$3" ;;
+		*) echo "$1" ;;
+	esac
+}
 
 data_root_now() {
 	uci -q get dockerd.globals.data_root || echo "/opt/docker/"
@@ -72,22 +81,22 @@ suggest_data_root() {
 
 cmd_status() {
 	if installed; then
-		echo "dockerd: $(t "установлен" "installed"), $(dockerd --version 2>/dev/null | head -1)"
+		echo "dockerd: $(t "установлен" "installed" "已安装"), $(dockerd --version 2>/dev/null | head -1)"
 	else
-		echo "dockerd: $(t "не установлен" "not installed")"
+		echo "dockerd: $(t "не установлен" "not installed" "未安装")"
 	fi
 	local dr free
 	dr="$(data_root_now)"
 	free="$(free_mb_of "$dr")"
-	echo "$(t "данные" "data"): $dr"
-	echo "$(t "свободно там: ${free:-?} МБ" "free there: ${free:-?} MB")"
+	echo "$(t "данные" "data" "数据目录"): $dr"
+	echo "$(t "свободно там: ${free:-?} МБ" "free there: ${free:-?} MB" "可用空间: ${free:-?} MB")"
 	if [ -n "$free" ] && [ "$free" -lt "$MIN_FREE_MB" ]; then
 		echo
-		t "Этого мало. Образы докера считаются сотнями мегабайт." "That is not enough. Docker images take hundreds of megabytes."
-		t "Подключите диск и запустите: be7000-docker setup" "Plug in a disk and run: be7000-docker setup"
+		t "Этого мало. Образы докера считаются сотнями мегабайт." "That is not enough. Docker images take hundreds of megabytes." "空间不足。Docker 镜像通常需要几百 MB。"
+		t "Подключите диск и запустите: be7000-docker setup" "Plug in a disk and run: be7000-docker setup" "请连接磁盘并运行: be7000-docker setup"
 	fi
 	echo
-	echo "$(t "служба" "service"): $(/etc/init.d/dockerd status 2>/dev/null || t 'не запущена' 'not running')"
+	echo "$(t "служба" "service" "服务"): $(/etc/init.d/dockerd status 2>/dev/null || t 'не запущена' 'not running' '未运行')"
 }
 
 cmd_setup() {
@@ -98,28 +107,29 @@ cmd_setup() {
 	else
 		dr="$(suggest_data_root)" || die "$(t "Не нашёл подключённого диска со свободным местом от ${MIN_FREE_MB} МБ.
 Подключите диск, смонтируйте его и укажите путь: be7000-docker setup --data-root /mnt/sda1/docker" "No mounted disk with at least ${MIN_FREE_MB} MB free found.
-Plug in a disk, mount it and give the path: be7000-docker setup --data-root /mnt/sda1/docker")"
+Plug in a disk, mount it and give the path: be7000-docker setup --data-root /mnt/sda1/docker" "没有找到至少有 ${MIN_FREE_MB} MB 可用空间的已挂载磁盘。
+请连接并挂载磁盘，然后指定路径: be7000-docker setup --data-root /mnt/sda1/docker")"
 	fi
 
 	free="$(free_mb_of "$dr")"
-	[ -n "$free" ] || die "$(t "Не удалось определить свободное место для $dr" "Could not find out the free space for $dr")"
+	[ -n "$free" ] || die "$(t "Не удалось определить свободное место для $dr" "Could not find out the free space for $dr" "无法确定 $dr 的可用空间")"
 	if [ "$free" -lt "$MIN_FREE_MB" ]; then
-		t "Свободно всего ${free} МБ, это мало для докера." "Only ${free} MB free, that is not enough for Docker." >&2
-		[ "$yes" = 1 ] || die "$(t "Если уверены, повторите с --yes" "If you are sure, repeat with --yes")"
+		t "Свободно всего ${free} МБ, это мало для докера." "Only ${free} MB free, that is not enough for Docker." "只有 ${free} MB 可用空间，不足以运行 Docker。" >&2
+		[ "$yes" = 1 ] || die "$(t "Если уверены, повторите с --yes" "If you are sure, repeat with --yes" "如果确定要继续，请加上 --yes 再次运行")"
 	fi
 
 	if [ "$yes" != 1 ]; then
-		echo "$(t "Поставлю" "Will install"): $PKGS"
-		t "Данные докера будут лежать в: $dr (свободно ${free} МБ)" "Docker data will live in: $dr (${free} MB free)"
-		t "Повторите с --yes, чтобы выполнить." "Repeat with --yes to do it."
+		echo "$(t "Поставлю" "Will install" "将安装"): $PKGS"
+		t "Данные докера будут лежать в: $dr (свободно ${free} МБ)" "Docker data will live in: $dr (${free} MB free)" "Docker 数据将保存到: $dr，剩余 ${free} MB"
+		t "Повторите с --yes, чтобы выполнить." "Repeat with --yes to do it." "请加上 --yes 再次运行以开始安装。"
 		exit 1
 	fi
 
 	if ! installed; then
-		t "Ставлю пакеты" "Installing packages"
+		t "Ставлю пакеты" "Installing packages" "正在安装软件包"
 		apk update >/dev/null 2>&1 || true
 		# shellcheck disable=SC2086
-		apk add $PKGS || die "$(t "Не удалось поставить пакеты. Проверьте apk update." "Could not install the packages. Check apk update.")"
+		apk add $PKGS || die "$(t "Не удалось поставить пакеты. Проверьте apk update." "Could not install the packages. Check apk update." "软件包安装失败。请检查 apk update。")"
 	fi
 
 	mkdir -p "$dr"
@@ -128,9 +138,10 @@ Plug in a disk, mount it and give the path: be7000-docker setup --data-root /mnt
 	if ! supports_docker_overlay "$dr"; then
 		die "$(t "Файловая система ${fs:-неизвестна} в $dr не поддерживает слои Docker.
 Используйте раздел ext4 или каталог внутри /overlay, если /overlay уже перенесён на USB-диск." "The ${fs:-unknown} filesystem at $dr cannot hold Docker layers.
-Use an ext4 partition or a directory under /overlay if /overlay has already been moved to a USB drive.")"
+Use an ext4 partition or a directory under /overlay if /overlay has already been moved to a USB drive." "$dr 所在的文件系统（${fs:-未知}）不支持 Docker 分层存储。
+请使用 ext4 分区。如果 /overlay 已经迁移到 USB 磁盘，也可以使用 /overlay 下的目录。")"
 	fi
-	t "Прописываю data-root" "Setting data-root"
+	t "Прописываю data-root" "Setting data-root" "正在设置 data-root"
 	uci -q set dockerd.globals.data_root="$dr"
 	uci -q commit dockerd
 
@@ -138,17 +149,17 @@ Use an ext4 partition or a directory under /overlay if /overlay has already been
 	/etc/init.d/dockerd restart
 
 	echo
-	t "Готово. Управление в LuCI: Сервисы, Dockerman." "Done. Manage it in LuCI: Services, Dockerman."
-	t "Там контейнеры, образы, сети, тома, логи и консоль внутрь контейнера." "Containers, images, networks, volumes, logs and a console into containers are there."
+	t "Готово. Управление в LuCI: Сервисы, Dockerman." "Done. Manage it in LuCI: Services, Dockerman." "完成。请在 LuCI 的 服务, Dockerman 中管理 Docker。"
+	t "Там контейнеры, образы, сети, тома, логи и консоль внутрь контейнера." "Containers, images, networks, volumes, logs and a console into containers are there." "其中可以管理容器、镜像、网络、卷、日志和容器终端。"
 }
 
 cmd_portainer() {
 	local yes="$1"
-	installed || die "$(t "Сначала be7000-docker setup" "Run be7000-docker setup first")"
+	installed || die "$(t "Сначала be7000-docker setup" "Run be7000-docker setup first" "请先运行 be7000-docker setup")"
 	if [ "$yes" != 1 ]; then
-		t "Запущу Portainer CE контейнером, веб-интерфейс на порту 9443 по https." "Will start Portainer CE as a container, web interface on port 9443 over https."
-		t "Это отдельный интерфейс поверх докера, со стеками и compose." "It is a separate interface on top of Docker, with stacks and compose."
-		t "Повторите с --yes." "Repeat with --yes."
+		t "Запущу Portainer CE контейнером, веб-интерфейс на порту 9443 по https." "Will start Portainer CE as a container, web interface on port 9443 over https." "将以容器方式启动 Portainer CE，HTTPS 管理页面使用 9443 端口。"
+		t "Это отдельный интерфейс поверх докера, со стеками и compose." "It is a separate interface on top of Docker, with stacks and compose." "这是独立的 Docker 管理界面，支持 stacks 和 compose。"
+		t "Повторите с --yes." "Repeat with --yes." "请加上 --yes 再次运行。"
 		exit 1
 	fi
 	docker volume create portainer_data >/dev/null
@@ -157,7 +168,7 @@ cmd_portainer() {
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v portainer_data:/data \
 		portainer/portainer-ce:latest
-	t "Portainer поднят. Откройте https://<адрес роутера>:9443 и задайте пароль." "Portainer is up. Open https://<router address>:9443 and set a password."
+	t "Portainer поднят. Откройте https://<адрес роутера>:9443 и задайте пароль." "Portainer is up. Open https://<router address>:9443 and set a password." "Portainer 已启动。请打开 https://<路由器地址>:9443 并设置密码。"
 }
 
 ACTION="$1"
