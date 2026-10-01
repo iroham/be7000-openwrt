@@ -1,6 +1,6 @@
 # Building
 
-[Русская версия](building.md)
+[Русская версия](building.md) · [中文](building.zh.md)
 
 Nothing is built by hand anymore. Everything is done by a single workflow in `.github/workflows/build.yml` on GitHub Actions.
 
@@ -18,3 +18,7 @@ grep -E "^(kmod-ath11k-ahb|kmod-ath12k|kmod-qcom-ppe|wpad-mbedtls|luci-ssl) " *.
 Images can be unpacked with the scripts/ubi_extract.py script (volume 1 is squashfs).
 
 Debug builds from a `debug-*` tag come out as a pre-release, do not publish the feed and build only the image, without the module packages for the feed, so they take about half an hour.
+
+A second workflow, `.github/workflows/hybrid-failover-feed.yml`, keeps a separate hybrid-failover feed. Every three hours it looks at the latest openwrt-hybrid-failover release, and if it is newer than what the feed holds, it builds the packages for aarch64_cortex-a73 with the project's own packaging script. The index is signed with the same key and goes to `feed/hybrid-failover/aarch64_cortex-a73/`. It can also be started by hand from Actions. It runs from the main branch, GitHub requires that for scheduled runs.
+
+LuCI translations live in `i18n`, English `be7000.en.po` and Chinese `be7000.zh-cn.po`, the built `.lmo` files sit with the other firmware files. `scripts/i18n-check.sh` checks that every string of our pages has a translation in both languages.

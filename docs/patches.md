@@ -1,6 +1,6 @@
 # Патчи
 
-[English](patches.en.md)
+[English](patches.en.md) · [中文](patches.zh.md)
 
 Всё, что добавлено к OpenWrt main (коммит d958caf) и порту kravasuper, который лежит серией патчей в [patches/port](../patches/port). Патчи ядра лежат в [patches](../patches) и копируются в target/linux/qualcommbe/patches-6.18, правки самого дерева OpenWrt в [patches/tree](../patches/tree).
 

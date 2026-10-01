@@ -1,6 +1,6 @@
 # Patches
 
-[Русская версия](patches.md)
+[Русская версия](patches.md) · [中文](patches.zh.md)
 
 Everything added to OpenWrt main (commit d958caf) and the kravasuper port, which is kept as a patch series in [patches/port](../patches/port). The kernel patches are in [patches](../patches) and are copied into target/linux/qualcommbe/patches-6.18, the changes to the OpenWrt tree itself are in [patches/tree](../patches/tree).
 

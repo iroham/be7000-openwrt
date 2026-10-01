@@ -1,6 +1,6 @@
 # Measurements
 
-[Русский](benchmarks.md)
+[Русский](benchmarks.md) · [中文](benchmarks.zh.md)
 
 Numbers you can check. Each one says what it was measured with and how, so anyone can repeat it on their own router and compare.
 

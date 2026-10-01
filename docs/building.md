@@ -1,6 +1,6 @@
 # Сборка
 
-[English](building.en.md)
+[English](building.en.md) · [中文](building.zh.md)
 
 Руками больше ничего не собирается. Всё делает один workflow в `.github/workflows/build.yml` на GitHub Actions.
 
@@ -18,3 +18,7 @@ grep -E "^(kmod-ath11k-ahb|kmod-ath12k|kmod-qcom-ppe|wpad-mbedtls|luci-ssl) " *.
 Образы можно разобрать скриптом scripts/ubi_extract.py (том 1 это squashfs).
 
 Отладочные сборки по тегу `debug-*` выходят пре-релизом, фид не публикуют и собирают только образ, без пакетов-модулей для фида, поэтому занимают около получаса.
+
+Второй workflow, `.github/workflows/hybrid-failover-feed.yml`, держит отдельный фид hybrid-failover. Раз в три часа он смотрит последний релиз openwrt-hybrid-failover, и если он новее того, что лежит в фиде, собирает пакеты под aarch64_cortex-a73 скриптом упаковки самого проекта. Индекс подписывается тем же ключом и кладётся в `feed/hybrid-failover/aarch64_cortex-a73/`. Запустить его можно и вручную, кнопкой в Actions. Работает он из ветки main, так GitHub требует для запусков по расписанию.
+
+Переводы LuCI лежат в `i18n`, английский `be7000.en.po` и китайский `be7000.zh-cn.po`, собранные `.lmo` лежат рядом с остальными файлами прошивки. Скрипт `scripts/i18n-check.sh` проверяет, что у каждой строки наших страниц есть перевод на оба языка.

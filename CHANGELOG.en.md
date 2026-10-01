@@ -1,6 +1,6 @@
 # Versions
 
-[Русская версия](CHANGELOG.md)
+[Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
 **1.4.0**, October 1, 2026.
 - Three 5 GHz modes instead of two. Besides one radio and two radios there is now MLO. In MLO one Wi-Fi 7 network runs on both radios at once, the lower one on channels 36-64 up to 160 MHz, the upper one from 149 up to 80 MHz. Wi-Fi 7 devices keep a link on two channels at once, the rest join one of them like an ordinary network. The mode changes in the 5 GHz mode block on Network, Wireless or with be7000-5g-split mode, without a reboot.
@@ -12,6 +12,7 @@
 - New page System, Slots. It shows which firmware each slot holds, which one runs and which one boots, and switches to the other slot, back to stock included. The page explains in full how the bootloader picks a slot and how to come back.
 - Hardware NAT offload on the PPE network engine, experimental and off by default. Page Network, Hardware offload, with a full description. It is built on open work for OpenWrt. Without three fixes of ours it did not work. The PPE now gets its table rows written whole, the path to Wi-Fi clients behind a bridge is no longer lost, and a bug in packet receive of the network driver is fixed. Bridging the LAN ports on the PPE is a separate switch.
 - The interface now comes in Chinese too. All Beam WRT pages, the theme and LuCI itself are translated, the language is picked on System, System, Language and Style or automatically from the browser.
+- hybrid-failover is now in the feed. It lives in its own directory and rebuilds itself with every new release, so `apk upgrade` picks up the latest version. kmod-nft-queue and coreutils-sleep were added to the feed as well.
 - The docs got recipes for common tasks (modem, phone over USB, Docker, 5 GHz modes, stock, slots) and a measurements page with the method.
 - The build moved to a fresh OpenWrt main (d958caf). Kernel 6.18.52 instead of 6.18.36, Wi-Fi drivers from backports 7.2. Installed packages are reinstalled for the new kernel from the new feed after the upgrade. Packages for 1.3.x stay in the old feed directory and no longer change.
 - A package the new feed does not have, such as an old-base library with a date in its name, is skipped and the rest are installed. Before, one such name broke the reinstall of every package.

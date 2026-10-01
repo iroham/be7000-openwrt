@@ -2,7 +2,7 @@
 <style>
 .bg{fill:#fcfcfb}.t1{fill:#0b0b0b}.t2{fill:#52514e}.grid{stroke:#e4e3de}.axis{stroke:#b9b8b2}
 .s1{fill:#2a78d6}.s2{fill:#eb6834}.s3{fill:#1baf7a}
-text{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+text{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif}
 @media (prefers-color-scheme: dark){.bg{fill:#1a1a19}.t1{fill:#ffffff}.t2{fill:#c3c2b7}.grid{stroke:#34332f}.axis{stroke:#5b5a55}
 .s1{fill:#3987e5}.s2{fill:#d95926}.s3{fill:#199e70}}
 </style>

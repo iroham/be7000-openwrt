@@ -1,6 +1,6 @@
 # Recipes
 
-[Русский](cookbook.md)
+[Русский](cookbook.md) · [中文](cookbook.zh.md)
 
 Ready recipes for common tasks. Commands run over SSH on the router (`ssh root@192.168.1.1`). Packages come from the build's feed, so the router needs internet. If something does not work, post the command output in the 4PDA topic or in issues.
 
