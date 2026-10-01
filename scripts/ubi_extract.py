@@ -1,4 +1,4 @@
-import struct, sys, collections
+import struct, sys, collections, os, re
 data = open(sys.argv[1], 'rb').read()
 PEB = 131072
 vols = collections.defaultdict(dict)
@@ -29,7 +29,9 @@ for off in range(0, len(data) - PEB + 1, PEB):
     vols[vol_id][lnum] = d
 for vid_, lebs in vols.items():
     out = b''.join(lebs[k] for k in sorted(lebs))
-    name = names.get(vid_, str(vid_))
-    fn = f"{sys.argv[2]}/vol_{vid_}_{name}.bin"
+    # the volume name comes from the image, keep it to plain characters so it
+    # can never turn into a path outside the output directory
+    name = re.sub(r'[^A-Za-z0-9._-]', '_', names.get(vid_, str(vid_))).lstrip('.') or str(vid_)
+    fn = os.path.join(sys.argv[2], f"vol_{vid_}_{name}.bin")
     open(fn, 'wb').write(out)
     print(fn, len(out), out[:4])
