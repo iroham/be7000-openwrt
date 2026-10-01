@@ -42,8 +42,11 @@ installed_field() {
 }
 
 json_escape() {
-	# good enough for text we print into our own JSON
-	printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g' -e 's/\r//g' -e 's/\t/\\t/g'
+	# Escape every line before joining them. If the input is joined first,
+	# quotes after the first newline are left untouched by sed.
+	printf '%s' "$1" |
+		sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\r//g' -e 's/\t/\\t/g' |
+		sed -e ':a;N;$!ba;s/\n/\\n/g'
 }
 
 # "1.2.5" from "v1.2.5-r20260925"
