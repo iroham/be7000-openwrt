@@ -44,17 +44,27 @@ install_hf() {
 	[ "$1" = bot ] && pkgs="$pkgs hybrid-failover-bot"
 	running && { echo "an install is already running"; return 1; }
 	(
+		tmp=$(mktemp -d)
 		echo "apk update"
 		apk update 2>&1 | tail -3
+		echo "apk fetch $pkgs"
+		if ! apk fetch --output "$tmp" $pkgs; then
+			rm -rf "$tmp"
+			/etc/init.d/rpcd start >/dev/null 2>&1
+			echo "=== failed, package download or signature check failed"
+			exit 1
+		fi
 		echo "apk add $pkgs"
 		# a copy installed by the project's own script owns the same files
 		if [ -x /usr/sbin/hybrid-failover ] && ! apk info -e hybrid-failover-core >/dev/null 2>&1; then
-			apk add --force-overwrite $pkgs 2>&1
+			apk add --force-overwrite "$tmp"/*.apk 2>&1
 		else
-			apk add $pkgs 2>&1
+			apk add "$tmp"/*.apk 2>&1
 		fi
 		rc=$?
+		rm -rf "$tmp"
 		rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache 2>/dev/null
+		/etc/init.d/rpcd start >/dev/null 2>&1
 		[ $rc = 0 ] && echo "=== done" || echo "=== failed, apk exit code $rc"
 	) > $LOG 2>&1 < /dev/null &
 	echo $! > $PID
