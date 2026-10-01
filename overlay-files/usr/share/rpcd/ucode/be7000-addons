@@ -1,0 +1,43 @@
+'use strict';
+
+import { popen } from 'fs';
+
+const BIN = '/usr/libexec/be7000-addons';
+const IDS = [ 'hybrid-failover' ];
+
+function run(args) {
+	let fd = popen(`${BIN} ${args} 2>&1`, 'r');
+	let out = fd ? trim(fd.read('all') ?? '') : '';
+	let rc = fd ? fd.close() : -1;
+	return { rc, out };
+}
+
+return {
+	'be7000-addons': {
+		status: {
+			args: { id: '' },
+			call: function(req) {
+				let id = req.args?.id;
+				if (!(id in IDS))
+					return { error: 'unknown add-on' };
+				let r = run(`status ${id}`);
+				try { return json(r.out); } catch (e) { return { error: r.out }; }
+			}
+		},
+		install: {
+			args: { id: '', bot: false },
+			call: function(req) {
+				let id = req.args?.id;
+				if (!(id in IDS))
+					return { ok: false, output: 'unknown add-on' };
+				let r = run(`install ${id}${req.args?.bot ? ' bot' : ''}`);
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+		log: {
+			call: function() {
+				return { log: run('log').out };
+			}
+		}
+	}
+};

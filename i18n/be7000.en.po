@@ -624,3 +624,99 @@ msgstr "Do not erase the art, bdata and bootloader partitions. They hold the rad
 
 msgid "Не меняйте флаги вручную, если не уверены. С неверным значением роутер может не загружаться семь включений подряд."
 msgstr "Do not change the flags by hand unless you are sure. With a wrong value the router may fail to boot for seven power-ons in a row."
+
+msgid "Не удалось начать установку"
+msgstr "Could not start the install"
+
+msgid "установлен %s"
+msgstr "installed %s"
+
+msgid "установлен вручную"
+msgstr "installed by hand"
+
+msgid "не установлен"
+msgstr "not installed"
+
+msgid "Установить"
+msgstr "Install"
+
+msgid "Переустановить"
+msgstr "Reinstall"
+
+msgid "Обновить до %s"
+msgstr "Update to %s"
+
+msgid "вместе с ботом для Telegram"
+msgstr "with the Telegram bot"
+
+msgid "Открыть Hybrid Failover"
+msgstr "Open Hybrid Failover"
+
+msgid "Версию в фиде узнать не удалось. Проверьте интернет на роутере."
+msgstr "Could not get the version in the feed. Check the internet on the router."
+
+msgid "В фиде версия %s."
+msgstr "The feed has version %s."
+
+msgid "Сейчас Hybrid Failover стоит не из фида, а своим скриптом установки. Установка отсюда заменит его пакетами из фида, настройки сохранятся. После этого обновления будут приходить вместе с остальными пакетами."
+msgstr "Hybrid Failover is installed by its own install script now, not from the feed. Installing from here replaces it with packages from the feed and keeps the settings. After that, updates come with the other packages."
+
+msgid "Дополнения"
+msgstr "Add-ons"
+
+msgid "Программы, которые не входят в прошивку, но собраны для неё и ставятся из фида Beam WRT одной кнопкой. Новые версии появляются в фиде сами, после выхода каждого релиза."
+msgstr "Programs that are not part of the firmware but are built for it and install from the Beam WRT feed with one button. New versions show up in the feed by themselves after every release."
+
+msgid "Маршрутизация через VPN с автоматическим резервом. Основной канал идёт через ваш VPN, например AmneziaWG. Если он падает, трафик сам уходит на резервные прокси, а когда VPN поднимается, возвращается обратно. Устройствам в сети ничего настраивать не нужно."
+msgstr "Routing through a VPN with an automatic fallback. The main channel goes through your VPN, AmneziaWG for example. If it goes down, traffic moves to backup proxies by itself and comes back once the VPN is up again. Nothing needs to be set up on the devices in the network."
+
+msgid "Зачем это нужно"
+msgstr "Why you would want it"
+
+msgid "Обычный VPN на роутере работает по принципу всё или ничего. Если сервер недоступен, пропадают и сайты, которые через него шли. Hybrid Failover держит несколько каналов сразу, сам проверяет, какой из них жив и быстрее, и переключается без вашего участия. Заодно он умеет пускать через VPN только нужные сервисы, а остальное напрямую."
+msgstr "A plain VPN on a router is all or nothing. When the server is down, the sites that went through it are gone too. Hybrid Failover keeps several channels at once, checks which one is alive and faster, and switches without your help. It can also send only the services you choose through the VPN and the rest directly."
+
+msgid "Что умеет"
+msgstr "What it can do"
+
+msgid "Прозрачно перехватывает трафик локальной сети и направляет его по правилам. Правила задаются доменами, подсетями и готовыми списками сервисов, например youtube или telegram."
+msgstr "It transparently intercepts LAN traffic and routes it by rules. Rules are set by domains, subnets and ready-made service lists, youtube or telegram for example."
+
+msgid "Проверяет каналы и сам выбирает живой и самый быстрый. Можно держать основной канал и переключаться только при его падении."
+msgstr "It checks the channels and picks the live and fastest one by itself. You can also keep a main channel and switch only when it goes down."
+
+msgid "Понимает ссылки vless, ss, trojan, hysteria2, socks и экспорт из Amnezia, включая AmneziaWG 3.1."
+msgstr "It understands vless, ss, trojan, hysteria2 and socks links and Amnezia exports, AmneziaWG 3.1 included."
+
+msgid "Правила для отдельных устройств. Например, приставка всегда через VPN, а телевизор мимо."
+msgstr "Rules for single devices. For example, the game console always through the VPN and the TV around it."
+
+msgid "Разные сервисы можно развести по разным туннелям, чтобы видео не делило канал со всем остальным."
+msgstr "Different services can go through different tunnels, so video does not share a channel with everything else."
+
+msgid "Графики по каждому каналу в LuCI и бот для Telegram, который показывает статус, переключает каналы и присылает уведомления."
+msgstr "Charts for every channel in LuCI and a Telegram bot that shows the status, switches channels and sends notifications."
+
+msgid "Что понадобится"
+msgstr "What you need"
+
+msgid "Свой VPN-сервер или ссылки на прокси. Сам по себе Hybrid Failover никуда трафик не уводит, ему нужны каналы, которые вы добавите. AmneziaWG уже встроен в прошивку, ставить его отдельно не нужно."
+msgstr "Your own VPN server or proxy links. Hybrid Failover does not send traffic anywhere by itself, it needs the channels you add. AmneziaWG is already built into the firmware, there is no need to install it."
+
+msgid "Что произойдёт при установке"
+msgstr "What happens on install"
+
+msgid "Поставятся служба, страница в LuCI и её перевод, а если отмечено, ещё и бот для Telegram."
+msgstr "The service, its LuCI page and its translation are installed, and the Telegram bot too if ticked."
+
+msgid "Служба сама не включится и трафик не тронет. Сначала откройте Сервисы, Hybrid Failover, добавьте каналы и включите её там."
+msgstr "The service does not turn on by itself and does not touch traffic. First open Services, Hybrid Failover, add channels and turn it on there."
+
+msgid "Если на роутере стоит отдельный sing-box, Hybrid Failover его остановит и выключит, чтобы они не мешали друг другу."
+msgstr "If a separate sing-box is installed on the router, Hybrid Failover stops and disables it so they do not get in each other's way."
+
+msgid "Когда служба включена, она берёт на себя DNS роутера и выключает IPv6 в локальной сети. Это нужно для маршрутизации по доменам."
+msgstr "Once the service is on, it takes over the router DNS and turns IPv6 off in the LAN. This is needed for routing by domain."
+
+msgid "Исходники и подробная документация на GitHub"
+msgstr "Sources and detailed docs on GitHub"

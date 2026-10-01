@@ -1,0 +1,84 @@
+#!/bin/sh
+# Add-on programs from the Beam WRT feeds, for the Services, Add-ons page.
+#
+#   status <id>          JSON: installed version, version in the feed, state
+#   install <id> [bot]   apk update and install in the background, log in $LOG
+#   log                  the log of the last install
+#
+# Only hybrid-failover for now. It lives in its own feed directory,
+# feed/hybrid-failover/, rebuilt from every upstream release.
+
+LOG=/tmp/be7000-addons.log
+PID=/tmp/be7000-addons.pid
+
+running() {
+	[ -s $PID ] && kill -0 "$(cat $PID)" 2>/dev/null
+}
+
+ver_installed() {
+	apk info -e "$1" >/dev/null 2>&1 || return 1
+	apk info "$1" 2>/dev/null | sed -n "s/^$1-\([^ ]*\) description:.*/\1/p" | head -1
+}
+
+ver_feed() {
+	apk search -x "$1" 2>/dev/null | sed -n "s/^$1-//p" | head -1
+}
+
+status_hf() {
+	local inst feed bot manual=false
+	inst=$(ver_installed hybrid-failover-core)
+	feed=$(ver_feed hybrid-failover-core)
+	bot=$(ver_installed hybrid-failover-bot)
+	# installed by its own script, outside apk
+	[ -z "$inst" ] && [ -x /usr/sbin/hybrid-failover ] && manual=true
+	printf '{"id":"hybrid-failover","installed":"%s","feed":"%s","bot":%s,"manual":%s,"running":%s,"service":%s}\n' \
+		"$inst" "$feed" \
+		$([ -n "$bot" ] && echo true || echo false) \
+		$manual \
+		$(running && echo true || echo false) \
+		$(pgrep -f '/usr/sbin/hybrid-failover' >/dev/null 2>&1 && echo true || echo false)
+}
+
+install_hf() {
+	local pkgs="hybrid-failover-core luci-app-hybrid-failover luci-i18n-hybrid-failover"
+	[ "$1" = bot ] && pkgs="$pkgs hybrid-failover-bot"
+	running && { echo "an install is already running"; return 1; }
+	(
+		echo "apk update"
+		apk update 2>&1 | tail -3
+		echo "apk add $pkgs"
+		# a copy installed by the project's own script owns the same files
+		if [ -x /usr/sbin/hybrid-failover ] && ! apk info -e hybrid-failover-core >/dev/null 2>&1; then
+			apk add --force-overwrite $pkgs 2>&1
+		else
+			apk add $pkgs 2>&1
+		fi
+		rc=$?
+		rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache 2>/dev/null
+		[ $rc = 0 ] && echo "=== done" || echo "=== failed, apk exit code $rc"
+	) > $LOG 2>&1 < /dev/null &
+	echo $! > $PID
+	echo started
+}
+
+case "$1" in
+status)
+	case "$2" in
+	hybrid-failover) status_hf ;;
+	*) echo '{"error":"unknown add-on"}' ;;
+	esac
+	;;
+install)
+	case "$2" in
+	hybrid-failover) install_hf "$3" ;;
+	*) echo "unknown add-on"; exit 1 ;;
+	esac
+	;;
+log)
+	cat $LOG 2>/dev/null
+	;;
+*)
+	echo "usage: $0 status <id> | install <id> [bot] | log"
+	exit 1
+	;;
+esac
