@@ -74,6 +74,7 @@ The full list of changes is in [CHANGELOG.en.md](../CHANGELOG.en.md).
 - Moving settings and packages to a USB disk with one button on System, Storage.
 - Docker with ready-made container sets (AdGuard Home, Home Assistant, Portainer and more) on Services, "Docker: stacks".
 - The Nimbus theme.
+- The interface in Russian, English and Chinese.
 - UPnP, off by default.
 - Kernel modules for transparent proxying.
 
