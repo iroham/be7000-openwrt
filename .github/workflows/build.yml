@@ -328,7 +328,14 @@ jobs:
             n=$(find "feed/$FEED_BASE/$ARCH" -name '*.apk' | wc -l)
             k=$(find "feed/targets/$TARGET/$VERMAGIC" -name '*.apk' | wc -l)
             git commit -q -m "feed: $n userspace packages and $k kernel modules for $VERMAGIC (${{ github.ref_name }})"
-            git push -q origin gh-pages
+            # the hybrid-failover feed job may have pushed meanwhile, its
+            # directory never overlaps ours, so a rebase is always clean
+            for i in 1 2 3 4 5; do
+              git push -q origin gh-pages && break
+              [ $i = 5 ] && exit 1
+              sleep $((i * 10))
+              git pull -q --rebase origin gh-pages
+            done
           fi
 
       - name: Package the release

@@ -1,0 +1,116 @@
+name: hybrid-failover feed
+
+# Keeps feed/hybrid-failover/ on gh-pages at the latest hybrid-failover
+# release. The upstream release builds no aarch64_cortex-a73 packages, so this
+# builds them from the release tag with the project's own packaging script and
+# signs the index with the same key as the main feed. It only commits when the
+# release is newer than what the feed holds.
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild even if the feed already holds the latest release"
+        type: boolean
+        default: false
+  repository_dispatch:
+    types: [hybrid-failover-release]
+
+concurrency:
+  group: hybrid-failover-feed
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: timofey-maykov/openwrt-hybrid-failover
+  ARCH: aarch64_cortex-a73
+  DIR: feed/hybrid-failover/aarch64_cortex-a73
+
+jobs:
+  feed:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Latest release and what the feed holds
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api "repos/$UPSTREAM/releases/latest" --jq .tag_name)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          have=$(curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/gh-pages/$DIR/VERSION" || true)
+          echo "latest $tag, feed has ${have:-nothing}"
+          if [ "$tag" = "$have" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the release
+        if: steps.ver.outputs.skip != '1'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM }}
+          ref: ${{ steps.ver.outputs.tag }}
+          path: hf
+
+      - uses: actions/setup-go@v5
+        if: steps.ver.outputs.skip != '1'
+        with:
+          go-version-file: hf/go.mod
+          cache-dependency-path: |
+            hf/go.sum
+            hf/bot/go.sum
+
+      - name: Build the packages
+        if: steps.ver.outputs.skip != '1'
+        working-directory: hf
+        env:
+          HF_BUILD_ARCHS_OVERRIDE: ${{ env.ARCH }}
+          HF_PKG_FORMAT: apk
+          GOTOOLCHAIN: local
+        run: |
+          chmod +x scripts/build-packages.sh scripts/lib/*.sh
+          ./scripts/build-packages.sh
+          ls -la dist/apk
+
+      - name: Sign the index
+        if: steps.ver.outputs.skip != '1'
+        env:
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
+        run: |
+          mkdir -p out
+          cp hf/dist/apk/*.apk out/
+          printf '%s\n' "$APK_SIGNING_KEY" > key.pem
+          docker run --rm -v "$PWD:/w" -w /w alpine:edge \
+            apk mkndx --allow-untrusted --sign-key key.pem --output out/packages.adb $(cd out && ls *.apk | sed 's|^|out/|')
+          rm -f key.pem
+          echo "${{ steps.ver.outputs.tag }}" > out/VERSION
+
+      - name: Publish
+        if: steps.ver.outputs.skip != '1'
+        run: |
+          git clone --filter=blob:none --no-checkout --depth 1 --branch gh-pages \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" pages
+          cd pages
+          git sparse-checkout set --no-cone "/$DIR/"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # the main feed build may push at the same time: on a refused push
+          # start again from the fresh tip, the directory is ours alone
+          for i in 1 2 3 4 5; do
+            git fetch -q --filter=blob:none --depth 1 origin gh-pages
+            git checkout -q -B gh-pages FETCH_HEAD
+            rm -rf "$DIR"
+            mkdir -p "$DIR"
+            cp ../out/* "$DIR/"
+            git add -A "$DIR"
+            if git diff --cached --quiet; then
+              echo "feed unchanged"
+              exit 0
+            fi
+            git commit -q -m "feed: hybrid-failover ${{ steps.ver.outputs.tag }} for $ARCH"
+            git push -q origin gh-pages && exit 0
+            sleep $((i * 10))
+          done
+          exit 1
