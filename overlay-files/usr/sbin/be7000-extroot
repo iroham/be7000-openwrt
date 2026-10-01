@@ -61,6 +61,8 @@ with_volume_config() {
 	fi
 	mkdir -p "$dir/upper/etc/config"
 	[ -f "$dir/upper/etc/config/fstab" ] || cp /rom/etc/config/fstab "$dir/upper/etc/config/fstab" 2>/dev/null || : > "$dir/upper/etc/config/fstab"
+	uci -q -c "$dir/upper/etc/config" get fstab.@global[0] >/dev/null ||
+		{ uci -q -c "$dir/upper/etc/config" add fstab global >/dev/null && uci -q -c "$dir/upper/etc/config" commit fstab; } || true
 	uci -q -c "$dir/upper/etc/config" batch || rc=1
 	sync
 	[ -n "$mnt" ] && { umount "$mnt"; rmdir "$mnt"; }
@@ -77,6 +79,28 @@ current_overlay_device() {
 	mount | awk '$3 == "/overlay" { print $1; exit }'
 }
 
+# In use: mounted, or an active swap partition (swap does not show in mount).
+dev_in_use() {
+	mount | grep -q "^$1 " && return 0
+	grep -q "^$1 " /proc/swaps 2>/dev/null && return 0
+	return 1
+}
+
+# A whole disk is busy when any of its partitions is in use.
+children_busy() {
+	local d
+	case "$1" in
+	/dev/sd[a-z]) ;;
+	/dev/mmcblk[0-9]) ;;
+	*) return 1 ;;
+	esac
+	for d in "$1"[0-9]* "$1"p[0-9]*; do
+		[ -b "$d" ] || continue
+		dev_in_use "$d" && return 0
+	done
+	return 1
+}
+
 
 # A partition whose whole disk is in use is not safe to touch: after the disk
 # was re-partitioned the kernel can still expose stale partition nodes that now
@@ -88,7 +112,7 @@ parent_busy() {
 	/dev/mmcblk[0-9]p[0-9]*) parent="$(echo "$dev" | sed 's/p[0-9]*$//')" ;;
 	*) return 1 ;;
 	esac
-	mount | grep -q "^$parent " && return 0
+	dev_in_use "$parent" && return 0
 	return 1
 }
 
@@ -120,8 +144,10 @@ cmd_list() {
 		size="$(awk -v n="$name" '$4 == n { printf "%.1f GB", $3/1024/1024 }' /proc/partitions)"
 		model=""
 		[ -r "/sys/class/block/$name/device/model" ] && model="$(cat "/sys/class/block/$name/device/model")"
-		if mount | grep -q "^$d "; then
-			echo "$d  ${size:-?}  $model  (mounted, skipped)"
+		if dev_in_use "$d"; then
+			echo "$d  ${size:-?}  $model  (in use, skipped)"
+		elif children_busy "$d"; then
+			echo "$d  ${size:-?}  $model  (partitions in use, skipped)"
 		elif parent_busy "$d"; then
 			echo "$d  ${size:-?}  $model  (whole disk in use, skipped)"
 		else
@@ -143,7 +169,8 @@ cmd_list_json() {
 		model=""
 		[ -r "/sys/class/block/$name/device/model" ] && model="$(tr -d '\r' < "/sys/class/block/$name/device/model" | sed 's/[[:space:]]*$//' | sed 's/"/\\"/g')"
 		mounted=false
-		mount | grep -q "^$d " && mounted=true
+		dev_in_use "$d" && mounted=true
+		children_busy "$d" && mounted=true
 		parent_busy "$d" && mounted=true
 		[ $first = 1 ] || printf ','
 		first=0
@@ -168,7 +195,8 @@ cmd_use() {
 	local dev="$1" yes="$2" do_reboot="$3" uuid
 	[ -n "$dev" ] || die "usage: be7000-extroot use <device> [--yes] [--reboot]"
 	[ -b "$dev" ] || die "$dev is not a block device"
-	mount | grep -q "^$dev " && die "$dev is mounted, unmount it first"
+	dev_in_use "$dev" && die "$dev is mounted or used as swap, free it first"
+	children_busy "$dev" && die "partitions of $dev are mounted or used as swap, a whole disk in use cannot be formatted"
 	parent_busy "$dev" && die "the whole disk this partition sits on is mounted, so this node may be stale; unmount it first"
 	case "$dev" in
 	/dev/ubi*|/dev/mtd*) die "$dev is internal flash, not an external disk" ;;
@@ -261,6 +289,74 @@ cmd_revert() {
 	if [ "$do_reboot" = 1 ]; then sync; reboot; fi
 }
 
+# Boot check, from /etc/init.d/be7000-extroot. A sysupgrade creates the
+# slot's rootfs_data anew, and with it goes the extroot entry fstools reads:
+# the router then comes up on the shared volume and the disk sits unused,
+# although the live settings still name it. Put the entry back from the live
+# settings, and reboot once onto the disk if it is plugged in. When the entry
+# is already there nothing changes, so this cannot loop.
+cmd_boot_sync() {
+	local rd cur mnt dir="" uuid en rd_uuid rd_en kver changed=0
+	[ -e /rom/etc/be7000-test ] && return 0
+	rd="$(rootfs_data_dev)" || return 0
+	cur="$(current_overlay_device)"
+	# running on rootfs_data itself: the live settings are the ones fstools read
+	[ "$cur" = "$rd" ] && return 0
+
+	uuid="$(uci -q get fstab.extroot.uuid || true)"
+	en="$(uci -q get fstab.extroot.enabled || true)"
+
+	dir="$(mount | awk -v d="$rd" '$1 == d { print $3; exit }')"
+	if [ -z "$dir" ]; then
+		mnt=/tmp/extroot-sync.$$
+		mkdir -p "$mnt"
+		mount -t ubifs "$rd" "$mnt" 2>/dev/null || { rmdir "$mnt"; return 0; }
+		dir="$mnt"
+	fi
+	rd_uuid="$(uci -q -c "$dir/upper/etc/config" get fstab.extroot.uuid || true)"
+	rd_en="$(uci -q -c "$dir/upper/etc/config" get fstab.extroot.enabled || true)"
+
+	# A uas driver copied into rootfs_data by hand on 1.3.x is not needed
+	# once the image carries it, and would shadow it after a kernel change.
+	kver="$(uname -r)"
+	if [ -f "/rom/lib/modules/$kver/uas.ko" ]; then
+		rm -f "$dir/upper/lib/modules/$kver/uas.ko" "$dir/upper/etc/modules-boot.d/60-usb-storage-uas"
+	fi
+
+	if [ -z "$uuid" ]; then
+		if [ -n "$rd_uuid" ]; then
+			uci -q -c "$dir/upper/etc/config" delete fstab.extroot && uci -q -c "$dir/upper/etc/config" commit fstab || true
+			logger -t be7000-extroot "extroot is off in the settings, removed it from rootfs_data too"
+		fi
+	elif [ "$uuid" != "$rd_uuid" ] || [ "$en" != "$rd_en" ]; then
+		mkdir -p "$dir/upper/etc/config"
+		[ -f "$dir/upper/etc/config/fstab" ] || cp /rom/etc/config/fstab "$dir/upper/etc/config/fstab" 2>/dev/null || : > "$dir/upper/etc/config/fstab"
+		# a fresh fstab may have no global section to hold delay_root
+		uci -q -c "$dir/upper/etc/config" get fstab.@global[0] >/dev/null ||
+			{ uci -q -c "$dir/upper/etc/config" add fstab global >/dev/null && uci -q -c "$dir/upper/etc/config" commit fstab; } || true
+		uci -q -c "$dir/upper/etc/config" batch <<-EOT || true
+			set fstab.extroot=mount
+			set fstab.extroot.target='/overlay'
+			set fstab.extroot.uuid='$uuid'
+			set fstab.extroot.fstype='ext4'
+			set fstab.extroot.options='rw,noatime'
+			set fstab.extroot.enabled='${en:-1}'
+			set fstab.@global[0].delay_root='15'
+			commit fstab
+		EOT
+		logger -t be7000-extroot "rootfs_data had no extroot entry for UUID $uuid (after an upgrade), put it back"
+		changed=1
+	fi
+	sync
+	[ -n "$mnt" ] && { umount "$mnt"; rmdir "$mnt"; }
+
+	if [ "$changed" = 1 ] && [ "${en:-1}" = 1 ] && block info 2>/dev/null | grep -q "UUID=\"$uuid\""; then
+		logger -t be7000-extroot "the disk is here, rebooting once to put /overlay on it"
+		( sleep 5; reboot ) </dev/null >/dev/null 2>&1 &
+	fi
+	return 0
+}
+
 YES=0
 REBOOT=0
 ACTION="$1"
@@ -283,6 +379,7 @@ status) [ $JSON = 1 ] && cmd_status_json || cmd_status ;;
 list)   [ $JSON = 1 ] && cmd_list_json || cmd_list ;;
 use)    cmd_use "$DEV" "$YES" "$REBOOT" ;;
 revert) cmd_revert "$YES" "$REBOOT" ;;
+boot-sync) cmd_boot_sync ;;
 *)
 	echo "usage: be7000-extroot {status|list|use <device> [--yes] [--reboot]|revert [--yes] [--reboot]}"
 	exit 1

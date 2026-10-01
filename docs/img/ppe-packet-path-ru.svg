@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 282" width="720" height="282" role="img" aria-label="Куда уходят пакеты загрузки при включённой разгрузке">
+<style>
+.bg{fill:#fcfcfb}.t1{fill:#0b0b0b}.t2{fill:#52514e}.grid{stroke:#e4e3de}.axis{stroke:#b9b8b2}
+.s1{fill:#2a78d6}.s2{fill:#eb6834}.s3{fill:#1baf7a}
+text{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif}
+@media (prefers-color-scheme: dark){.bg{fill:#1a1a19}.t1{fill:#ffffff}.t2{fill:#c3c2b7}.grid{stroke:#34332f}.axis{stroke:#5b5a55}
+.s1{fill:#3987e5}.s2{fill:#d95926}.s3{fill:#199e70}}
+</style>
+<rect class="bg" width="720" height="282" rx="12"/>
+<text class="t1" x="24" y="36" font-size="18" font-weight="600">Куда уходят пакеты загрузки при включённой разгрузке</text>
+<text class="t2" x="24" y="58" font-size="13">Доля пакетов с WAN за 15 секунд загрузки через PPPoE, клиент на Wi-Fi</text>
+<rect class="s1" x="24" y="74" width="12" height="12" rx="3"/><text class="t2" x="42" y="85" font-size="13">NAT сделал PPE</text>
+<rect class="s2" x="168.8" y="74" width="12" height="12" rx="3"/><text class="t2" x="186.8" y="85" font-size="13">Процессору без маршрута</text>
+<rect class="s3" x="378.4" y="74" width="12" height="12" rx="3"/><text class="t2" x="396.4" y="85" font-size="13">Прочее</text>
+<text class="t1" x="24" y="120" font-size="14">До исправлений</text>
+<g><title>До исправлений, Процессору без маршрута: 100.0 %</title><rect class="s2" x="24" y="128" width="671.8908913784705" height="34" rx="4"/></g>
+<text x="359.94544568923527" y="150.0" font-size="13" font-weight="600" text-anchor="middle" fill="#ffffff">100 %</text>
+<text class="t1" x="24" y="182" font-size="14">С исправлениями Beam WRT</text>
+<g><title>С исправлениями Beam WRT, NAT сделал PPE: 85.9 %</title><rect class="s1" x="24" y="190" width="575.0949813355454" height="34" rx="4"/></g>
+<text x="312.5474906677727" y="212.0" font-size="13" font-weight="600" text-anchor="middle" fill="#ffffff">86 %</text>
+<g><title>С исправлениями Beam WRT, Процессору без маршрута: 2.0 %</title><rect class="s2" x="601.0949813355454" y="190" width="11.518042306097055" height="34" rx="0"/></g>
+<g><title>С исправлениями Beam WRT, Прочее: 12.1 %</title><rect class="s3" x="614.6130236416425" y="190" width="81.38697635835747" height="34" rx="4"/></g>
+<text x="655.3065118208212" y="212.0" font-size="13" font-weight="600" text-anchor="middle" fill="#ffffff">12 %</text>
+<text class="t2" x="24" y="260" font-size="12">Счётчики причин PPE (коды 93 и 162) против числа пакетов на wan.</text>
+</svg>

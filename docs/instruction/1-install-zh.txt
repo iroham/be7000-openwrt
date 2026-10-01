@@ -1,0 +1,75 @@
+从原厂固件安装
+
+
+事先需要准备什么
+
+你需要在原厂固件上拥有 root SSH 权限。如果还没有，用 xmir-patcher 打开它。同时在 xmir-patcher 的第 8 项 Other functions 里设置 root 密码。不设的话，SSH 不接受网页管理界面的密码，已经有不少人卡在这一步。
+
+Windows 10 及更新的系统自带 OpenSSH 就够用，下面的命令可以在 PowerShell 或普通命令提示符里运行。Mac 和 Linux 在终端里运行同样的命令。
+
+原厂固件的版本无所谓。从 1.1.16 和 1.1.38 都安装成功过，不需要先升级原厂固件。
+
+原厂固件的地址是 192.168.31.1。用网线把电脑接到 LAN 口。
+
+
+关于设置的存储空间
+
+槽位里的空间很小。所以 Beam WRT 第一次启动时，会把自己的设置和软件包放到原厂固件存放设置的那个分区里，用一个单独的目录。这样可用空间是 19.4 MB，而不是 7.4 MB。原厂设置不会被改动，切回原厂固件后，它会带着自己的设置启动。如果你想保持 7.4 MB，请在第一次启动前把 /etc/config/bigoverlay 里的值改成 0。
+
+
+第 1 步。备份，没有备份不要开始
+
+最重要的分区是 ART 和 bdata。ART 里是 Wi-Fi 校准数据，没有它无线就不能工作。bdata 里是 MAC 地址和序列号。引导程序和两个槽位也要备份。所有文件先保存到路由器的 /tmp 里。
+
+ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.168.31.1 "for n in 17 18 19 20 25; do cat /dev/mtd$n > /tmp/mtd$n.bin; done"
+
+然后把文件一个一个复制到电脑上。
+
+scp -O -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.168.31.1:/tmp/mtd20.bin .
+
+mtd17、mtd18、mtd19 和 mtd25 也照这样做。槽位 mtd23 和 mtd24 各有 40 MB。它们也可以用同样的方法保存，但要一次只存一个，否则 /tmp 的内存不够。
+
+在 PowerShell 里不要用大于号把 ssh 的输出直接重定向到文件，这样会损坏二进制数据。所以才要先存到 /tmp 再用 scp 复制。
+
+
+第 2 步。上传镜像和脚本
+
+scp -O -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi root@192.168.31.1:/tmp/openwrt.ubi
+scp -O -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa install-from-stock.sh root@192.168.31.1:/tmp/install-from-stock.sh
+
+
+第 3 步。在路由器上检查校验值
+
+ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.168.31.1 "openssl dgst -sha256 /tmp/openwrt.ubi"
+
+把结果和 sha256sums.txt 对比。如果不一致，重新上传镜像，先不要继续。
+
+
+第 4 步。安装
+
+ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.168.31.1 "sh /tmp/install-from-stock.sh /tmp/openwrt.ubi reboot"
+
+脚本会查出原厂固件在哪个槽位运行，把镜像写到另一个槽位，然后切换启动。它不会动引导程序。只要有一点对不上，脚本就会停下，什么也不写。如果 Beam WRT 启动不了，下次通电时路由器会自己回到原厂固件。
+
+
+第 5 步。第一次登录
+
+第一次启动大约需要一分钟。指示灯变成白色常亮，路由器就准备好了。这时 root 密码还是空的。
+
+安装后去哪里找路由器
+
+第一次启动时，固件会从原厂固件里取出 Wi-Fi 名称和密码、上网方式以及路由器地址。
+
+如果原厂固件已经设置过，路由器会保持原来的地址，一般是 192.168.31.1。Wi-Fi 名称和密码不变，网络会自己连上。电脑上什么都不用改。
+
+如果原厂固件没有设置过，或者导入失败，路由器的地址是 192.168.1.1。Wi-Fi 名称是 OpenWrt-BE7000，密码是 be7000openwrt。
+
+状态, 概览 页面会显示导入了哪些设置，还有一个撤销按钮。原厂固件的管理密码不会被导入。
+
+如果路由器在 192.168.1.1，而电脑没有自动拿到地址，就手动设置。地址填 192.168.1.2，子网掩码 255.255.255.0，网关留空。千万不要给电脑设成和路由器一样的地址，那样什么都连不上。在 Mac 上如果用自动获取地址，系统可能会把所有流量都发给路由器，而路由器这时还没有网络。
+
+如果用网线连不上路由器，换一个 LAN 口试试，或者用 Wi-Fi 连接。
+
+在浏览器里打开路由器地址，https 也可以。马上设置 root 密码。如果 Wi-Fi 还是默认密码，到 网络, 无线 页面里改掉。
+
+成功启动后，固件会在引导程序里锁定自己的槽位。之后断电就不会再回到原厂固件了。要回去，可以用 系统, 槽位 页面上的按钮或者回滚脚本，详见 3-rollback-and-problems-zh.txt。

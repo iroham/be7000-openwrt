@@ -1,0 +1,46 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: [PATCH] wifi: mac80211: end the forward path at an AP interface
+
+ieee80211_netdev_fill_forward_path() fails with -EOPNOTSUPP when the
+driver has no net_fill_forward_path op, as ath12k. dev_fill_forward_path()
+then drops the whole path, and a flowtable entry for a station behind
+a bridge keeps the bridge as its output device. Hardware flow offload
+(the Qualcomm PPE) cannot use that and rejects the flow.
+
+For an AP or AP_VLAN interface with a known station, end the path at
+the interface itself as a plain Ethernet hop instead.
+
+Signed-off-by: Timofey Maykov <itnitro@gmail.com>
+---
+--- a/net/mac80211/iface.c	2026-09-30 21:26:50.527501584 +0000
++++ b/net/mac80211/iface.c	2026-09-30 21:26:50.539817459 +0000
+@@ -997,7 +997,9 @@
+ 	sdata = IEEE80211_DEV_TO_SUB_IF(ctx->dev);
+ 	local = sdata->local;
+ 
+-	if (!local->ops->net_fill_forward_path)
++	if (!local->ops->net_fill_forward_path &&
++	    sdata->vif.type != NL80211_IFTYPE_AP &&
++	    sdata->vif.type != NL80211_IFTYPE_AP_VLAN)
+ 		return -EOPNOTSUPP;
+ 
+ 	rcu_read_lock();
+@@ -1037,6 +1039,18 @@
+ 	if (!sta)
+ 		goto out;
+ 
++	/* Without a hardware path in the driver the frame still leaves
++	 * through this interface. End the path here, so that a bridge
++	 * above keeps its resolved port instead of losing the whole path.
++	 */
++	if (!local->ops->net_fill_forward_path) {
++		path->type = DEV_PATH_ETHERNET;
++		path->dev = ctx->dev;
++		ctx->dev = NULL;
++		ret = 0;
++		goto out;
++	}
++
+ 	ret = drv_net_fill_forward_path(local, sdata, &sta->sta, ctx, path);
+ out:
+ 	rcu_read_unlock();

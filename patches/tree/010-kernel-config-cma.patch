@@ -1,0 +1,26 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: kernel: qualcommbe: CMA for DT reserved pools
+
+Contiguous memory allocator without a default global pool
+(CMA_SIZE_MBYTES=0): only shared-dma-pool regions from the device tree use
+it. Needed to hand the ath12k dual-MAC firmware its MLO global memory only
+while the 5 GHz split is on, instead of keeping 12 MB no-map all the time.
+Batched into 1.4.0 so the kernel config hash does not move again in 1.4.x.
+
+--- a/target/linux/qualcommbe/config-6.18
++++ b/target/linux/qualcommbe/config-6.18
+@@ -646,3 +646,14 @@
+ CONFIG_ZSTD_COMMON=y
+ CONFIG_ZSTD_COMPRESS=y
+ CONFIG_ZSTD_DECOMPRESS=y
++CONFIG_CMA=y
++CONFIG_CMA_ALIGNMENT=8
++CONFIG_CMA_AREAS=8
++# CONFIG_CMA_DEBUGFS is not set
++CONFIG_CMA_SIZE_MBYTES=0
++CONFIG_CMA_SIZE_SEL_MBYTES=y
++# CONFIG_CMA_SIZE_SEL_MAX is not set
++# CONFIG_CMA_SIZE_SEL_MIN is not set
++# CONFIG_CMA_SIZE_SEL_PERCENTAGE is not set
++# CONFIG_CMA_SYSFS is not set
++CONFIG_DMA_CMA=y

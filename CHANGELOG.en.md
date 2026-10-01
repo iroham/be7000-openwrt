@@ -1,6 +1,29 @@
 # Versions
 
-[Русская версия](CHANGELOG.md)
+[Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
+
+**1.4.0**, October 1, 2026.
+- Three 5 GHz modes instead of two. Besides one radio and two radios there is now MLO. In MLO one Wi-Fi 7 network runs on both radios at once, the lower one on channels 36-64 up to 160 MHz, the upper one from 149 up to 80 MHz. Wi-Fi 7 devices keep a link on two channels at once, the rest join one of them like an ordinary network. The mode changes in the 5 GHz mode block on Network, Wireless or with be7000-5g-split mode, without a reboot.
+- Older devices can join the MLO network too. Its base protection is WPA2 and WPA3, and Wi-Fi 7 gets its own WPA3 with GCMP-256. Before, a Mac with Wi-Fi 7 stayed on 2.4 GHz with such a network.
+- The Wireless page no longer fails with an error when an MLO network is set up.
+- Changing the 5 GHz mode can no longer reboot the router. The radios now stop completely before the driver reloads the radio firmware.
+- When the chosen country code makes the radio firmware turn Wi-Fi 7 off on 5 GHz (RU does, for example), the 5 GHz mode block says so. A button next to it sets US for 5 GHz only, and after it the access point runs as Wi-Fi 7 again.
+- Importing stock settings. On the first boot after installing from stock, Beam WRT takes the Wi-Fi names and passwords, the internet connection (PPPoE, DHCP or a static address) and the router address from there. Status, Overview shows what was taken, with an undo button. Stock keeps its settings in an encrypted container, the script opens it read-only and from a copy. To look without changing anything, run be7000-stock-import preview.
+- New page System, Slots. It shows which firmware each slot holds, which one runs and which one boots, and switches to the other slot, back to stock included. The page explains in full how the bootloader picks a slot and how to come back.
+- Hardware NAT offload on the PPE network engine, experimental and off by default. Page Network, Hardware offload, with a full description. It is built on open work for OpenWrt. Without three fixes of ours it did not work. The PPE now gets its table rows written whole, the path to Wi-Fi clients behind a bridge is no longer lost, and a bug in packet receive of the network driver is fixed. Bridging the LAN ports on the PPE is a separate switch.
+- The interface now comes in Chinese too. All Beam WRT pages, the theme and LuCI itself are translated, the language is picked on System, System, Language and Style or automatically from the browser.
+- New page Services, Add-ons. hybrid-failover installs there with one button, and the page explains in detail what it is and why.
+- hybrid-failover is now in the feed. It lives in its own directory and rebuilds itself with every new release, so `apk upgrade` picks up the latest version. kmod-nft-queue and coreutils-sleep were added to the feed as well.
+- The docs got recipes for common tasks (modem, phone over USB, Docker, 5 GHz modes, stock, slots) and a measurements page with the method.
+- The build moved to a fresh OpenWrt main (d958caf). Kernel 6.18.52 instead of 6.18.36, Wi-Fi drivers from backports 7.2. Installed packages are reinstalled for the new kernel from the new feed after the upgrade. Packages for 1.3.x stay in the old feed directory and no longer change.
+- A package the new feed does not have, such as an old-base library with a date in its name, is skipped and the rest are installed. Before, one such name broke the reinstall of every package.
+- After an upgrade, old copies of firmware files in the shared settings volume no longer shadow the new ones. Such a copy could take 5 GHz Wi-Fi away on a new version. Settings stay, the moved files go to .be7000-replaced.
+- The memory TrustZone uses is reserved, as on stock. We counted these 6.5 MB as free and they could get silently corrupted. Free memory is smaller by the same amount.
+- /overlay on a USB disk survives an upgrade. Before, the router came up on internal flash after an upgrade although the settings named the disk. The entry is now restored and the router reboots onto the disk once. SSDs in UAS enclosures are seen at boot, the uas driver is in the image. Found by kazanova-sgh.
+- The Storage page no longer offers to move /overlay onto a disk whose partitions are in use, or onto a swap partition. That button would have erased data. A full internal overlay shows as 0 MB instead of a dash.
+- Nimbus theme. Dropdowns in multi-value fields open again, for example the MAC of a static DHCP lease, found by Alex Zaguzin. Wide tables fit their card, row buttons no longer stick out. After an upgrade the browser picks up the new styles by itself, before it took a hard reload.
+- USB tethering from an iPhone installs from the feed again, the new feed lacked a dependency of usbmuxd.
+- The 5 GHz driver no longer crashes when a scan fails on a radio that is not created yet.
 
 **1.3.1**, September 30, 2026.
 - The build got a name, Beam WRT, and its own logo. They are in LuCI (tab icon, sidebar, login page, Project block), in the SSH greeting, on the Credits page and in the version string. The default hostname OpenWrt became BeamWRT, a hostname you set stays. Image files keep their old names, openwrt-qualcommbe-...

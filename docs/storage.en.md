@@ -1,6 +1,6 @@
 # Space for settings and packages
 
-[Русская версия](storage.md)
+[Русская версия](storage.md) · [中文](storage.zh.md)
 
 Inside the slot about 8 MB is left for rootfs_data, and that is not much. Starting with 1.2, on first boot the system moves /overlay to a separate 28 MB flash partition where the factory firmware keeps its settings. Free space becomes 19.4 MB instead of 7.4.
 
@@ -17,4 +17,4 @@ be7000-extroot status
 be7000-extroot revert --yes
 ```
 
-It refuses to work with a mounted disk or with the internal flash, only formats after --yes, carries over the current overlay and writes fstab by UUID. Separately, it filters out partitions whose whole disk is mounted: after the partition table changes, the kernel keeps showing old nodes like /dev/sda1 even though the filesystem occupies the whole disk, and formatting such a node would wipe live data.
+It refuses to work with a mounted disk or with the internal flash, only formats after --yes, carries over the current overlay and writes fstab by UUID. Separately, it filters out partitions whose whole disk is mounted. After the partition table changes, the kernel keeps showing old nodes like /dev/sda1 even though the filesystem occupies the whole disk, and formatting such a node would wipe live data.

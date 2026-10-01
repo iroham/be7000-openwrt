@@ -1,0 +1,72 @@
+回到原厂固件，以及出问题时怎么办
+
+
+在运行中的固件里切回去
+
+最简单的方法是用 系统, 槽位 页面。在另一个槽位上点"查看内容"，再点"设为启动槽位并重启"。这个页面还详细说明了引导程序怎样选择槽位，以及以后怎样回到 Beam WRT。
+
+也可以用脚本。把 rollback-to-stock.sh 复制到路由器上，运行它，然后重启路由器。
+
+scp -O rollback-to-stock.sh root@192.168.1.1:/tmp/
+ssh root@192.168.1.1 "sh /tmp/rollback-to-stock.sh && reboot"
+
+页面和脚本都不会刷写任何东西。它们只是把启动切换到另一个槽位，也就是原厂固件所在的槽位。Beam WRT 留在自己的槽位里，原厂固件带着自己的设置启动。通过 Wi-Fi 操作也可以。
+
+1.2.6、1.2.7 和调试版本里的脚本会把原厂固件恢复成出厂设置。原厂固件的设置是加密保存的，旧脚本不知道这一点，以为没有设置。如果你的脚本来自这些版本，请从代码仓库里下载修复后的 scripts/rollback-to-stock.sh。
+
+有时切换后原厂固件的设置是空的。网页界面是空白的，SSH 起不来，xmir-patcher 显示 "dropbear is found, but it cannot run"。这说明之前装过 1.2 到 1.2.5 中的某个版本，这些版本清空了原厂设置分区。普通的恢复出厂设置就能解决。按住 reset 键大约十秒，或者通过 telnet 运行下面的命令。
+
+nvram set restore_defaults=1 && nvram commit && reboot -f
+
+用 MIWIFIRepairTool 也能把原厂固件恢复过来，同样不会丢失任何东西。
+
+
+从原厂固件回到 Beam WRT
+
+如果原厂固件里 SSH 是开着的，把启动切换回来就行。槽位 页面会显示 Beam WRT 在哪个槽位，切换之前先记下来。
+
+nvram set flag_last_success=<Beam WRT slot>
+nvram set flag_boot_rootfs=<Beam WRT slot>
+nvram set flag_ota_reboot=0
+nvram commit
+reboot
+
+如果没有 SSH，就按照 1-install-zh.txt 重新安装 Beam WRT。你的 Beam WRT 设置会保留。
+
+
+如果固件启动不了
+
+从 1.2.3 开始，安装程序交接槽位的方式和小米正常升级一样。如果固件没能启动，下次通电时路由器会回到原厂固件。
+
+旧版本的引导程序要连续通电七次才会切换槽位。断电再通电，每次通电后等大约三十秒。
+
+固件一旦成功启动过，断电就没有用了，因为它已经锁定了自己的槽位。这时请用 槽位 页面或者回滚脚本。
+
+
+路由器启动了，但是连不上
+
+先检查地址。如果安装时导入了原厂固件的设置，Beam WRT 一般会保持原来的地址 192.168.31.1。如果没有导入，地址是 192.168.1.1。如果电脑没有自动拿到地址，就给它设置一个同网段的地址，192.168.31.2 或 192.168.1.2，子网掩码 255.255.255.0，网关留空。常见的错误是把电脑设成和路由器一样的地址。
+
+Wi-Fi 能用，但有线网络不通。在部分主板上导致网线不通的原因已经找到，并在 1.3.0 里修复了。如果你还遇到这个问题，用 Wi-Fi 连接，收集下面这条命令的输出，发到帖子里或者 GitHub issue 里。Wi-Fi 的名称和密码沿用原厂固件的，或者是 OpenWrt-BE7000，密码 be7000openwrt。
+
+dmesg | grep -i -E "10gbase-r|baser|xpcs|qca8084|link is"
+
+还有一个故障安全模式。在白色指示灯闪烁时，连续按几次 reset 键。路由器会以 192.168.1.1 启动，没有设置也没有密码，你可以在那里用 logread、ip addr 和 dmesg 收集日志。
+
+如果你用 mtd verify 把分区和镜像做了对比，发现校验值不一样，这是正常的。ubiformat 有自己的写入方式，写出来的分区不会和文件逐字节一致。
+
+
+闪存里的启动日志
+
+从 1.2.4 开始，固件会自动把启动日志写进闪存。dmesg 的输出保存在 crash_syslog 分区 (mtd27)，如果内核崩溃，最后 64 KB 的输出会保存在 crash 分区 (mtd26)。这两个分区都可以在原厂固件里读取。切回原厂固件，通过 SSH 或 telnet 运行下面两条命令。
+
+dd if=/dev/mtd27 bs=64k 2>/dev/null | strings > /tmp/bootlog.txt
+dd if=/dev/mtd26 bs=64k 2>/dev/null | strings > /tmp/oops.txt
+
+把这两个文件发出来。如果第一个文件是空的，说明系统连启动的最开始阶段都没走完。
+
+
+千万不要这样做
+
+不要往引导程序分区 APPSBL 和 APPSBL_1 写入任何东西。
+主板上的 UART 是 1.8 V 电平。不要用 3.3 V 的转接器向串口发送数据。只读取是可以的，把主板的 TX 接到转接器的 RX，地线接地线。用 FT232R 转接器最稳定。

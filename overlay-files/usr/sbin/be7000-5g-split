@@ -2,7 +2,9 @@
 # 5 GHz split, like 5G-1 and 5G-2 on stock: the QCN9274 runs its dual-MAC
 # firmware as two radios, 36-64 and 149-165.
 #
-#   be7000-5g-split status | on | off
+#   be7000-5g-split status | mode [single|split|mlo] | on | off
+#
+# on and off are the old names of mode split and mode single.
 #
 # The ath12k board_id parameter picks the firmware (0x1008 split, 0 = the
 # single-MAC board id from DT), the PCI device is rebound to apply it, and
@@ -12,10 +14,22 @@
 # calibration from ART (single 0x65000, split 0x33000). The choice is kept
 # in /etc/config/be7000; /etc/init.d/be7000-5g-split sets lines, calibration
 # and the ath12k board_id option at boot, before the module loads.
+#
+# mlo runs the same two radios as split and joins them in one Wi-Fi 7
+# network (an MLD with a link on each radio). Every 5 GHz network gets an
+# MLO twin over both radios; the per-radio copies stay in the config, only
+# switched off, so going back restores them exactly. The twin runs WPA3
+# compatibility mode (sae-compat): the SAE-EXT-KEY and GCMP-256 that MLO
+# asks for go in an RSN Override element, WPA2 clients still join one
+# link. The lower radio may run 160 MHz: its
+# link then waits a minute for the DFS channel check (hostapd needs tree
+# patch 012 for that); if it does not come up, 80 MHz is tried once.
 
 SPLIT_ID=0x1008
 PARAM=/sys/module/ath12k/parameters/board_id
+# the PCI driver is ath12k_pci up to backports 6.x, ath12k_wifi7_pci from 7.x
 DRV=/sys/bus/pci/drivers/ath12k_pci
+[ -d /sys/bus/pci/drivers/ath12k_wifi7_pci ] && DRV=/sys/bus/pci/drivers/ath12k_wifi7_pci
 CAL_DIR=/lib/firmware/ath12k/QCN9274/hw2.0
 CAL_LEN=0x2d000
 
@@ -109,6 +123,21 @@ mode_of() {
 	[ $(($1 & 0x1000)) -ne 0 ] && echo split || echo single
 }
 
+# stop the access points of the QCN9274 radios and wait until their
+# interfaces are gone. wifi down also turns autostart off for them, so
+# everything after a switch brings Wi-Fi back with wifi up, not reload.
+pci_radios_down() {
+	local s i=0
+	for s in $(uci -q show wireless | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p"); do
+		case "$(uci -q get wireless.$s.path)" in *pci*) wifi down $s 2>/dev/null ;; esac
+	done
+	# the netdevs of the PCI device (phyN-apM, ap-mld0) go with hostapd
+	while [ $i -lt 10 ] && [ -n "$(ls /sys/bus/pci/devices/$(pci_dev)/net 2>/dev/null)" ]; do
+		sleep 1; i=$((i + 1))
+	done
+	sleep 2
+}
+
 apply_fw() {
 	local dev="$(pci_dev)"
 	[ -n "$dev" ] || { echo "no QCN9274 on PCI" >&2; return 1; }
@@ -117,7 +146,14 @@ apply_fw() {
 		prepare $(mode_of $1)
 		return
 	fi
-	[ -e "$DRV/$dev" ] && echo "$dev" > $DRV/unbind
+	if [ -e "$DRV/$dev" ]; then
+		# Take the 5 GHz networks down first. An unbind while clients still
+		# have frames queued makes ath12k retry its TX flush ("data pkts
+		# pending") until the board resets, seen with an SSH session over
+		# 5 GHz during the switch.
+		pci_radios_down
+		echo "$dev" > $DRV/unbind
+	fi
 	prepare $(mode_of $1) || return 1
 	echo "$(printf %d $1)" > $PARAM
 	sleep 2
@@ -192,46 +228,204 @@ config_off() {
 	uci commit wireless
 }
 
+# wifi-ifaces this script made for MLO, and the ones it switched off
+mlo_ifaces() {
+	uci -q show wireless | sed -n "s/^wireless\.\([^.]*\)\.be7000_mlo='1'$/\1/p"
+}
+mlo_parked() {
+	uci -q show wireless | sed -n "s/^wireless\.\([^.]*\)\.be7000_mlo_off='1'$/\1/p"
+}
+
+config_mlo_on() {
+	local r="$(main_radio)" low i n o v
+	low="$(low_radio $r)"
+	[ -n "$r" ] && [ -n "$low" ] || { echo "MLO needs the two 5 GHz radios" >&2; return 1; }
+	[ -n "$(mlo_ifaces)" ] && return 0
+	for i in $(ifaces_of $r); do
+		[ "$(uci -q get wireless.$i.mode)" = ap ] || continue
+		[ "$(uci -q get wireless.$i.disabled)" = 1 ] && continue
+		n=${i}_mlo
+		uci set wireless.$n=wifi-iface
+		uci add_list wireless.$n.device=$low
+		uci add_list wireless.$n.device=$r
+		for o in mode ssid key network hidden isolate macfilter maclist wmm; do
+			v="$(uci -q get wireless.$i.$o)" && uci set wireless.$n.$o="$v"
+		done
+		# WPA3 compatibility mode: WPA2/WPA3 in the base RSN element for
+		# every client, and SAE-EXT-KEY with GCMP-256 in an RSN Override
+		# element for Wi-Fi 7 ones, which is what MLO asks for. A WPA2-only
+		# device joins one link instead of dropping to 2.4 GHz.
+		uci set wireless.$n.encryption=sae-compat
+		uci set wireless.$n.mlo=1
+		uci set wireless.$n.be7000_mlo=1
+		for o in $i ${i}_low; do
+			uci -q get wireless.$o >/dev/null || continue
+			[ "$(uci -q get wireless.$o.disabled)" = 1 ] && continue
+			uci set wireless.$o.disabled=1
+			uci set wireless.$o.be7000_mlo_off=1
+		done
+	done
+	[ -n "$(mlo_ifaces)" ] || { echo "no enabled 5 GHz access point to join" >&2; return 1; }
+	# no neighbour scan on the lower radio: at 160 MHz its MLO link needs a
+	# DFS check, and a scan running at that moment makes the kernel refuse
+	# it (-EBUSY), so the link never comes up
+	if [ "$(uci -q get wireless.$low.noscan)" != 1 ]; then
+		uci set wireless.$low.noscan=1
+		uci set wireless.$low.be7000_noscan=1
+	fi
+	uci commit wireless
+}
+
+config_mlo_off() {
+	local i low
+	for i in $(mlo_ifaces); do uci -q delete wireless.$i; done
+	for i in $(mlo_parked); do
+		uci -q delete wireless.$i.disabled
+		uci -q delete wireless.$i.be7000_mlo_off
+	done
+	low="$(low_radio "$(main_radio)")"
+	if [ -n "$low" ] && [ "$(uci -q get wireless.$low.be7000_noscan)" = 1 ]; then
+		uci -q delete wireless.$low.noscan
+		uci -q delete wireless.$low.be7000_noscan
+	fi
+	if [ -n "$low" ] && uci -q get wireless.$low.be7000_htmode >/dev/null; then
+		uci set wireless.$low.htmode="$(uci -q get wireless.$low.be7000_htmode)"
+		uci -q delete wireless.$low.be7000_htmode
+	fi
+	uci commit wireless
+}
+
+# every MLD has a working link on both radios (a link that is not on air
+# is listed without a channel)
+mlo_up() {
+	local n
+	n=$(iw dev 2>/dev/null | sed -n '/MLD with links/,/Radios/p' | grep -c "^[[:space:]]*channel ")
+	[ "$n" -ge 2 ]
+}
+
+# wait up to $1 s for both links
+mlo_wait() {
+	local i=0
+	while [ $i -lt $1 ]; do
+		mlo_up && return 0
+		sleep 3; i=$((i + 3))
+	done
+	return 1
+}
+
+# after a switch to MLO: a 160 MHz lower link waits a minute for the DFS
+# check; if it still is not up, try 80 MHz once, then fall back to two
+# plain radios
+mlo_watch() {
+	local low
+	mlo_wait 150 && return 0
+	low="$(low_radio "$(main_radio)")"
+	case "$(uci -q get wireless.$low.htmode)" in
+	*160|*320)
+		logger -t be7000-5g-split "MLO link on the lower radio did not come up at 160 MHz, trying 80 MHz"
+		uci set wireless.$low.be7000_htmode="$(uci -q get wireless.$low.htmode)"
+		uci set wireless.$low.htmode=EHT80
+		uci commit wireless
+		wifi up
+		mlo_wait 60 && return 0 ;;
+	esac
+	logger -t be7000-5g-split "MLO did not come up on both radios, back to two separate radios"
+	echo "MLO did not come up on both radios, back to two separate radios" >&2
+	save split
+	config_mlo_off
+	wifi up
+	return 1
+}
+
+saved_mode() {
+	local m="$(uci -q get be7000.wifi.mode_5g)"
+	case "$m" in single|split|mlo) echo $m; return ;; esac
+	[ "$(uci -q get be7000.wifi.split_5g)" = 1 ] && echo split || echo single
+}
+
+# running mode: the firmware decides single/split, MLO ifaces make it mlo
+current_mode() {
+	local p="$(cat $PARAM 2>/dev/null)"
+	if [ -n "$p" ] && [ "$p" -ne 0 ] && [ $((p & 0x1000)) -ne 0 ]; then
+		[ -n "$(mlo_ifaces)" ] && echo mlo || echo split
+	else
+		echo single
+	fi
+}
+
 save() {
 	[ -f /etc/config/be7000 ] || touch /etc/config/be7000
 	uci -q get be7000.wifi >/dev/null || uci set be7000.wifi=wifi
-	uci set be7000.wifi.split_5g=$1
+	uci set be7000.wifi.mode_5g=$1
+	# the older images read split_5g
+	[ "$1" = single ] && uci set be7000.wifi.split_5g=0 || uci set be7000.wifi.split_5g=1
 	uci commit be7000
+}
+
+to_single() {
+	save single
+	config_mlo_off
+	config_off
+	apply_fw 0 || return 1
+	sleep 5
+	wifi up
+	echo "5 GHz: one radio for the whole band"
+}
+
+# two radios, optionally joined by MLO ($1 = split | mlo)
+to_split() {
+	local want=$1
+	save $want
+	config_on || return 1
+	if ! apply_fw $SPLIT_ID || [ "$(radios)" -lt 2 ]; then
+		# the dual-MAC firmware did not come up (board data missing,
+		# old driver): go back so 5 GHz keeps working
+		echo "the 5 GHz module did not start as two radios, back to one radio" >&2
+		save single
+		config_mlo_off
+		config_off
+		apply_fw 0
+		sleep 5
+		wifi up
+		return 1
+	fi
+	if [ $want = mlo ]; then
+		config_mlo_on || { save split; want=split; }
+	else
+		config_mlo_off
+	fi
+	sleep 5
+	wifi up
+	if [ $want = mlo ]; then
+		mlo_watch || return 1
+		echo "5 GHz: MLO, one Wi-Fi 7 network over both radios (36-64 and 149-165)"
+	else
+		echo "5 GHz: two radios, 36-64 and 149-165"
+	fi
 }
 
 case "$1" in
 	status)
-		p="$(cat $PARAM 2>/dev/null)"
-		if [ -n "$p" ] && [ "$p" -ne 0 ] && [ $((p & 0x1000)) -ne 0 ]; then echo on; else echo off; fi
+		# on/off for the older LuCI page and scripts
+		[ "$(current_mode)" = single ] && echo off || echo on
+		;;
+	mode)
+		case "$2" in
+		"") current_mode ;;
+		single) to_single || exit 1 ;;
+		split|mlo) to_split $2 || exit 1 ;;
+		*) echo "usage: $0 mode [single|split|mlo]" >&2; exit 1 ;;
+		esac
 		;;
 	on)
-		save 1
-		config_on || exit 1
-		if ! apply_fw $SPLIT_ID || [ "$(radios)" -lt 2 ]; then
-			# the dual-MAC firmware did not come up (board data missing,
-			# old driver): go back so 5 GHz keeps working
-			echo "the 5 GHz module did not start as two radios, back to one radio" >&2
-			save 0
-			config_off
-			apply_fw 0
-			sleep 5
-			wifi reload
-			exit 1
-		fi
-		sleep 5
-		wifi reload
-		echo "5 GHz split on: two radios, 36-64 and 149-165"
+		to_split split || exit 1
 		;;
 	off)
-		save 0
-		config_off
-		apply_fw 0 || exit 1
-		sleep 5
-		wifi reload
-		echo "5 GHz split off: one radio for the whole band"
+		to_single || exit 1
 		;;
 	boot)
-		if [ "$(uci -q get be7000.wifi.split_5g)" = 1 ]; then mode=split; id=$SPLIT_ID; else mode=single; id=0; fi
+		saved=$(saved_mode)
+		if [ $saved != single ]; then mode=split; id=$SPLIT_ID; else mode=single; id=0; fi
 		if [ -e "$PARAM" ]; then
 			# ath12k is already in: switch it by a rebind
 			apply_fw $id || exit 0
@@ -248,15 +442,19 @@ case "$1" in
 			while [ $i -lt 90 ] && [ "$(radios)" -eq 0 ]; do sleep 1; i=$((i+1)); done
 			if [ "$(radios)" -lt 2 ]; then
 				logger -t be7000-5g-split "dual-MAC firmware did not start, 5 GHz back to one radio"
+				config_mlo_off
 				config_off
 				apply_fw 0
-				wifi reload
+				wifi up
+			elif [ $saved = mlo ]; then
+				sleep 30
+				mlo_watch
 			fi
 		) </dev/null >/dev/null 2>&1 &
 		exit 0
 		;;
 	*)
-		echo "usage: $0 status|on|off" >&2
+		echo "usage: $0 status | mode [single|split|mlo] | on | off" >&2
 		exit 1
 		;;
 esac

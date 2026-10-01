@@ -1,0 +1,133 @@
+# 常用做法
+
+[Русский](cookbook.md) · [English](cookbook.en.md)
+
+这里是常见任务的现成做法。命令通过 SSH 在路由器上执行（`ssh root@192.168.1.1`）。软件包从固件的软件源安装，所以路由器需要能上网。如果哪里不成功，请把命令输出发到 4PDA 的帖子或 issues 里。
+
+## LTE 或 5G USB 调制解调器
+
+现在的大多数调制解调器需要 ModemManager 以及 QMI、MBIM 和 NCM 驱动。
+
+```
+apk update
+apk add modemmanager luci-proto-modemmanager kmod-usb-net-qmi-wwan kmod-usb-net-cdc-mbim kmod-usb-net-cdc-ncm kmod-usb-serial-option
+```
+
+插上调制解调器，等半分钟，确认系统能识别到它。
+
+```
+mmcli -L
+```
+
+然后在 LuCI 里打开 "网络, 接口"，点 "添加"。协议选 ModemManager，设备选调制解调器，再填上运营商的 APN。防火墙区域选 wan。走 NCM 的华为调制解调器还需要装 `kmod-usb-net-huawei-cdc-ncm`。
+
+## 用手机通过 USB 上网
+
+Android。新手机用 NCM 共享，老手机用 RNDIS，所以两个驱动都装上。
+
+```
+apk update
+apk add kmod-usb-net-cdc-ncm kmod-usb-net-rndis
+```
+
+iPhone。需要 ipheth 驱动和 usbmuxd 服务，usbmuxd 负责和手机通信。
+
+```
+apk update
+apk add kmod-usb-net-ipheth usbmuxd
+/etc/init.d/usbmuxd enable
+/etc/init.d/usbmuxd start
+```
+
+在 iPhone 上确认 "信任此电脑"，然后打开个人热点。
+
+插上手机，看看出现了哪个接口。
+
+```
+dmesg | tail -20
+```
+
+一般是 `usb0`，或者一个带新编号的 `eth`。在 LuCI 里打开 "网络, 接口"，点 "添加"。协议选 DHCP 客户端，设备选这个接口，区域选 wan。
+
+## Docker
+
+Docker 镜像放不进内部闪存，需要一个 USB 硬盘。插上硬盘，按 [storage.zh.md](storage.zh.md) 里的说明格式化并挂载。然后运行下面的命令。
+
+```
+be7000-docker setup
+```
+
+脚本会找到一个已挂载且有空闲空间的硬盘，把 Docker 数据移过去。它还会安装 Dockerman，也就是管理容器、镜像和网络的页面。现成的容器组合在 "服务, Docker 堆栈" 里启动。
+
+## 5 GHz 模式
+
+模式在 "网络, 无线" 页面顶部的 "5 GHz 模式" 区域选择。切换模式时路由器不会重启，5 GHz Wi-Fi 会断开大约半分钟。
+
+- 单射频。整个频段一个网络，所有信道都能用，最高 160 MHz。单台设备速度最快。
+- 双射频，和原厂固件的 5G-1、5G-2 一样。低频段用 36-64 信道，高频段从 149 开始。低频段在设置里可以开到 160 MHz，高频段最高 80 MHz。设备多的时候很方便。
+- MLO。两个射频组成一个 Wi-Fi 7 网络。支持 Wi-Fi 7 和 MLO 的设备可以同时在两个信道上保持连接，其他设备像连普通网络一样连到其中一个。
+
+在双射频和 MLO 模式下，每个射频只分到一半天线。所以单台设备比单射频模式下慢。具体数字见 [benchmarks.zh.md](benchmarks.zh.md)。
+
+某些国家代码下（包括 RU），射频固件会关掉 Wi-Fi 7，接入点按 Wi-Fi 6 工作。"5 GHz 模式" 区域会提示这一点，旁边的按钮可以把代码改成 US。信道和功率的规则会随代码一起变化。
+
+在命令行里这样切换模式。
+
+```
+be7000-5g-split mode           # 当前模式
+be7000-5g-split mode split     # 双射频
+be7000-5g-split mode mlo       # MLO
+be7000-5g-split mode single    # 单射频
+```
+
+## 从原厂固件导入设置
+
+如果路由器是从原厂固件刷过来的，而且原厂里已经设置好了 Wi-Fi 和上网，Beam WRT 第一次启动时会从那里取出 Wi-Fi 名称和密码、上网方式（PPPoE、DHCP 或静态地址）以及路由器地址。"状态, 概览" 会显示导入了什么，还有一个撤销按钮。
+
+想看看原厂固件里有什么，又不改动任何东西，运行这个命令。
+
+```
+be7000-stock-import preview
+```
+
+手动导入设置和撤销用这两个命令。
+
+```
+be7000-stock-import apply
+be7000-stock-import undo
+```
+
+原厂固件把设置存在一个加密容器里。脚本只读打开它，而且是从副本读取，所以路由器回到原厂固件时设置原封不动。
+
+## 槽位和回到原厂固件
+
+闪存里有两个槽位。"系统, 槽位" 显示每个槽位里装了什么，当前运行的是哪个，默认启动的是哪个，也可以切换到另一个。启动起来的固件会把自己的槽位设为默认，所以切换是长期生效的。切换之前页面会告诉你以后怎么从原厂固件回来。引导程序的更多说明见 [bootloader.zh.md](bootloader.zh.md)。
+
+## 硬件加速
+
+加速在 "网络, 硬件加速" 里开启。PPE 网络引擎可以接管 NAT 和路由，也可以接管 LAN 口的网桥。这个功能还在试验阶段，默认关闭。页面上说明了哪些流量会被加速，以及它和哪些功能不能一起用，比如 SQM。
+
+在命令行里这样开启。
+
+```
+/usr/libexec/be7000-ppe status
+/usr/libexec/be7000-ppe nat on        # 立即生效
+/usr/libexec/be7000-ppe bridge on     # 重启后生效
+```
+
+下面的命令显示现在有多少连接经过 PPE。
+
+```
+grep -c HW_OFFLOAD /proc/net/nf_conntrack
+```
+
+## 更新
+
+"系统, 固件更新" 会检查新版本，一键安装。设置会保留。在命令行里这样做。
+
+```
+be7000-update check     # 有没有新版本
+be7000-update apply     # 下载、校验并安装
+```
+
+你装过的软件包会在更新后、路由器联网时为新内核重新安装。如果你是从 1.x 更新到 1.4.0，请先读 docs/instruction/2-update-zh.txt 开头关于这次更新的部分。这个文件在发布压缩包里也有。

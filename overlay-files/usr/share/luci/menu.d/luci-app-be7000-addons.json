@@ -1,0 +1,13 @@
+{
+	"admin/services/be7000-addons": {
+		"title": "Дополнения",
+		"order": 5,
+		"action": {
+			"type": "view",
+			"path": "be7000-addons/addons"
+		},
+		"depends": {
+			"acl": [ "luci-app-be7000-addons" ]
+		}
+	}
+}

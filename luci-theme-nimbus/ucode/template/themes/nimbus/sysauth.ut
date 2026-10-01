@@ -6,6 +6,7 @@
 {%
 	const board = ubus.call('system', 'board');
 	const ru = (index(dispatcher.lang ?? '', 'ru') == 0);
+	const zh = (index(dispatcher.lang ?? '', 'zh') == 0);
 -%}
 
 {% include('header', { blank_page: true }) %}
@@ -64,7 +65,7 @@
 		{% endif %}
 
 		<button type="submit" class="nb-login-submit">{{ _('Log in') }}</button>
-		<p class="nb-login-foot">{{ ru ? 'Панель управления роутером' : 'Router control panel' }}</p>
+		<p class="nb-login-foot">{{ ru ? 'Панель управления роутером' : zh ? '路由器管理面板' : 'Router control panel' }}</p>
 	</form>
 </div>
 <script>

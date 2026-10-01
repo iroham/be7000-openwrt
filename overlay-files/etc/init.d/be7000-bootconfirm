@@ -35,6 +35,13 @@ set_if_changed() {
 
 start() {
 	local slot
+	# A local test build (its ROM carries /etc/be7000-test) is booted as a
+	# one-shot try into the spare slot. It must never confirm itself, so any
+	# reboot or hang brings the working slot back.
+	if [ -e /rom/etc/be7000-test ]; then
+		logger -t bootconfirm "test image, leaving the one-shot boot unconfirmed"
+		return 0
+	fi
 	# Without a usable environment we cannot confirm anything. Say so loudly:
 	# the installer leaves the boot marked as unconfirmed on purpose, and a
 	# router that can never confirm will keep falling back to the stock slot.

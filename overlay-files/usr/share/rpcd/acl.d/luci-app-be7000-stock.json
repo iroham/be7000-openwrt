@@ -1,0 +1,15 @@
+{
+	"luci-app-be7000-stock": {
+		"description": "Take the settings stock firmware left behind",
+		"read": {
+			"ubus": {
+				"be7000-stock": [ "status", "preview" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"be7000-stock": [ "apply", "undo" ]
+			}
+		}
+	}
+}

@@ -1,26 +1,101 @@
-Updating an installed OpenWrt
+Updating an installed firmware
 
-Easiest from the web interface
-Since 1.2.6 there is a page under System called "Обновление сборки" (firmware update; these menu entries are in Russian whatever the interface language). It asks GitHub whether a newer version is out, shows what is in it, and with one button downloads the image, checks the checksum and runs the update keeping your settings. The same from the console: be7000-update check, then be7000-update apply.
-On an image that does not have this page yet, it is installed as a package from the feed: apk add luci-app-be7000-update (you need 1.2.5 or newer, it has the certificates for https). The image version is in /etc/be7000-release, an image without this file is considered self-built and does not offer itself updates.
+
+UPDATING TO 1.4.0 FROM 1.x VERSIONS
+
+Version 1.4.0 is built on a new OpenWrt base with a new kernel. It updates as usual and keeps your settings.
+
+One thing is worth knowing in advance. Packages you installed yourself are installed again after the update, this time for the new kernel. The router does it by itself, but it needs internet for that.
+
+Which versions can update
+
+From 1.3.0, 1.3.1 and from 1.2.3 up to 1.2.7 you can update right away.
+From 1.0 up to 1.2.2, first read "If your version is older than 1.2.3" at the end of this file. There is one command to run before the update.
+
+Before the update
+
+1. Save your settings. Open System, Backup / Flash Firmware and press "Generate archive". The file stays on your computer.
+
+2. If you installed your own packages, save their list. This command prints it.
+
+cat /etc/apk/world
+
+The list holds the firmware's own packages too, yours are among them. Copy it somewhere. Usually the packages come back by themselves, but if one is missing from the new feed you will know what to install by hand.
+
+3. Check that the internet works. The update takes a few minutes and the network is down meanwhile.
+
+How to update
+
+The easiest way is the System, Build update page. It finds 1.4.0 and shows what is new. With one button it downloads the image, checks it and updates the router keeping the settings.
+
+The same from the console.
+
+be7000-update check
+be7000-update apply
+
+You can also do it by hand with sysupgrade.bin, see "By hand" below.
+
+What happens on the first boot
+
+The first boot takes longer than usual, up to a couple of minutes. Do not cut the power until the LED is solid white.
+
+If your settings live on a USB disk, the router reboots once by itself. That is expected.
+
+Once the internet is up, the router installs your packages. You can watch it in Status, System Log, in the lines with be7000-romsync. If a package is missing from the new feed, it is skipped and the rest are installed. The skipped ones are listed in the line "not in the feed of this image, dropped".
+
+The 5 GHz mode stays as it was. The new MLO mode can be turned on later.
+
+Stock settings are not imported on an update. That only happens on the first install from stock, your settings stay as they were.
+
+What to check afterwards
+
+Status, Overview should show version 1.4.0 and working internet.
+Network, Wireless should show both networks. With country code RU there will be a warning that Wi-Fi 7 is off. The button next to it sets US for 5 GHz and Wi-Fi 7 works again.
+System, Software should list your packages again. If something is missing, check your list and install it by hand.
+
+If something goes wrong
+
+Open Status, System Log and post it in the 4PDA thread.
+
+You can go back to 1.3.1 the same way, with sysupgrade.bin from the 1.3.1 release. If settings behave oddly after that, restore the archive you saved before the update.
+
+The Slots page does not help here. The other slot holds the factory firmware, not the previous Beam WRT version.
+
+
+Regular update
+
+From the web interface
+
+Since 1.2.6 there is a System, Build update page. It checks GitHub for a newer version and shows what is in it. With one button it downloads the image, checks the checksum and updates the router keeping the settings. From the console be7000-update check and be7000-update apply do the same. Before 1.4.0 this menu entry may show in Russian as "Обновление сборки".
+
+If you do not have this page yet, install it from the feed with apk add luci-app-be7000-update. You need 1.2.5 or newer for that. The firmware version is written in /etc/be7000-release. Without this file the firmware counts as self-built and does not offer itself updates.
 
 By hand
-Download openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-sysupgrade.bin from the release, put it on the router and run a normal update.
+
+Download openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-sysupgrade.bin from the release and update the router with the commands below. If your router has a different address, use yours.
 
 scp -O openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-sysupgrade.bin root@192.168.1.1:/tmp/
 ssh root@192.168.1.1 "sysupgrade -v /tmp/openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-sysupgrade.bin"
 
-The update writes into the slot the system booted from, stock in the other slot is not touched. Settings, packages and the list of enabled services move over by themselves.
+The update is written into the slot the router booted from. The factory firmware in the other slot is not touched. Settings, packages and enabled services move over by themselves.
+
 
 If your version is older than 1.2.3
+
 Find your version below.
 
-1.0, 1.1, 1.2, 1.2.1, 1.2.2: the bootloader counts boots, and these versions never reset the counter. After the seventh boot since installation the router silently switches to stock. OpenWrt stays in its slot, but it looks like "the router went back to Xiaomi by itself". Reset the counters over SSH before updating:
+Versions 1.0, 1.1, 1.2, 1.2.1 and 1.2.2
+
+The bootloader counts boots and these versions never reset the counter. After the seventh boot the router switches to the factory firmware by itself. Beam WRT stays in its slot, but it looks as if the router went back to Xiaomi. Reset the counters over SSH before the update.
 
 fw_setenv flag_try_sys1_failed 0 && fw_setenv flag_try_sys2_failed 0
 
-To check: fw_printenv flag_try_sys1_failed flag_try_sys2_failed, both must be 0. Since 1.2.3 the system resets the counters itself. If the router has already gone back to stock, nothing is lost: run install-from-stock.sh from stock again, as in 1-install-en.txt.
+You can check it with fw_printenv flag_try_sys1_failed flag_try_sys2_failed, both values must be 0. Since 1.2.3 the firmware resets them by itself. If the router has already gone back to the factory firmware, nothing is lost. Run install-from-stock.sh again as in 1-install-en.txt.
 
-1.0 and 1.1, if you run from slot 0: in these versions an update always wrote to slot 1, that is over stock. The fix only arrives with the new image, and the update itself still runs by the old rules. If you care about stock, back it up before updating, as in step 1 of 1-install-en.txt.
+Versions 1.0 and 1.1 in slot 0
 
-1.2 or 1.2.1: during this one update both radios may switch off. If the radio is gone, enable it under Network, Wireless. It will not happen again.
+In these versions an update always wrote to slot 1, that is over the factory firmware. The fix comes with the new image, but this one update still follows the old rules. If you need the factory firmware, save a copy of it before the update, as in step 1 of 1-install-en.txt.
+
+Versions 1.2 and 1.2.1
+
+During this update both radios may switch off. If Wi-Fi is gone, turn it on at Network, Wireless. It will not happen again.

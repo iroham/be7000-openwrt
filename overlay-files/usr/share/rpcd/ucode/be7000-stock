@@ -1,0 +1,48 @@
+'use strict';
+
+import { popen, access } from 'fs';
+
+const BIN = '/usr/sbin/be7000-stock-import';
+
+function run(args) {
+	let fd = popen(`${BIN} ${args} 2>&1`, 'r');
+	let out = fd ? trim(fd.read('all') ?? '') : '';
+	let rc = fd ? fd.close() : -1;
+	return { rc, out };
+}
+
+function parse(out) {
+	try { return json(out); } catch (e) { return null; }
+}
+
+return {
+	'be7000-stock': {
+		status: {
+			call: function() {
+				if (access(BIN) != true)
+					return { available: false };
+				let r = run('status');
+				return { available: true, ...(parse(r.out) ?? { error: r.out }) };
+			}
+		},
+		preview: {
+			call: function() {
+				let r = run('preview');
+				let p = parse(r.out);
+				return p ? { ok: true, settings: p } : { ok: false, error: r.out };
+			}
+		},
+		apply: {
+			call: function() {
+				let r = run('apply');
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+		undo: {
+			call: function() {
+				let r = run('undo');
+				return { ok: r.rc == 0, output: r.out };
+			}
+		}
+	}
+};

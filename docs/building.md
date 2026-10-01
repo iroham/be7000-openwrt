@@ -1,6 +1,6 @@
 # Сборка
 
-[English](building.en.md)
+[English](building.en.md) · [中文](building.zh.md)
 
 Руками больше ничего не собирается. Всё делает один workflow в `.github/workflows/build.yml` на GitHub Actions.
 
@@ -9,7 +9,7 @@
 - Через артефакты Actions ничего не проходит, только git и Release. Компилятор кешируется через ccache между прогонами.
 - Модули ядра публикуются в каталог с хешем конфига ядра, `feed/targets/qualcommbe/ipq95xx/<хеш>/packages/`. Образ при сборке вписывает свой хеш в `customfeeds.list`, поэтому старые образы продолжают находить подходящие модули, когда конфиг ядра меняется.
 
-Если хочется собрать самому, порядок такой. Дерево kravasuper/openwrt на коммите 790d036a и фиды на дату из feeds-pins.txt. Патчи из patches в target/linux/qualcommbe/patches-6.18 и правки из patches/tree поверх дерева, описание в [patches.md](patches.md). В DTS платы два gpio-hog для TLMM6 (выход в ноль) и TLMM7 (выход в единицу), они нужны для нормального приёма на 5 ГГц. В профиль устройства kmod-ath11k-ahb. Фид awg-feed для AmneziaWG. Файл version в корне дерева с содержимым r20260623-790d036a, без него apk не соберёт base-files. overlay-files в files. В конфиге xiaomi_be7000, wpad-mbedtls вместо wpad-basic, luci-ssl. После make defconfig проверьте grep-ом, что нужные драйверы остались включёнными, потом make world. Собирать лучше в Docker на debian, исходники держать в томе Docker, а не на диске macOS, там регистронезависимая файловая система теряет файлы ядра.
+Если хочется собрать самому, порядок такой, он же в `.github/workflows/build.yml`. Дерево openwrt/openwrt на коммите из patches/port/BASE, поверх него `git am patches/port/*.patch`, это порт kravasuper. Фиды на коммитах из feeds-pins.txt. Патчи ядра из patches в target/linux/qualcommbe/patches-6.18, патчи ath12k из patches/mac80211-ath12k в package/kernel/mac80211/patches/ath12k, патчи mac80211 из patches/mac80211-subsys в package/kernel/mac80211/patches/subsys, правки дерева из patches/tree через patch -p1, описание в [patches.md](patches.md). Файл version в корне дерева с содержимым r20260929-d958caf, без него apk не соберёт base-files. overlay-files в files, awg-feed и luci-theme-nimbus рядом. Конфиг из config.buildinfo, потом make defconfig и make world. Собирать лучше в Docker на debian, исходники держать в томе Docker, а не на диске macOS, там регистронезависимая файловая система теряет файлы ядра. Если меняли конфиг ядра, пересоберите и внешние модули (mac80211, amneziawg), иначе они останутся собранными под старое ядро.
 
 ```
 grep -E "^(kmod-ath11k-ahb|kmod-ath12k|kmod-qcom-ppe|wpad-mbedtls|luci-ssl) " *.manifest
@@ -18,3 +18,7 @@ grep -E "^(kmod-ath11k-ahb|kmod-ath12k|kmod-qcom-ppe|wpad-mbedtls|luci-ssl) " *.
 Образы можно разобрать скриптом scripts/ubi_extract.py (том 1 это squashfs).
 
 Отладочные сборки по тегу `debug-*` выходят пре-релизом, фид не публикуют и собирают только образ, без пакетов-модулей для фида, поэтому занимают около получаса.
+
+Второй workflow, `.github/workflows/hybrid-failover-feed.yml`, держит отдельный фид hybrid-failover. Раз в три часа он смотрит последний релиз openwrt-hybrid-failover, и если он новее того, что лежит в фиде, собирает пакеты под aarch64_cortex-a73 скриптом упаковки самого проекта. Индекс подписывается тем же ключом и кладётся в `feed/hybrid-failover/aarch64_cortex-a73/`. Запустить его можно и вручную, кнопкой в Actions. Работает он из ветки main, так GitHub требует для запусков по расписанию.
+
+Переводы LuCI лежат в `i18n`, английский `be7000.en.po` и китайский `be7000.zh-cn.po`, собранные `.lmo` лежат рядом с остальными файлами прошивки. Скрипт `scripts/i18n-check.sh` проверяет, что у каждой строки наших страниц есть перевод на оба языка.

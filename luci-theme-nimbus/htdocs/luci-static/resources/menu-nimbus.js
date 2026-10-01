@@ -22,14 +22,19 @@ const ICONS = {
 
 const STRINGS = {
 	ru: {
-		search: 'Поиск', placeholder: 'Найти страницу или настройку…', empty: 'Ничего не найдено',
+		search: 'Поиск', placeholder: 'Найти страницу или настройку...', empty: 'Ничего не найдено',
 		auto: 'Авто', light: 'Светлая', dark: 'Тёмная', theme: 'Оформление', logout: 'Выйти',
 		go: 'открыть', move: 'выбор', close: 'закрыть'
 	},
 	en: {
-		search: 'Search', placeholder: 'Jump to a page or setting…', empty: 'Nothing found',
+		search: 'Search', placeholder: 'Jump to a page or setting...', empty: 'Nothing found',
 		auto: 'Auto', light: 'Light', dark: 'Dark', theme: 'Appearance', logout: 'Log out',
 		go: 'open', move: 'navigate', close: 'close'
+	},
+	zh: {
+		search: '搜索', placeholder: '查找页面或设置...', empty: '未找到',
+		auto: '自动', light: '浅色', dark: '深色', theme: '外观', logout: '退出',
+		go: '打开', move: '选择', close: '关闭'
 	}
 };
 
@@ -52,7 +57,7 @@ function storeSet(key, val) {
 return baseclass.extend({
 	__init__() {
 		const lang = (document.documentElement.getAttribute('lang') || 'en').toLowerCase();
-		this.t = STRINGS[lang.indexOf('ru') === 0 ? 'ru' : 'en'];
+		this.t = STRINGS[lang.indexOf('ru') === 0 ? 'ru' : lang.indexOf('zh') === 0 ? 'zh' : 'en'];
 		this.pages = [];
 
 		this.bindShell();

@@ -48,6 +48,20 @@ boot() {
 			logger -t be7000-wifi-defaults "wireless already configured, left as is"
 			exit 0
 		fi
+		# the networks stock had, taken by be7000-stock-import on this boot
+		if [ -s /etc/be7000-stock-wifi.pending ]; then
+			for r in 0 1; do
+				uci -q get wireless.radio$r >/dev/null || continue
+				uci -q set wireless.radio$r.disabled=0
+				uci -q set wireless.default_radio$r.disabled=0
+			done
+			uci commit wireless
+			if /usr/sbin/be7000-stock-import wifi-pending; then
+				touch "$MARK"
+				wifi reload
+				exit 0
+			fi
+		fi
 		for r in 0 1; do
 			uci -q get wireless.radio$r >/dev/null || continue
 			uci -q set wireless.radio$r.disabled=0

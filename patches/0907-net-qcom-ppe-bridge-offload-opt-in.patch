@@ -1,0 +1,56 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: [PATCH] net: qcom-ppe: make bridge offload opt-in
+
+Bridging of the PPE ports in hardware starts as soon as a port joins a
+bridge, with no way to keep the software bridge. Add a load-time
+parameter bridge_offload, off by default. With it off the ports never
+join a hardware bridge domain and no FDB entries are programmed, while
+routed flows can still be offloaded through the flowtable.
+
+Signed-off-by: Timofey Maykov <itnitro@gmail.com>
+---
+--- a/drivers/net/ethernet/qualcomm/ppe/ppe_bridge.c
++++ b/drivers/net/ethernet/qualcomm/ppe/ppe_bridge.c
+@@ -17,6 +17,7 @@
+  * software ports (such as wireless interfaces) of the bridge.
+  */
+ 
++#include <linux/moduleparam.h>
+ #include <linux/etherdevice.h>
+ #include <linux/hashtable.h>
+ #include <linux/if_bridge.h>
+@@ -1460,6 +1461,14 @@
+ 	}
+ }
+ 
++/* Hardware bridging of the PPE ports is off unless asked for at load
++ * time. The ports then stay parked and the software bridge forwards,
++ * while routed flows can still be offloaded through the flowtable.
++ */
++static bool bridge_offload;
++module_param(bridge_offload, bool, 0444);
++MODULE_PARM_DESC(bridge_offload, "Offload bridging of the PPE ports (default off)");
++
+ static int ppe_bridge_netdev_event(struct notifier_block *nb,
+ 				   unsigned long event, void *ptr)
+ {
+@@ -1478,6 +1487,9 @@
+ 		if (!netif_is_bridge_master(info->upper_dev))
+ 			break;
+ 
++		if (!bridge_offload)
++			break;
++
+ 		if (info->linking)
+ 			ret = ppe_bridge_port_join(pb, dev, info->upper_dev,
+ 						   netdev_notifier_info_to_extack(&info->info));
+@@ -1572,6 +1584,9 @@
+ 	struct ppe_bridge_fdb_work *fdb_work;
+ 	bool host_addr;
+ 
++	if (!bridge_offload)
++		return 0;
++
+ 	if (ctx && ctx != pb)
+ 		return 0;
+ 

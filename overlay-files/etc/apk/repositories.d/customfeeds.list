@@ -8,6 +8,9 @@ https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/packages
 https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/luci/packages.adb
 https://timofey-maykov.github.io/be7000-openwrt/feed/aarch64_cortex-a73/awg/packages.adb
 
+# hybrid-failover, rebuilt from every new upstream release
+https://timofey-maykov.github.io/be7000-openwrt/feed/hybrid-failover/aarch64_cortex-a73/packages.adb
+
 # Kernel modules built against the kernel this firmware ships. The mirror's
 # own target feed is built against a newer kernel and cannot satisfy the
 # dependency, so the modules have to come from here.

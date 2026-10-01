@@ -33,8 +33,23 @@ var TEXT = {
 		issues: 'Report a problem',
 		update: 'Build update',
 		credits: 'Credits'
+	},
+	zh: {
+		sub: '基于 OpenWrt 的小米 BE7000 固件，内核 6.18',
+		version: '版本',
+		github: 'GitHub 上的源代码',
+		releases: '发布版本',
+		forum: '4PDA 讨论帖',
+		issues: '报告问题',
+		update: '固件更新',
+		credits: '致谢'
 	}
 };
+
+function lang() {
+	var l = document.documentElement.lang || '';
+	return /^zh/i.test(l) ? 'zh' : /^en/i.test(l) ? 'en' : 'ru';
+}
 
 var ICONS = {
 	code: 'M8 6l-6 6 6 6M16 6l6 6-6 6',
@@ -92,14 +107,14 @@ function link(href, name, text, cls) {
 }
 
 return baseclass.extend({
-	title: /^en/i.test(document.documentElement.lang || '') ? 'Project' : 'Проект',
+	title: { ru: 'Проект', en: 'Project', zh: '项目' }[lang()],
 
 	load: function() {
 		return L.resolveDefault(callSystemBoard(), {});
 	},
 
 	render: function(board) {
-		var tx = TEXT[/^en/i.test(document.documentElement.lang || '') ? 'en' : 'ru'];
+		var tx = TEXT[lang()];
 		var ver = (L.isObject(board.release) ? board.release.version : '') || '';
 
 		ver = ver.replace(/^(BE7000|Beam WRT)\s+/, '');

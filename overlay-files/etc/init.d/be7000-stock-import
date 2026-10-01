@@ -1,0 +1,11 @@
+#!/bin/sh /etc/rc.common
+# First boot of a fresh install: take Wi-Fi, WAN and LAN from the settings
+# stock left behind, once, while this router still has its defaults (see
+# be7000-stock-import auto). Before netifd (20), so the network comes up
+# with them right away; Wi-Fi defaults (be7000-wifi-defaults, 99) see a
+# configured network and leave it alone.
+START=19
+
+boot() {
+	/usr/sbin/be7000-stock-import auto
+}

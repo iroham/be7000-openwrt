@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 282" width="720" height="282" role="img" aria-label="Where download packets go with offload on">
+<style>
+.bg{fill:#fcfcfb}.t1{fill:#0b0b0b}.t2{fill:#52514e}.grid{stroke:#e4e3de}.axis{stroke:#b9b8b2}
+.s1{fill:#2a78d6}.s2{fill:#eb6834}.s3{fill:#1baf7a}
+text{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif}
+@media (prefers-color-scheme: dark){.bg{fill:#1a1a19}.t1{fill:#ffffff}.t2{fill:#c3c2b7}.grid{stroke:#34332f}.axis{stroke:#5b5a55}
+.s1{fill:#3987e5}.s2{fill:#d95926}.s3{fill:#199e70}}
+</style>
+<rect class="bg" width="720" height="282" rx="12"/>
+<text class="t1" x="24" y="36" font-size="18" font-weight="600">Where download packets go with offload on</text>
+<text class="t2" x="24" y="58" font-size="13">Share of WAN packets during a 15 s download over PPPoE, client on Wi-Fi</text>
+<rect class="s1" x="24" y="74" width="12" height="12" rx="3"/><text class="t2" x="42" y="85" font-size="13">NAT done by the PPE</text>
+<rect class="s2" x="204.8" y="74" width="12" height="12" rx="3"/><text class="t2" x="222.8" y="85" font-size="13">To the CPU, no route</text>
+<rect class="s3" x="392.8" y="74" width="12" height="12" rx="3"/><text class="t2" x="410.8" y="85" font-size="13">Other</text>
+<text class="t1" x="24" y="120" font-size="14">Before the fixes</text>
+<g><title>Before the fixes, To the CPU, no route: 100.0 %</title><rect class="s2" x="24" y="128" width="671.8908913784705" height="34" rx="4"/></g>
+<text x="359.94544568923527" y="150.0" font-size="13" font-weight="600" text-anchor="middle" fill="#ffffff">100 %</text>
+<text class="t1" x="24" y="182" font-size="14">With the Beam WRT fixes</text>
+<g><title>With the Beam WRT fixes, NAT done by the PPE: 85.9 %</title><rect class="s1" x="24" y="190" width="575.0949813355454" height="34" rx="4"/></g>
+<text x="312.5474906677727" y="212.0" font-size="13" font-weight="600" text-anchor="middle" fill="#ffffff">86 %</text>
+<g><title>With the Beam WRT fixes, To the CPU, no route: 2.0 %</title><rect class="s2" x="601.0949813355454" y="190" width="11.518042306097055" height="34" rx="0"/></g>
+<g><title>With the Beam WRT fixes, Other: 12.1 %</title><rect class="s3" x="614.6130236416425" y="190" width="81.38697635835747" height="34" rx="4"/></g>
+<text x="655.3065118208212" y="212.0" font-size="13" font-weight="600" text-anchor="middle" fill="#ffffff">12 %</text>
+<text class="t2" x="24" y="260" font-size="12">PPE reason counters (codes 93 and 162) against the packet count on wan.</text>
+</svg>

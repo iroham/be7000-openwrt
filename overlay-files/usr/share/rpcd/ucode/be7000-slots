@@ -1,0 +1,47 @@
+'use strict';
+
+import { popen } from 'fs';
+
+const BIN = '/usr/libexec/be7000-slots';
+
+function run(args) {
+	let fd = popen(`${BIN} ${args} 2>&1`, 'r');
+	let out = fd ? trim(fd.read('all') ?? '') : '';
+	let rc = fd ? fd.close() : -1;
+	return { rc, out };
+}
+
+function parse(out) {
+	try { return json(out); } catch (e) { return { error: out }; }
+}
+
+return {
+	'be7000-slots': {
+		status: {
+			call: function() {
+				return parse(run('status').out);
+			}
+		},
+		info: {
+			args: { slot: 0 },
+			call: function(req) {
+				let s = +(req.args?.slot ?? -1);
+				if (s != 0 && s != 1)
+					return { error: 'slot is 0 or 1' };
+				return parse(run(`info ${s}`).out);
+			}
+		},
+		switch: {
+			args: { slot: 0, reboot: false },
+			call: function(req) {
+				let s = +(req.args?.slot ?? -1);
+				if (s != 0 && s != 1)
+					return { ok: false, output: 'slot is 0 or 1' };
+				let r = run(`switch ${s}`);
+				if (r.rc == 0 && req.args?.reboot)
+					popen('(sleep 3; reboot) </dev/null >/dev/null 2>&1 &', 'r')?.close();
+				return { ok: r.rc == 0, output: r.out };
+			}
+		}
+	}
+};
