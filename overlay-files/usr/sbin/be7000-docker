@@ -34,6 +34,26 @@ free_mb_of() {
 	df -m "$path" 2>/dev/null | awk 'NR==2 { print $4 }'
 }
 
+fs_type_of() {
+	local path="$1"
+	while [ ! -d "$path" ] && [ "$path" != "/" ]; do path="$(dirname "$path")"; done
+	df -T "$path" 2>/dev/null | awk 'NR==2 { print $2 }'
+}
+
+supports_docker_overlay() {
+	local root="$1" test="$1/.be7000-docker-overlay-test.$$"
+	mkdir -p "$test/lower" "$test/upper" "$test/work" "$test/merged" || return 1
+	if mount -t overlay overlay \
+		-o "lowerdir=$test/lower,upperdir=$test/upper,workdir=$test/work" \
+		"$test/merged" 2>/dev/null; then
+		umount "$test/merged" 2>/dev/null || true
+		rm -rf "$test"
+		return 0
+	fi
+	rm -rf "$test"
+	return 1
+}
+
 installed() {
 	command -v dockerd >/dev/null 2>&1
 }
@@ -103,6 +123,13 @@ Plug in a disk, mount it and give the path: be7000-docker setup --data-root /mnt
 	fi
 
 	mkdir -p "$dr"
+	local fs
+	fs="$(fs_type_of "$dr")"
+	if ! supports_docker_overlay "$dr"; then
+		die "$(t "Файловая система ${fs:-неизвестна} в $dr не поддерживает слои Docker.
+Используйте раздел ext4 или каталог внутри /overlay, если /overlay уже перенесён на USB-диск." "The ${fs:-unknown} filesystem at $dr cannot hold Docker layers.
+Use an ext4 partition or a directory under /overlay if /overlay has already been moved to a USB drive.")"
+	fi
 	t "Прописываю data-root" "Setting data-root"
 	uci -q set dockerd.globals.data_root="$dr"
 	uci -q commit dockerd
