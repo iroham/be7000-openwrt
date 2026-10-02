@@ -1,5 +1,5 @@
 #!/usr/bin/ucode
-// Builds /etc/banner: the Beam WRT logo from /rom/etc/banner, the version
+// Builds /etc/banner: the MiWRT logo from /rom/etc/banner, the version
 // line and the credits from the same JSON the LuCI page (System, Credits)
 // shows. English when LuCI is set to English (luci.main.lang), Russian
 // otherwise.
@@ -10,7 +10,7 @@ const src = readfile('/rom/etc/banner') ?? '';
 const data = json(readfile('/www/luci-static/resources/be7000-credits/credits.json') ?? '{}');
 const rel = readfile('/etc/openwrt_release') ?? '';
 const ver = match(readfile('/etc/be7000-release') ?? '', /VERSION=([^\n]+)/)?.[1] ??
-	replace(match(rel, /DISTRIB_RELEASE='([^']*)'/)?.[1] ?? '', /^(BE7000|Beam WRT) /, '');
+	replace(match(rel, /DISTRIB_RELEASE='([^']*)'/)?.[1] ?? '', /^(BE7000|Beam WRT|MiWRT) /, '');
 const rev = match(rel, /DISTRIB_REVISION='([^']*)'/)?.[1];
 const p = popen('uci -q get luci.main.lang');
 const lang = match(trim(p?.read('all') ?? ''), /^en/) ? 'en' : 'ru';
@@ -32,7 +32,7 @@ if (length(out) && !match(out, /\n$/))
 	out += '\n';
 
 out += ` -----------------------------------------------------\n`;
-out += ` Beam WRT${ver ? ' ' + ver : ''} ${T.model}\n ${T.base}${rev ? ' ' + rev : ''}\n`;
+out += ` MiWRT${ver ? ' ' + ver : ''} ${T.model}\n ${T.base}${rev ? ' ' + rev : ''}\n`;
 out += ` -----------------------------------------------------\n`;
 out += `\n ${T.hello}\n`;
 

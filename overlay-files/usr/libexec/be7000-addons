@@ -1,5 +1,5 @@
 #!/bin/sh
-# Add-on programs from the Beam WRT feeds, for the Services, Add-ons page.
+# Add-on programs from the MiWRT feeds, for the Services, Add-ons page.
 #
 #   status <id>          JSON: installed version, version in the feed, state
 #   install <id> [bot]   apk update and install in the background, log in $LOG

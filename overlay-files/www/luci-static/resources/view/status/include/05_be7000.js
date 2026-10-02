@@ -5,12 +5,12 @@
 // Project card at the top of Status, Overview: build version and links to
 // the repository, releases, the 4PDA topic and the build's own pages.
 
-var REPO = 'https://github.com/timofey-maykov/be7000-openwrt';
+var REPO = 'https://github.com/iroham/be7000-openwrt';
 var FORUM = 'https://4pda.to/forum/index.php?showtopic=1070166';
 
 var callSystemBoard = rpc.declare({ object: 'system', method: 'board' });
 
-// the Beam WRT mark, same as the theme's logo.svg
+// the MiWRT mark, same as the theme's logo.svg
 var LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"> <defs> <linearGradient id="be7k-bg" x1="0" y1="64" x2="64" y2="0" gradientUnits="userSpaceOnUse"> <stop offset="0" stop-color="#4f46e5"/> <stop offset="1" stop-color="#06b6d4"/> </linearGradient> <linearGradient id="be7k-ray" x1="14" y1="32" x2="62" y2="32" gradientUnits="userSpaceOnUse"> <stop offset="0" stop-color="#fff" stop-opacity=".55"/> <stop offset="1" stop-color="#fff" stop-opacity="0"/> </linearGradient> </defs> <rect width="64" height="64" rx="15" fill="url(#be7k-bg)"/> <path d="M30 32 L62 22 L62 42 Z" fill="url(#be7k-ray)"/> <g fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"> <path d="M17 14 V50"/> <path d="M17 14 H26 A8.5 8.5 0 0 1 26 31 H17"/> <path d="M17 31 H28 A9.5 9.5 0 0 1 28 50 H17"/> </g> <g fill="none" stroke="#fff" stroke-linecap="round"> <path d="M44 24 A12 12 0 0 1 44 40" stroke-width="3.6" stroke-opacity=".9"/> <path d="M50.5 19 A18 18 0 0 1 50.5 45" stroke-width="3.2" stroke-opacity=".6"/> </g> </svg>';
 
 var TEXT = {
@@ -117,7 +117,7 @@ return baseclass.extend({
 		var tx = TEXT[lang()];
 		var ver = (L.isObject(board.release) ? board.release.version : '') || '';
 
-		ver = ver.replace(/^(BE7000|Beam WRT)\s+/, '');
+		ver = ver.replace(/^(BE7000|Beam WRT|MiWRT)\s+/, '');
 
 		if (!document.getElementById('be7k-css'))
 			document.head.appendChild(E('style', { 'id': 'be7k-css' }, CSS));
@@ -125,7 +125,7 @@ return baseclass.extend({
 		var card = E('div', { 'class': 'be7k-card' }, [
 			E('div', { 'class': 'be7k-logo', 'aria-hidden': 'true' }),
 			E('div', { 'class': 'be7k-head' }, [
-				E('a', { 'class': 'be7k-name', 'href': REPO, 'target': '_blank', 'rel': 'noopener' }, 'Beam WRT'),
+				E('a', { 'class': 'be7k-name', 'href': REPO, 'target': '_blank', 'rel': 'noopener' }, 'MiWRT'),
 				E('div', { 'class': 'be7k-sub' }, tx.sub),
 				ver ? E('span', { 'class': 'be7k-ver' }, tx.version + ' ' + ver) : ''
 			]),

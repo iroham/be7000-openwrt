@@ -16,7 +16,7 @@
 	<form method="post" class="nb-login-card" autocomplete="on">
 		<div class="nb-login-head">
 			<img class="nb-login-logo" src="{{ media }}/logo.svg" alt="" width="56" height="56">
-			<h1>Beam WRT</h1>
+			<h1>MiWRT</h1>
 			<p>{{ striptags(board?.hostname ?? '') }}{% if (board?.model): %} · {{ striptags(board.model) }}{% endif %}</p>
 		</div>
 

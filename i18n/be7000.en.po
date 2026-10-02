@@ -334,11 +334,11 @@ msgstr "Slots"
 msgid "Заводская прошивка Xiaomi"
 msgstr "Xiaomi factory firmware"
 
-msgid "Beam WRT или другой OpenWrt"
-msgstr "Beam WRT or another OpenWrt"
+msgid "MiWRT или другой OpenWrt"
+msgstr "MiWRT or another OpenWrt"
 
-msgid "Тестовая сборка Beam WRT"
-msgstr "Beam WRT test build"
+msgid "Тестовая сборка MiWRT"
+msgstr "MiWRT test build"
 
 msgid "Пусто"
 msgstr "Empty"
@@ -364,14 +364,14 @@ msgstr "boots by default"
 msgid "Сделать основным и перезагрузить"
 msgstr "Make it the one that boots and reboot"
 
-msgid "Роутер загрузит заводскую прошивку, и она сама станет основной. Настройки Beam WRT останутся на месте."
-msgstr "The router boots the factory firmware, and it makes itself the one that boots. The Beam WRT settings stay where they are."
+msgid "Роутер загрузит заводскую прошивку, и она сама станет основной. Настройки MiWRT останутся на месте."
+msgstr "The router boots the factory firmware, and it makes itself the one that boots. The MiWRT settings stay where they are."
 
-msgid "Вернуться на Beam WRT из стока можно так. Если в стоке включён SSH, выполните"
-msgstr "To come back to Beam WRT from stock, with SSH enabled on stock, run"
+msgid "Вернуться на MiWRT из стока можно так. Если в стоке включён SSH, выполните"
+msgstr "To come back to MiWRT from stock, with SSH enabled on stock, run"
 
-msgid "Или поставьте Beam WRT заново скриптом из архива релиза, настройки сохранятся."
-msgstr "Or install Beam WRT again with the script from the release archive, the settings are kept."
+msgid "Или поставьте MiWRT заново скриптом из архива релиза, настройки сохранятся."
+msgstr "Or install MiWRT again with the script from the release archive, the settings are kept."
 
 msgid "Роутер загрузит %s из слота %d, и эта прошивка станет основной."
 msgstr "The router boots %s from slot %d, and that firmware becomes the one that boots."
@@ -469,8 +469,8 @@ msgstr "What the PPE is"
 msgid "В процессоре IPQ9554 кроме ядер ARM есть отдельный сетевой блок PPE (packet processing engine). Он умеет сам коммутировать кадры между портами и маршрутизировать пакеты с NAT по таблице соединений, не нагружая основной процессор. Заводская прошивка Xiaomi им пользуется, в обычном OpenWrt он до сих пор простаивает."
 msgstr "Besides the ARM cores, the IPQ9554 has a separate network block, the PPE (packet processing engine). It can switch frames between ports and route packets with NAT from a connection table on its own, without loading the main CPU. The Xiaomi factory firmware uses it, in regular OpenWrt it still sits idle."
 
-msgid "Поддержка разгрузки в Beam WRT построена на открытой работе для OpenWrt и наших исправлениях к ней. Она ещё не принята в основной OpenWrt, поэтому здесь она экспериментальная."
-msgstr "Offload support in Beam WRT is built on open work for OpenWrt plus our fixes to it. It is not in mainline OpenWrt yet, so here it is experimental."
+msgid "Поддержка разгрузки в MiWRT построена на открытой работе для OpenWrt и наших исправлениях к ней. Она ещё не принята в основной OpenWrt, поэтому здесь она экспериментальная."
+msgstr "Offload support in MiWRT is built on open work for OpenWrt plus our fixes to it. It is not in mainline OpenWrt yet, so here it is experimental."
 
 msgid "Первые пакеты каждого соединения, как обычно, проходят межсетевой экран на процессоре. Когда соединение установлено, ядро записывает его в таблицу PPE, и дальше PPE пересылает его пакеты сам, с подменой адресов и портов. Это обычная функция OpenWrt, она называется аппаратной разгрузкой потоков (flow offloading). Включить её здесь то же самое, что поставить галку в настройках межсетевого экрана."
 msgstr "The first packets of every connection pass the firewall on the CPU as usual. Once the connection is established, the kernel writes it into the PPE table, and from then on the PPE forwards its packets itself, rewriting addresses and ports. This is a regular OpenWrt feature called hardware flow offloading. Turning it on here is the same as ticking the box in the firewall settings."
@@ -541,8 +541,8 @@ msgstr "If something goes wrong"
 msgid "Выключите разгрузку на этой странице. NAT выключается сразу, мост после перезагрузки. Если страница не открывается, выполните в консоли команды ниже."
 msgstr "Turn offload off on this page. NAT turns off at once, the bridge after a reboot. If the page does not open, run the commands below in the console."
 
-msgid "Напишите о проблеме в тему Beam WRT на 4PDA или в issues на GitHub и приложите вывод этой команды."
-msgstr "Report the problem in the Beam WRT topic on 4PDA or in GitHub issues, with the output of this command."
+msgid "Напишите о проблеме в тему MiWRT на 4PDA или в issues на GitHub и приложите вывод этой команды."
+msgstr "Report the problem in the MiWRT topic on 4PDA or in GitHub issues, with the output of this command."
 
 msgid "Что такое слоты"
 msgstr "What slots are"
@@ -550,11 +550,11 @@ msgstr "What slots are"
 msgid "На флеше роутера два раздела для прошивки, слот 0 (rootfs) и слот 1 (rootfs_1). В каждом лежит своё ядро и своя система. Xiaomi сделала так для безопасных обновлений. Новая версия пишется в свободный слот, а если она не загрузится, роутер вернётся на старую."
 msgstr "The router flash has two firmware partitions, slot 0 (rootfs) and slot 1 (rootfs_1). Each holds its own kernel and system. Xiaomi did this for safe updates. A new version is written to the free slot, and if it does not boot, the router goes back to the old one."
 
-msgid "Beam WRT при установке из стока занимает один слот, заводская прошивка остаётся во втором. Поэтому вернуться на сток можно без прошивки и без программатора, простым переключением."
-msgstr "When installed from stock, Beam WRT takes one slot and the factory firmware stays in the other. So you can go back to stock without flashing and without a programmer, with a plain switch."
+msgid "MiWRT при установке из стока занимает один слот, заводская прошивка остаётся во втором. Поэтому вернуться на сток можно без прошивки и без программатора, простым переключением."
+msgstr "When installed from stock, MiWRT takes one slot and the factory firmware stays in the other. So you can go back to stock without flashing and without a programmer, with a plain switch."
 
-msgid "Настройки хранятся отдельно от слотов. У Beam WRT они на разделе данных и общие для любой сборки Beam WRT в любом слоте. Сток хранит свои настройки в зашифрованном виде там же, Beam WRT их не трогает."
-msgstr "Settings are kept apart from the slots. Beam WRT keeps them on the data partition, shared by any Beam WRT build in either slot. Stock keeps its own settings encrypted in the same place, Beam WRT does not touch them."
+msgid "Настройки хранятся отдельно от слотов. У MiWRT они на разделе данных и общие для любой сборки MiWRT в любом слоте. Сток хранит свои настройки в зашифрованном виде там же, MiWRT их не трогает."
+msgstr "Settings are kept apart from the slots. MiWRT keeps them on the data partition, shared by any MiWRT build in either slot. Stock keeps its own settings encrypted in the same place, MiWRT does not touch them."
 
 msgid "Как загрузчик выбирает слот"
 msgstr "How the bootloader picks a slot"
@@ -562,8 +562,8 @@ msgstr "How the bootloader picks a slot"
 msgid "Загрузчик запускает слот, записанный в flag_last_success."
 msgstr "The bootloader starts the slot written in flag_last_success."
 
-msgid "Каждая прошивка, которая загрузилась до конца, сама записывает туда свой слот и сбрасывает счётчик неудачных попыток. И Beam WRT, и сток делают это при каждой загрузке."
-msgstr "Every firmware that boots completely writes its own slot there and resets the failed attempt counter. Both Beam WRT and stock do this on every boot."
+msgid "Каждая прошивка, которая загрузилась до конца, сама записывает туда свой слот и сбрасывает счётчик неудачных попыток. И MiWRT, и сток делают это при каждой загрузке."
+msgstr "Every firmware that boots completely writes its own slot there and resets the failed attempt counter. Both MiWRT and stock do this on every boot."
 
 msgid "Если слот не загружается, загрузчик считает попытки. После шести неудачных подряд на седьмом включении он сам берёт другой слот."
 msgstr "If a slot does not boot, the bootloader counts the attempts. After six failed ones in a row it takes the other slot on the seventh power-on."
@@ -586,14 +586,14 @@ msgstr "When switching to stock the page checks whether stock has saved settings
 msgid "Как вернуться обратно"
 msgstr "How to come back"
 
-msgid "Из другой сборки Beam WRT откройте в ней эту же страницу и переключите слот."
-msgstr "From another Beam WRT build, open this same page there and switch the slot."
+msgid "Из другой сборки MiWRT откройте в ней эту же страницу и переключите слот."
+msgstr "From another MiWRT build, open this same page there and switch the slot."
 
 msgid "Из заводской прошивки, если в ней включён SSH, выполните команды ниже."
 msgstr "From the factory firmware with SSH on, run the commands below."
 
-msgid "Из заводской прошивки без SSH установите Beam WRT заново скриптом из архива релиза, как в первый раз. Настройки Beam WRT сохранятся."
-msgstr "From the factory firmware without SSH, install Beam WRT again with the script from the release archive, as the first time. Beam WRT settings are kept."
+msgid "Из заводской прошивки без SSH установите MiWRT заново скриптом из архива релиза, как в первый раз. Настройки MiWRT сохранятся."
+msgstr "From the factory firmware without SSH, install MiWRT again with the script from the release archive, as the first time. MiWRT settings are kept."
 
 msgid "Если роутер не загружается совсем, выключите и включите питание семь раз подряд, каждый раз давая ему полминуты. На седьмой раз загрузчик сам возьмёт другой слот."
 msgstr "If the router does not boot at all, power it off and on seven times in a row, giving it half a minute each time. On the seventh time the bootloader takes the other slot itself."
@@ -664,8 +664,8 @@ msgstr "Hybrid Failover is installed by its own install script now, not from the
 msgid "Дополнения"
 msgstr "Add-ons"
 
-msgid "Программы, которые не входят в прошивку, но собраны для неё и ставятся из фида Beam WRT одной кнопкой. Новые версии появляются в фиде сами, после выхода каждого релиза."
-msgstr "Programs that are not part of the firmware but are built for it and install from the Beam WRT feed with one button. New versions show up in the feed by themselves after every release."
+msgid "Программы, которые не входят в прошивку, но собраны для неё и ставятся из фида MiWRT одной кнопкой. Новые версии появляются в фиде сами, после выхода каждого релиза."
+msgstr "Programs that are not part of the firmware but are built for it and install from the MiWRT feed with one button. New versions show up in the feed by themselves after every release."
 
 msgid "Маршрутизация через VPN с автоматическим резервом. Основной канал идёт через ваш VPN, например AmneziaWG. Если он падает, трафик сам уходит на резервные прокси, а когда VPN поднимается, возвращается обратно. Устройствам в сети ничего настраивать не нужно."
 msgstr "Routing through a VPN with an automatic fallback. The main channel goes through your VPN, AmneziaWG for example. If it goes down, traffic moves to backup proxies by itself and comes back once the VPN is up again. Nothing needs to be set up on the devices in the network."

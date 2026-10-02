@@ -1,6 +1,6 @@
 {
 	"luci-app-be7000-addons": {
-		"description": "Add-on programs from the Beam WRT feeds",
+		"description": "Add-on programs from the MiWRT feeds",
 		"read": {
 			"ubus": {
 				"be7000-addons": [ "status", "log" ]

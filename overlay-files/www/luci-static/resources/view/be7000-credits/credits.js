@@ -78,7 +78,7 @@ return view.extend({
 		var body = [];
 
 		body.push(E('div', { 'class': 'bct-logo' }, LOGO));
-		body.push(E('div', { 'class': 'bct-hi' }, 'Beam WRT' + (ver ? ' ' + ver : '') + '. ' + tx.hello));
+		body.push(E('div', { 'class': 'bct-hi' }, 'MiWRT' + (ver ? ' ' + ver : '') + '. ' + tx.hello));
 
 		d.groups.forEach(function(g) {
 			body.push(E('div', { 'class': 'bct-gt' }, '# ' + t(g.title)));
@@ -126,7 +126,7 @@ return view.extend({
 				E('i', { 'style': 'background:#ff5f56' }),
 				E('i', { 'style': 'background:#ffbd2e' }),
 				E('i', { 'style': 'background:#27c93f' }),
-				E('span', {}, 'root@BeamWRT: ~/credits')
+				E('span', {}, 'root@MiWRT: ~/credits')
 			]),
 			E('div', { 'class': 'bct-in' }, body)
 		]);

@@ -5,7 +5,7 @@
 'require poll';
 
 // Services, Add-ons: programs that are not part of the image but are built
-// for it and install from the Beam WRT feeds in one click. The work is
+// for it and install from the MiWRT feeds in one click. The work is
 // /usr/libexec/be7000-addons behind the rpcd object be7000-addons.
 
 var callStatus = rpc.declare({ object: 'be7000-addons', method: 'status', params: [ 'id' ] });
@@ -98,7 +98,7 @@ return view.extend({
 		return E([], [
 			E('style', {}, CSS),
 			E('h2', {}, _('Дополнения')),
-			E('div', { 'class': 'cbi-map-descr' }, _('Программы, которые не входят в прошивку, но собраны для неё и ставятся из фида Beam WRT одной кнопкой. Новые версии появляются в фиде сами, после выхода каждого релиза.')),
+			E('div', { 'class': 'cbi-map-descr' }, _('Программы, которые не входят в прошивку, но собраны для неё и ставятся из фида MiWRT одной кнопкой. Новые версии появляются в фиде сами, после выхода каждого релиза.')),
 
 			E('div', { 'class': 'ba-card' }, [
 				E('h3', {}, [ 'Hybrid Failover' ].concat(badges)),
