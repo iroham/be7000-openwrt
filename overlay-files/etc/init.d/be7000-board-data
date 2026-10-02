@@ -1,15 +1,23 @@
 #!/bin/sh /etc/rc.common
-# Keep Xiaomi's 5 GHz board data in place. The generic ath12k-firmware-qcn9274
-# package ships Qualcomm's reference board-2.bin; a package reinstall (romsync
-# after an image change, apk upgrade) would put it back. Stock's board data
-# (bdwlan.b0002 for board id 2, bdwlan.b1008 for 0x1008, both inside
-# board-2.bin.xiaomi) lets the radio use the full regulatory power and
-# measured about 25% more downlink on this unit. Runs before ath12k loads.
+# Keep Xiaomi's board data in place for both radios. The generic firmware
+# packages (ath12k-firmware-qcn9274, ath11k-firmware-ipq9574) ship Qualcomm's
+# reference board-2.bin; a package reinstall (romsync after an image change,
+# apk upgrade) would put it back. Stock's board data lets the radios use the
+# full regulatory power: on this unit the 5 GHz file alone measured about
+# 25% more downlink. Runs before the Wi-Fi drivers load.
+#   5 GHz: bdwlan.b0002 (board id 2) and bdwlan.b1008 (0x1008), board-xiaomi_be7000.qcn9274
+#   2.4 GHz: bdwlan.b20 under board ids 255 and 32 (plain and variant=Xiaomi-BE7000),
+#            plus the generic file's regulatory entry, unchanged
 START=08
 
-start() {
-	local d=/lib/firmware/ath12k/QCN9274/hw2.0
+restore() {
+	local d="$1"
 	[ -s "$d/board-2.bin.xiaomi" ] || return 0
 	cmp -s "$d/board-2.bin.xiaomi" "$d/board-2.bin" && return 0
-	cp "$d/board-2.bin.xiaomi" "$d/board-2.bin" && logger -t be7000-board-data "restored Xiaomi board-2.bin"
+	cp "$d/board-2.bin.xiaomi" "$d/board-2.bin" && logger -t be7000-board-data "restored Xiaomi board-2.bin in $d"
+}
+
+start() {
+	restore /lib/firmware/ath12k/QCN9274/hw2.0
+	restore /lib/firmware/ath11k/IPQ9574/hw1.0
 }

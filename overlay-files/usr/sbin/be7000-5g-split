@@ -190,6 +190,11 @@ config_on() {
 	# the upper radio covers 144-177; ACS right after the firmware switch
 	# is unreliable, so start on fixed channels
 	ch="$(uci -q get wireless.$r.channel)"
+	# remember the single-radio channel and width: on the way back to one radio
+	# the upper radio's channel (149) with 160 MHz is a combination hostapd cannot
+	# start, which left the whole 5 GHz band down
+	uci -q get wireless.$r.be7000_single_channel >/dev/null || uci set wireless.$r.be7000_single_channel="${ch:-auto}"
+	uci -q get wireless.$r.be7000_single_htmode >/dev/null || uci set wireless.$r.be7000_single_htmode="$(uci -q get wireless.$r.htmode)"
 	case "$ch" in [0-9]*) [ "$ch" -ge 144 ] || uci set wireless.$r.channel=149 ;; *) uci set wireless.$r.channel=149 ;; esac
 	low="$(low_radio $r)"
 	if [ -z "$low" ]; then
@@ -216,7 +221,7 @@ config_on() {
 }
 
 config_off() {
-	local r="$(main_radio)" low i
+	local r="$(main_radio)" low i ch
 	[ -n "$r" ] || return 0
 	low="$(low_radio $r)"
 	if [ -n "$low" ]; then
@@ -224,6 +229,13 @@ config_off() {
 		uci -q delete wireless.$low
 	fi
 	uci -q delete wireless.$r.radio
+	# restore the channel and width the single radio ran with before the split
+	ch="$(uci -q get wireless.$r.be7000_single_channel)"
+	[ -n "$ch" ] && uci set wireless.$r.channel="$ch"
+	ch="$(uci -q get wireless.$r.be7000_single_htmode)"
+	[ -n "$ch" ] && uci set wireless.$r.htmode="$ch"
+	uci -q delete wireless.$r.be7000_single_channel
+	uci -q delete wireless.$r.be7000_single_htmode
 	drop_extra $r
 	uci commit wireless
 }

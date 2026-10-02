@@ -1,0 +1,14 @@
+#!/bin/sh
+# Default regulatory country for radios that have none. Without a country the
+# OpenWrt scripts never write ieee80211h to hostapd, so every radar (DFS)
+# channel is silently unavailable and 160 MHz on 5 GHz cannot be used; the
+# radio firmware also falls back to its own default rules. GB is this build's
+# home market; change it under Network, Wireless if the router lives elsewhere.
+changed=0
+for r in $(uci -q show wireless | sed -n "s/^wireless\.\([^.]*\)=wifi-device$/\1/p"); do
+	[ -n "$(uci -q get wireless.$r.country)" ] && continue
+	uci set wireless.$r.country='GB'
+	changed=1
+done
+[ "$changed" = 1 ] && uci commit wireless && logger -t be7000-country "country GB set on radios that had none"
+exit 0
