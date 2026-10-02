@@ -10,7 +10,7 @@
 # version comes from /etc/be7000-release, which CI writes into the image; a
 # build without it is "dev" and never offers itself an upgrade.
 
-REPO="timofey-maykov/be7000-openwrt"
+REPO="iroham/be7000-openwrt"
 API="https://api.github.com/repos/$REPO/releases/latest"
 RELEASE_FILE=/etc/be7000-release
 STATE=/tmp/be7000-update.json

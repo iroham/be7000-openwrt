@@ -1,0 +1,15 @@
+#!/bin/sh /etc/rc.common
+# Keep Xiaomi's 5 GHz board data in place. The generic ath12k-firmware-qcn9274
+# package ships Qualcomm's reference board-2.bin; a package reinstall (romsync
+# after an image change, apk upgrade) would put it back. Stock's board data
+# (bdwlan.b0002 for board id 2, bdwlan.b1008 for 0x1008, both inside
+# board-2.bin.xiaomi) lets the radio use the full regulatory power and
+# measured about 25% more downlink on this unit. Runs before ath12k loads.
+START=08
+
+start() {
+	local d=/lib/firmware/ath12k/QCN9274/hw2.0
+	[ -s "$d/board-2.bin.xiaomi" ] || return 0
+	cmp -s "$d/board-2.bin.xiaomi" "$d/board-2.bin" && return 0
+	cp "$d/board-2.bin.xiaomi" "$d/board-2.bin" && logger -t be7000-board-data "restored Xiaomi board-2.bin"
+}
