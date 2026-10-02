@@ -3,14 +3,14 @@ Going back to the factory firmware, and what to do when something goes wrong
 
 Going back from the running firmware
 
-The easiest way is the System, Slots page. On the other slot press "See what is there", then "Make it the main one and reboot". The same page explains in full how the bootloader picks a slot and how to come back to Beam WRT later.
+The easiest way is the System, Slots page. On the other slot press "See what is there", then "Make it the main one and reboot". The same page explains in full how the bootloader picks a slot and how to come back to MiWRT later.
 
 You can also use the script. Copy rollback-to-stock.sh to the router, run it and reboot the router.
 
 scp -O rollback-to-stock.sh root@192.168.1.1:/tmp/
 ssh root@192.168.1.1 "sh /tmp/rollback-to-stock.sh && reboot"
 
-Neither the page nor the script flashes anything. They only switch the boot to the other slot, where the factory firmware is. Beam WRT stays in its slot and the factory firmware boots with its own settings. This works over Wi-Fi too.
+Neither the page nor the script flashes anything. They only switch the boot to the other slot, where the factory firmware is. MiWRT stays in its slot and the factory firmware boots with its own settings. This works over Wi-Fi too.
 
 The script from 1.2.6, 1.2.7 and the debug builds reset the factory firmware to its defaults. It keeps its settings encrypted, the old script did not know that and decided there were none. If your script comes from those versions, take the fixed scripts/rollback-to-stock.sh from the repository.
 
@@ -21,17 +21,17 @@ nvram set restore_defaults=1 && nvram commit && reboot -f
 MIWIFIRepairTool also brings the factory firmware back, nothing is lost with it either.
 
 
-Coming back from the factory firmware to Beam WRT
+Coming back from the factory firmware to MiWRT
 
-If SSH is on in the factory firmware, switch the boot back. The Slots page shows which slot holds Beam WRT, note it before you switch.
+If SSH is on in the factory firmware, switch the boot back. The Slots page shows which slot holds MiWRT, note it before you switch.
 
-nvram set flag_last_success=<Beam WRT slot>
-nvram set flag_boot_rootfs=<Beam WRT slot>
+nvram set flag_last_success=<MiWRT slot>
+nvram set flag_boot_rootfs=<MiWRT slot>
 nvram set flag_ota_reboot=0
 nvram commit
 reboot
 
-Without SSH, install Beam WRT again as in 1-install-en.txt. Your Beam WRT settings are kept.
+Without SSH, install MiWRT again as in 1-install-en.txt. Your MiWRT settings are kept.
 
 
 If the firmware does not boot
@@ -45,7 +45,7 @@ Once the firmware has booted successfully, cutting the power does not help, it h
 
 The router booted but does not answer
 
-First check the address. If the settings were taken from the factory firmware during the install, Beam WRT usually stays at its address 192.168.31.1. If not, it is at 192.168.1.1. When the computer gets no address by itself, give it one from the same network, 192.168.31.2 or 192.168.1.2, mask 255.255.255.0 and an empty gateway. A common mistake is giving the computer the same address as the router.
+First check the address. If the settings were taken from the factory firmware during the install, MiWRT usually stays at its address 192.168.31.1. If not, it is at 192.168.1.1. When the computer gets no address by itself, give it one from the same network, 192.168.31.2 or 192.168.1.2, mask 255.255.255.0 and an empty gateway. A common mistake is giving the computer the same address as the router.
 
 No wired network while Wi-Fi works. The cause that broke the cable on some boards was found and fixed in 1.3.0. If you still see it, connect over Wi-Fi, collect the output of the command below and post it in the thread or in a GitHub issue. Wi-Fi has the name and password from the factory firmware, or OpenWrt-BE7000 with password be7000openwrt.
 

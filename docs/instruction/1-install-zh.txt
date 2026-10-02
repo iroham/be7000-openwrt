@@ -14,7 +14,7 @@ Windows 10 及更新的系统自带 OpenSSH 就够用，下面的命令可以在
 
 关于设置的存储空间
 
-槽位里的空间很小。所以 Beam WRT 第一次启动时，会把自己的设置和软件包放到原厂固件存放设置的那个分区里，用一个单独的目录。这样可用空间是 19.4 MB，而不是 7.4 MB。原厂设置不会被改动，切回原厂固件后，它会带着自己的设置启动。如果你想保持 7.4 MB，请在第一次启动前把 /etc/config/bigoverlay 里的值改成 0。
+槽位里的空间很小。所以 MiWRT 第一次启动时，会把自己的设置和软件包放到原厂固件存放设置的那个分区里，用一个单独的目录。这样可用空间是 19.4 MB，而不是 7.4 MB。原厂设置不会被改动，切回原厂固件后，它会带着自己的设置启动。如果你想保持 7.4 MB，请在第一次启动前把 /etc/config/bigoverlay 里的值改成 0。
 
 
 第 1 步。备份，没有备份不要开始
@@ -49,7 +49,7 @@ ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.
 
 ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.168.31.1 "sh /tmp/install-from-stock.sh /tmp/openwrt.ubi reboot"
 
-脚本会查出原厂固件在哪个槽位运行，把镜像写到另一个槽位，然后切换启动。它不会动引导程序。只要有一点对不上，脚本就会停下，什么也不写。如果 Beam WRT 启动不了，下次通电时路由器会自己回到原厂固件。
+脚本会查出原厂固件在哪个槽位运行，把镜像写到另一个槽位，然后切换启动。它不会动引导程序。只要有一点对不上，脚本就会停下，什么也不写。如果 MiWRT 启动不了，下次通电时路由器会自己回到原厂固件。
 
 
 第 5 步。第一次登录

@@ -59,7 +59,7 @@ Open Status, System Log and post it in the 4PDA thread.
 
 You can go back to 1.3.1 the same way, with sysupgrade.bin from the 1.3.1 release. If settings behave oddly after that, restore the archive you saved before the update.
 
-The Slots page does not help here. The other slot holds the factory firmware, not the previous Beam WRT version.
+The Slots page does not help here. The other slot holds the factory firmware, not the previous MiWRT version.
 
 
 Regular update
@@ -86,7 +86,7 @@ Find your version below.
 
 Versions 1.0, 1.1, 1.2, 1.2.1 and 1.2.2
 
-The bootloader counts boots and these versions never reset the counter. After the seventh boot the router switches to the factory firmware by itself. Beam WRT stays in its slot, but it looks as if the router went back to Xiaomi. Reset the counters over SSH before the update.
+The bootloader counts boots and these versions never reset the counter. After the seventh boot the router switches to the factory firmware by itself. MiWRT stays in its slot, but it looks as if the router went back to Xiaomi. Reset the counters over SSH before the update.
 
 fw_setenv flag_try_sys1_failed 0 && fw_setenv flag_try_sys2_failed 0
 

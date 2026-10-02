@@ -1,19 +1,19 @@
-<img src="docs/img/beam-wrt-logo.svg" alt="" width="72" height="72" align="left">
+<img src="../img/beam-wrt-logo.svg" alt="" width="72" height="72" align="left">
 
 # Beam WRT
 
 基于 OpenWrt 的 Xiaomi BE7000 固件。
 <br clear="left">
 
-[Русский](README.md) · [English](README.en.md) · <a href="#支持项目"><img alt="支持项目" src="https://img.shields.io/badge/%E6%94%AF%E6%8C%81%E9%A1%B9%E7%9B%AE-Boosty%20%C2%B7%20crypto-F15F2C?style=flat-square"></a>
+[Русский](README.ru.md) · [English](README.en.md) · <a href="#支持项目"><img alt="支持项目" src="https://img.shields.io/badge/%E6%94%AF%E6%8C%81%E9%A1%B9%E7%9B%AE-Boosty%20%C2%B7%20crypto-F15F2C?style=flat-square"></a>
 
 Beam WRT 是给 Xiaomi BE7000 (RC06 主板，IPQ9554 处理器) 用的新版 OpenWrt，取自 main 分支，内核 6.18，不用 kexec。1.3.1 之前这个固件就叫 be7000-openwrt，和仓库同名。系统直接从闪存启动，原厂固件留在另一个槽位里，随时都可以切回去。
 
-**固件能做什么，1.4.0 有哪些新东西，和别的固件有什么区别，都写在 [features.zh.md](docs/features.zh.md) 里。**
+**固件能做什么，1.4.0 有哪些新东西，和别的固件有什么区别，都写在 [features.zh.md](../features.zh.md) 里。**
 
-从 1.4.0 开始，固件基于 OpenWrt main (提交 d958caf，2026 年 9 月 29 日)，上面叠加 kravasuper 的移植，放在 patches/port 里作为补丁系列。1.4.0 之前用的是 kravasuper 的 xiaomi_be7000 分支，提交 790d036a。在这个基础上我修了以太网驱动，不修的话我这块板子上的系统连网络都起不来 ([patches.zh.md](docs/patches.zh.md))。另外还加了一组服务，让双槽位和原厂引导程序的行为变得可预期。
+从 1.4.0 开始，固件基于 OpenWrt main (提交 d958caf，2026 年 9 月 29 日)，上面叠加 kravasuper 的移植，放在 patches/port 里作为补丁系列。1.4.0 之前用的是 kravasuper 的 xiaomi_be7000 分支，提交 790d036a。在这个基础上我修了以太网驱动，不修的话我这块板子上的系统连网络都起不来 ([patches.zh.md](../patches.zh.md))。另外还加了一组服务，让双槽位和原厂引导程序的行为变得可预期。
 
-当前版本是 **1.4.0**。镜像在 [Releases](../../releases) 里，校验和在 sha256sums.txt 里。安装方法见 [安装、更新和回滚](#安装更新和回滚) 一节。
+当前版本是 **1.4.0**。镜像在 [Releases](https://github.com/timofey-maykov/be7000-openwrt/releases) 里，校验和在 sha256sums.txt 里。安装方法见 [安装、更新和回滚](#安装更新和回滚) 一节。
 
 ## 目录
 
@@ -42,20 +42,20 @@ Beam WRT 是给 Xiaomi BE7000 (RC06 主板，IPQ9554 处理器) 用的新版 Ope
 
 ## 已知问题
 
-- **1.3.0 之前部分板子上的以太网问题。** 网口有连接，但路由器一帧都收不到。原因是内核通过 RPM 请求了 l2 稳压器，1.3.0 已经修好，详情见 [patches.zh.md](docs/patches.zh.md)。如果你的板子上网线还是不通，请到 [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) 或 4PDA 帖子里反馈。可以先通过 Wi-Fi 连进去 (网络 OpenWrt-BE7000，密码 be7000openwrt)。
-- 在双射频和 MLO 模式下，每个射频只分到一半天线，所以单台设备的速度比单射频模式慢。模式在 网络, 无线 页面上选，或者用 be7000-5g-split mode 命令切换，详情见 [patches.zh.md](docs/patches.zh.md)。
+- **1.3.0 之前部分板子上的以太网问题。** 网口有连接，但路由器一帧都收不到。原因是内核通过 RPM 请求了 l2 稳压器，1.3.0 已经修好，详情见 [patches.zh.md](../patches.zh.md)。如果你的板子上网线还是不通，请到 [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) 或 4PDA 帖子里反馈。可以先通过 Wi-Fi 连进去 (网络 OpenWrt-BE7000，密码 be7000openwrt)。
+- 在双射频和 MLO 模式下，每个射频只分到一半天线，所以单台设备的速度比单射频模式慢。模式在 网络, 无线 页面上选，或者用 be7000-5g-split mode 命令切换，详情见 [patches.zh.md](../patches.zh.md)。
 - /overlay 只有 19.4 MB 空间。要装大东西，最好用 be7000-extroot 命令把它搬到 USB 上。
 - 内核用的是主线的 qcom-ppe，不是厂商的 NSS。PPE 上的硬件 NAT 加速在 1.4.0 里加上了，但还是实验功能，默认关闭。Wi-Fi 客户端的数据包仍然要经过一次 CPU。
 - 这个移植落后于 OpenWrt main，更新基础版本时可能需要重做补丁。
 
 ## 安装、更新和回滚
 
-所有步骤都写在 [docs/instruction](docs/instruction) 里，发布压缩包里也是同样的文件。
+所有步骤都写在 [docs/instruction](../instruction) 里，发布压缩包里也是同样的文件。
 
-- [从原厂固件安装](docs/instruction/1-install-zh.txt)
-- [更新](docs/instruction/2-update-zh.txt)，包括通过 系统, 固件更新 页面更新
-- [回滚到原厂固件，以及出问题时怎么办](docs/instruction/3-rollback-and-problems-zh.txt)
-- [固件功能](docs/instruction/4-features-zh.txt)，软件包、5 GHz 模式和 MLO、导入原厂设置、槽位、硬件加速、USB 存储、Docker
+- [从原厂固件安装](../instruction/1-install-zh.txt)
+- [更新](../instruction/2-update-zh.txt)，包括通过 系统, 固件更新 页面更新
+- [回滚到原厂固件，以及出问题时怎么办](../instruction/3-rollback-and-problems-zh.txt)
+- [固件功能](../instruction/4-features-zh.txt)，软件包、5 GHz 模式和 MLO、导入原厂设置、槽位、硬件加速、USB 存储、Docker
 
 如果从任何 1.x 版本更新到 1.4.0，请先读更新文件的第一节。
 
@@ -72,11 +72,11 @@ OpenWrt main r20260929-d958caf，内核 6.18.52，Wi-Fi 驱动来自 backports 7
 | 服务 | 作用 |
 |--------|-----------|
 | be7000-bootconfirm | 启动结束时向引导程序确认当前槽位，并清零尝试计数 |
-| bigoverlay | 首次启动时把 /overlay 搬到原厂设置分区，见 [storage.zh.md](docs/storage.zh.md) |
+| bigoverlay | 首次启动时把 /overlay 搬到原厂设置分区，见 [storage.zh.md](../storage.zh.md) |
 | be7000-wifi-defaults | 全新安装时打开两个射频，网络名为 OpenWrt-BE7000 |
 | be7000-feeds | 让内核模块软件源的路径和 ROM 里内核的哈希保持一致 |
 | be7000-romsync | 镜像更换后重置 overlay 里的 apk 数据库副本，并重新安装用户自己装的软件包 |
-| be7000-bootlog | 把启动日志写到闪存里 (crash_syslog)，见 [debugging.zh.md](docs/debugging.zh.md) |
+| be7000-bootlog | 把启动日志写到闪存里 (crash_syslog)，见 [debugging.zh.md](../debugging.zh.md) |
 | 79_be7000_stale_modules | 在 preinit 阶段把上一个镜像留下的内核模块挪开，免得它们盖住 ROM 里的模块 |
 | be7000-stock-import | 从原厂固件安装后的第一次启动时，从原厂固件里取出 Wi-Fi、上网连接和路由器地址 |
 | be7000-5g-split | 5 GHz 的几种模式 (单射频、双射频和 MLO)，在驱动加载前准备好模式 |
@@ -88,21 +88,21 @@ OpenWrt main r20260929-d958caf，内核 6.18.52，Wi-Fi 驱动来自 backports 7
 
 ## 文档
 
-- [features.zh.md](docs/features.zh.md)，固件能做什么，和别的固件有什么区别
-- [cookbook.zh.md](docs/cookbook.zh.md)，常见操作的做法，包括调制解调器、USB 连接手机、Docker、5 GHz 模式和 MLO、原厂设置、槽位、更新
-- [benchmarks.zh.md](docs/benchmarks.zh.md)，测试数据和复现方法
-- [patches.zh.md](docs/patches.zh.md)，给移植加了什么，为什么加，还在做的补丁
-- [bootloader.zh.md](docs/bootloader.zh.md)，闪存槽位、引导程序怎么选槽位、什么时候会启用网络
-- [storage.zh.md](docs/storage.zh.md)，设置和软件包的空间、和原厂固件共用的卷、搬到 USB
-- [building.zh.md](docs/building.zh.md)，固件在 CI 里怎么编译，自己怎么编译
-- [debugging.zh.md](docs/debugging.zh.md)，没有 UART 时怎么找原因，闪存里的启动日志
-- [CHANGELOG.zh.md](CHANGELOG.zh.md)，各版本之间改了什么
+- [features.zh.md](../features.zh.md)，固件能做什么，和别的固件有什么区别
+- [cookbook.zh.md](../cookbook.zh.md)，常见操作的做法，包括调制解调器、USB 连接手机、Docker、5 GHz 模式和 MLO、原厂设置、槽位、更新
+- [benchmarks.zh.md](../benchmarks.zh.md)，测试数据和复现方法
+- [patches.zh.md](../patches.zh.md)，给移植加了什么，为什么加，还在做的补丁
+- [bootloader.zh.md](../bootloader.zh.md)，闪存槽位、引导程序怎么选槽位、什么时候会启用网络
+- [storage.zh.md](../storage.zh.md)，设置和软件包的空间、和原厂固件共用的卷、搬到 USB
+- [building.zh.md](../building.zh.md)，固件在 CI 里怎么编译，自己怎么编译
+- [debugging.zh.md](../debugging.zh.md)，没有 UART 时怎么找原因，闪存里的启动日志
+- [CHANGELOG.zh.md](../../CHANGELOG.zh.md)，各版本之间改了什么
 
 ## 主题
 
-我给 LuCI 做了一个自己的主题，叫 Nimbus。菜单在左侧，能快速搜索页面，有浅色和深色两种配色，在手机上看也没问题。源码、截图和安装说明在 [luci-theme-nimbus](luci-theme-nimbus) 文件夹里，打好的软件包在发布页里。这个主题不绑定 BE7000，任何带 LuCI 23.05 及更新版本的 OpenWrt 都能装。主题界面有俄文、英文和中文。
+我给 LuCI 做了一个自己的主题，叫 Nimbus。菜单在左侧，能快速搜索页面，有浅色和深色两种配色，在手机上看也没问题。源码、截图和安装说明在 [luci-theme-nimbus](../../luci-theme-nimbus) 文件夹里，打好的软件包在发布页里。这个主题不绑定 BE7000，任何带 LuCI 23.05 及更新版本的 OpenWrt 都能装。主题界面有俄文、英文和中文。
 
-![Nimbus](luci-theme-nimbus/screenshots/overview-dark.png)
+![Nimbus](../../luci-theme-nimbus/screenshots/overview-dark.png)
 
 ## 许可证
 
@@ -126,4 +126,4 @@ patches 里的补丁和 Linux 内核一样，按 GPL-2.0-only 发布。脚本和
 | <img alt="BTC" src="https://img.shields.io/badge/BTC-Bitcoin-F7931A?style=for-the-badge&logo=bitcoin&logoColor=white"> | `bc1qcyd3kaa3y2cv2yn90rsa628y3ptz56zs05z2jq` |
 | <img alt="WeChat" src="https://img.shields.io/badge/WeChat-itnitro-07C160?style=for-the-badge&logo=wechat&logoColor=white"> | `itnitro` |
 
-<img src="docs/img/wechat-itnitro-qr.jpg" alt="WeChat itnitro" width="200">
+<img src="../img/wechat-itnitro-qr.jpg" alt="WeChat itnitro" width="200">

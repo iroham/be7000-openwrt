@@ -14,7 +14,7 @@ The factory firmware address is 192.168.31.1. Connect the computer by cable to a
 
 About space for settings
 
-There is little room inside the slot. So on the first boot Beam WRT keeps its settings and packages in the partition where the factory firmware keeps its own, in a separate directory. That gives 19.4 MB instead of 7.4. The factory settings are not touched, after going back the factory firmware boots with its own. If you want to stay at 7.4 MB, set 0 in /etc/config/bigoverlay before the first boot.
+There is little room inside the slot. So on the first boot MiWRT keeps its settings and packages in the partition where the factory firmware keeps its own, in a separate directory. That gives 19.4 MB instead of 7.4. The factory settings are not touched, after going back the factory firmware boots with its own. If you want to stay at 7.4 MB, set 0 in /etc/config/bigoverlay before the first boot.
 
 
 Step 1. Backup, do not start without it
@@ -49,7 +49,7 @@ Step 4. Install
 
 ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.168.31.1 "sh /tmp/install-from-stock.sh /tmp/openwrt.ubi reboot"
 
-The script finds out which slot the factory firmware runs from, writes the image into the other slot and switches the boot. It does not touch the bootloader. If something does not add up, it stops and writes nothing. If Beam WRT does not boot, the next power-on takes the router back to the factory firmware by itself.
+The script finds out which slot the factory firmware runs from, writes the image into the other slot and switches the boot. It does not touch the bootloader. If something does not add up, it stops and writes nothing. If MiWRT does not boot, the next power-on takes the router back to the factory firmware by itself.
 
 
 Step 5. First login

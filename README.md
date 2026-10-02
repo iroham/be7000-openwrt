@@ -1,129 +1,58 @@
-<img src="docs/img/beam-wrt-logo.svg" alt="" width="72" height="72" align="left">
+# MiWRT
 
-# Beam WRT
+OpenWrt firmware for the Xiaomi BE7000 (board RC06, Qualcomm IPQ9554), tuned to get the most out of the hardware.
 
-Прошивка для Xiaomi BE7000 на базе OpenWrt.
-<br clear="left">
+MiWRT is built on [Beam WRT](https://github.com/timofey-maykov/be7000-openwrt) by timofey-maykov, which in turn stands on the kravasuper port of OpenWrt to this router. Everything Beam WRT does, MiWRT does: native boot from flash (no kexec), the stock firmware kept in the second slot, two-slot updates with automatic fallback, Wi-Fi 7 on 5 GHz, the 2.5 Gbit/s ports, USB 3, NFC, the split 5 GHz modes and the PPE offload work. The original documentation is kept in [docs/upstream](docs/upstream/README.en.md).
 
-[English](README.en.md) · [中文](README.zh.md) · <a href="#поддержать-проект"><img alt="Поддержать проект" src="https://img.shields.io/badge/%D0%9F%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C%20%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82-Boosty%20%C2%B7%20crypto-F15F2C?style=flat-square"></a>
+Current version: **1.4.0.2**, based on Beam WRT 1.4.0 (OpenWrt main d958caf, kernel 6.18.52). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`.
 
-Beam WRT это свежий OpenWrt из main для Xiaomi BE7000 (плата RC06, процессор IPQ9554), ядро 6.18, без kexec. До версии 1.3.1 сборка называлась просто be7000-openwrt, по имени репозитория. Система грузится прямо с флеша, сток остаётся в соседнем слоте, вернуться на него можно в любой момент.
+## What MiWRT changes
 
-**Что умеет прошивка, что нового в 1.4.0 и чем она отличается от других, собрано на странице [features.md](docs/features.md).**
+### The radios run on Xiaomi's own board data
 
-С версии 1.4.0 основа это OpenWrt main (коммит d958caf, 29 сентября 2026) и порт kravasuper поверх него, серией патчей в patches/port. До 1.4.0 сборка стояла на ветке kravasuper xiaomi_be7000, коммит 790d036a. К нему добавлены исправления в драйвер Ethernet, без которых на моей плате система не доходила до сети ([patches.md](docs/patches.md)), и набор служб, которые делают жизнь в двух слотах с заводским загрузчиком предсказуемой.
+Board data tells a Wi-Fi chip about the board it sits on: the RF front end, antennas, power targets per channel. Beam WRT 1.4.0 loads Qualcomm's generic reference-board data for both radios in their normal mode. MiWRT ships the files Xiaomi built for this router, taken from the stock firmware:
 
-Текущая версия **1.4.0**. Образы лежат в [Releases](../../releases), суммы в sha256sums.txt. Как поставить, в разделе [Установка, обновление, откат](#установка-обновление-откат).
+| Radio | Board data | Measured on a test unit |
+|---|---|---|
+| 5 GHz (QCN9274) | `bdwlan.b0002` (single radio) and `bdwlan.b1008` (split mode) | transmit power on channel 36 rises to the full UK/EU limit (19 → 23 dBm); downlink to a 2×2 Wi-Fi 6E laptop at 160 MHz ~800 → ~1,000 Mbit/s |
+| 2.4 GHz (IPQ9554) | `bdwlan.b20`, with the generic file's regulatory table kept | loads cleanly, no measurable change; it is the data the board shipped with |
 
-## Содержание
+A boot service (`be7000-board-data`) puts the Xiaomi files back if a package reinstall ever restores the generic ones.
 
-- [Что проверено](#что-проверено)
-- [Известные проблемы](#известные-проблемы)
-- [Установка, обновление, откат](#установка-обновление-откат)
-- [Что в образе](#что-в-образе)
-- [Документация](#документация)
-- [Тема оформления](#тема-оформления)
-- [Лицензия](#лицензия)
-- [Спасибо](#спасибо)
-- [Поддержать проект](#поддержать-проект)
+### Radar channels and 160 MHz work out of the box
 
-## Что проверено
+OpenWrt only enables radar detection (DFS) when a country is set. Without one, channels 52-144 and every 160 MHz setting are silently unavailable. MiWRT sets a country on first boot for radios that have none (`GB` by default; change it under Network, Wireless).
 
-Своя плата RC06, IPQ9554 rev 1.1, стоковая прошивка 1.1.38, 1 ГБ памяти.
+### Split-mode fix
 
-- Система загружается за 25 секунд и доходит до LuCI и SSH.
-- Гигабитный порт даёт около 940 Мбит/с в обе стороны по iperf3, ошибок CRC и потерь нет.
-- Порты на 2.5 Гбит/с. У одного владельца линк 2500 Мбит/с работал, через порт прошло 72 ГБ в одну сторону и 30 в другую без ошибок. На своей плате я проверял только 100 и 1000.
-- Wi-Fi 2.4 и 5 ГГц работают как Wi-Fi 6, калибровка из раздела ART подхватывается, правка TLMM6 и TLMM7 для 5 ГГц применена.
-- Wi-Fi 7 (EHT80) в режиме точки доступа работает, проверено ноутбуком. macOS показывает PHY Mode 802.11be, канал 36 на 80 МГц, iperf3 945 Мбит/с. Автовыбор канала на 5 ГГц тоже работает.
-- Со страной RU прошивка радиомодуля QCN9274 сама запрещает 802.11be (в `iw reg get` появляется NO-EHT), и точка работает как Wi-Fi 6. Это решение прошивки радио, а не драйвера. С 1.4.0 блок Режим 5 ГГц об этом предупреждает, а кнопка рядом ставит код US только для 5 ГГц.
-- Режим MLO поднимается за несколько секунд, нижнее радио на 36 канале с шириной 160 МГц, верхнее на 149 с шириной 80 МГц. Ноутбук с Wi-Fi 7 подключается к такой сети одним звеном, сложение двух звеньев одним устройством пока не проверено.
-- PPPoE на живой линии, sysupgrade с переносом настроек и списка включённых служб, WireGuard и AmneziaWG (модуль и утилита awg собраны под это ядро).
+Returning from the two-radio 5 GHz mode to one radio left the upper radio's channel (149) behind; combined with 160 MHz that is a setting hostapd cannot start, and 5 GHz stayed down. The split script now saves the single-radio channel and width and restores them.
 
-## Известные проблемы
+### Shipped in the image
 
-- **Ethernet на части плат до 1.3.0.** Порты поднимали линк, но роутер не принимал ни одного кадра. Причина оказалась в запросе ядра на регулятор l2 через RPM, в 1.3.0 это исправлено, подробности в [patches.md](docs/patches.md#приём-по-ethernet-на-части-плат). Если на вашей плате кабель всё ещё не работает, напишите в [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) или в тему на 4PDA, заходить можно по Wi-Fi (сеть OpenWrt-BE7000, пароль be7000openwrt).
-- В режимах двух радио и MLO каждое радио получает половину антенн, поэтому одно устройство работает медленнее, чем в режиме одного радио. Режим выбирается на странице Сеть, Беспроводная сеть или командой be7000-5g-split mode, подробности в [patches.md](docs/patches.md#два-радио-на-5-ггц).
-- Места под /overlay 19.4 МБ, для чего-то крупного лучше вынести его на USB командой be7000-extroot.
-- Ядро использует мейнлайновый qcom-ppe, а не вендорный NSS. Аппаратная разгрузка NAT на PPE появилась в 1.4.0, но пока экспериментальная и выключена по умолчанию. Клиентам Wi-Fi пакеты всё равно проходят через процессор один раз.
-- Порт отстаёт от main OpenWrt, при обновлении базы могут понадобиться правки патчей.
+`sqm-scripts` and its LuCI page (cake), `nlbwmon` and its page (per-device traffic accounting), `banip` and its page (IP block lists), `umdns` (mDNS for separated networks) and `tcpdump-mini`. They survive every sysupgrade without depending on the feed.
 
-## Установка, обновление, откат
+### Name
 
-Пошагово всё описано в [docs/instruction](docs/instruction), в архиве релиза лежат те же файлы.
+The system calls itself MiWRT in LuCI, the console banner and `/etc/openwrt_release`; the default hostname is `MiWRT`. Image file names stay `openwrt-qualcommbe-ipq95xx-xiaomi_be7000-…`, which the installer and the update page look up by name.
 
-- [установка со стока](docs/instruction/1-install.txt)
-- [обновление](docs/instruction/2-update.txt), в том числе со страницы Система, Обновление сборки
-- [откат на сток и если что-то пошло не так](docs/instruction/3-rollback-and-problems.txt)
-- [возможности прошивки](docs/instruction/4-features.txt), пакеты, режимы 5 ГГц и MLO, перенос настроек из стока, слоты, разгрузка, накопитель на USB, Docker
+## Installing, updating, going back
 
-Если обновляетесь на 1.4.0 с любой версии 1.x, сначала прочитайте первый раздел файла про обновление.
+The procedures are the same as Beam WRT's and come with every release archive:
 
-Загрузчик (0:APPSBL и 0:APPSBL_1) не трогайте ни при каких условиях, это единственное место, где плату можно убить насовсем.
+- [Install from stock](docs/instruction/1-install-en.txt) (needs root SSH on the stock firmware)
+- [Update](docs/instruction/2-update-en.txt): System, Build update in LuCI, or `be7000-update apply`, or sysupgrade with the `…-sysupgrade.bin` from a release. Settings are kept.
+- [Back to stock, and troubleshooting](docs/instruction/3-rollback-and-problems-en.txt): System, Slots in LuCI switches to the stock firmware in the other slot.
 
-## Что в образе
+Coming from Beam WRT: install the MiWRT `sysupgrade.bin` over it. Package feed and update page then follow this repository.
 
-OpenWrt main r20260929-d958caf, ядро 6.18.52, драйверы Wi-Fi из backports 7.2, архитектура aarch64_cortex-a73, пакеты apk. Фиды зафиксированы на ту же дату (feeds-pins.txt). Точный список пакетов в файле manifest, конфиг сборки в config.buildinfo.
+Never write to the bootloader partitions `0:APPSBL` and `0:APPSBL_1`.
 
-Из заметного в образе есть модуль qcom-ppe с ускорением PPE, firewall4 и nftables, PPPoE, dnsmasq-full, WireGuard и AmneziaWG, tc и ifb для шейпинга, драйверы ath11k (2.4 ГГц) и ath12k (5 ГГц) с прошивками, полный wpad, LuCI с https, русским и китайским языком, поддержка USB-накопителей, iperf3. Пакета kmod-ath11k-ahb в профиле порта не было, я его добавил, без него встроенный радиомодуль 2.4 ГГц остаётся без драйвера.
+## Building
 
-Службы, которых нет в обычном OpenWrt, лежат в overlay-files.
+GitHub Actions builds everything: a tag `v*` produces the images, the signed package feed on this repository's GitHub Pages, and a release. The workflow needs one secret, `APK_SIGNING_KEY` (an EC P-256 private key in PEM); images trust its public key. Details in [docs/building.en.md](docs/building.en.md).
 
-| Служба | Что делает |
-|--------|-----------|
-| be7000-bootconfirm | в конце загрузки подтверждает слот загрузчику и обнуляет счётчики попыток |
-| bigoverlay | при первой загрузке переносит /overlay на раздел настроек стока, см. [storage.md](docs/storage.md) |
-| be7000-wifi-defaults | при чистой установке включает оба радио с сетью OpenWrt-BE7000 |
-| be7000-feeds | приводит путь к фиду модулей ядра к хешу ядра из ROM |
-| be7000-romsync | после смены образа сбрасывает копию базы apk из overlay и переустанавливает пакеты пользователя |
-| be7000-bootlog | пишет журнал загрузки во флеш (crash_syslog), см. [debugging.md](docs/debugging.md) |
-| 79_be7000_stale_modules | в preinit откладывает модули ядра от прошлого образа, чтобы они не перекрывали модули из ROM |
-| be7000-stock-import | при первой загрузке после установки со стока переносит оттуда Wi-Fi, интернет и адрес роутера |
-| be7000-5g-split | режимы 5 ГГц: одно радио, два радио и MLO, готовит нужный режим до загрузки драйвера |
-| be7000-extroot | перенос /overlay на USB-диск и его сохранение при обновлении |
-| be7000-ppe | переносит выбор разгрузки моста на PPE в параметры модуля до его загрузки |
-| be7000-slots | показывает содержимое слотов и переключает загрузку, страница Система, Слоты |
+## Licence and credits
 
-Пакеты ставятся из коробки. Официальное зеркало собирает qualcommbe под cortex-a53, а эта сборка идёт под cortex-a73, поэтому каталога aarch64_cortex-a73 на зеркале нет и все общие фиды отдают 404. В образ прописан свой фид, собранный из того же дерева и подписанный ключом, которому образ уже доверяет. После `apk update` доступно больше 600 пакетов, включая nano, htop, tcpdump, strace, tmux, rsync, jq, modemmanager с драйверами USB-модемов, ksmbd и ttyd. Модули ядра лежат в отдельном фиде, потому что на зеркале они собраны под другое ядро. Ещё один отдельный фид держит hybrid-failover, он сам пересобирается с каждым новым релизом.
+Patches under `patches/` are GPL-2.0-only, like the Linux kernel; scripts and text can be used freely. Images are built from OpenWrt sources, the kravasuper port, the Beam WRT patches and the changes above. Xiaomi's board data files are redistributed in the form kravasuper's board repository and the stock firmware carry them.
 
-## Документация
-
-- [features.md](docs/features.md), что умеет прошивка и чем отличается от других
-- [cookbook.md](docs/cookbook.md), рецепты, модем, телефон по USB, Docker, режимы 5 ГГц и MLO, перенос настроек со стока, слоты, обновление
-- [benchmarks.md](docs/benchmarks.md), замеры и как их повторить
-- [patches.md](docs/patches.md), что и зачем добавлено к порту, патчи в работе
-- [bootloader.md](docs/bootloader.md), слоты флеша, как загрузчик выбирает слот, когда он поднимает сеть
-- [storage.md](docs/storage.md), место под настройки и пакеты, общий том со стоком, перенос на USB
-- [building.md](docs/building.md), как собирается прошивка в CI и как собрать самому
-- [debugging.md](docs/debugging.md), как искать причину без UART, журнал загрузки во флеше
-- [CHANGELOG.md](CHANGELOG.md), что менялось от версии к версии
-
-## Тема оформления
-
-Для LuCI сделал свою тему Nimbus. В ней меню слева, быстрый поиск по страницам, светлая и тёмная схема, и она нормально выглядит на телефоне. Исходники, скриншоты и инструкция по установке лежат в папке [luci-theme-nimbus](luci-theme-nimbus), готовый пакет есть в релизах. Тема не привязана к BE7000 и ставится на любой OpenWrt с LuCI 23.05 и новее. Интерфейс темы на русском, английском и китайском.
-
-![Nimbus](luci-theme-nimbus/screenshots/overview-dark.png)
-
-## Лицензия
-
-Патчи в patches распространяются на условиях GPL-2.0-only, как ядро Linux. Скрипты и текст можно использовать как угодно. Образы собраны из исходников OpenWrt, порта kravasuper, этих патчей и пакетов из awg-feed, версии и конфиг указаны в config.buildinfo и feeds-pins.txt.
-
-## Спасибо
-
-Полный список с ссылками открывается в LuCI на странице Система, Благодарности, и его же видно в приветствии по SSH. Отдельно спасибо zerc00l за удалённый доступ к роутеру. Именно на этой плате нашлась причина мёртвого Ethernet. И kravasuper за сам порт, на котором всё стоит.
-
-## Поддержать проект
-
-Сборка делается в свободное время. Это отладка на чужих платах, десятки тестовых образов и CI. Если она вам пригодилась, можно поддержать работу. Спасибо!
-
-<a href="https://boosty.to/itnitro"><img alt="Boosty" src="https://img.shields.io/badge/Boosty-itnitro-F15F2C?style=for-the-badge&logo=boosty&logoColor=white"></a>
-
-| Способ | Реквизиты |
-|------|-----------|
-| <img alt="USDT TON" src="https://img.shields.io/badge/USDT-TON-26A17B?style=for-the-badge&logo=tether&logoColor=white"> | `UQBZhwBuZCgQOtrgRGMu4PKiiOcf9dTKxRpapZt1oDn0m3yH` |
-| <img alt="USDT ETH ERC-20" src="https://img.shields.io/badge/USDT%20%2F%20ETH-ERC--20-627EEA?style=for-the-badge&logo=ethereum&logoColor=white"> | `0xeb05803030afB64C903C7BfB79d18957efD6bcCd` |
-| <img alt="SOL" src="https://img.shields.io/badge/SOL-Solana-9945FF?style=for-the-badge&logo=solana&logoColor=white"> | `GcKxgUeSfKnsPL9iEaYKJArosfYKMtE4W5wVDdHrRVTu` |
-| <img alt="BTC" src="https://img.shields.io/badge/BTC-Bitcoin-F7931A?style=for-the-badge&logo=bitcoin&logoColor=white"> | `bc1qcyd3kaa3y2cv2yn90rsa628y3ptz56zs05z2jq` |
-| <img alt="WeChat" src="https://img.shields.io/badge/WeChat-itnitro-07C160?style=for-the-badge&logo=wechat&logoColor=white"> | `itnitro` |
-
-<img src="docs/img/wechat-itnitro-qr.jpg" alt="WeChat itnitro" width="200">
+Thanks to timofey-maykov for Beam WRT, to kravasuper for the port, and to everyone listed on the System, Credits page.
