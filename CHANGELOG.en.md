@@ -2,6 +2,19 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.4.1**, October 3, 2026.
+- A temporary failure of one MLO link no longer permanently switches the router to two-radio mode. Both radios start without scanning, the firmware retries after radio recovery, and the saved MLO choice is kept.
+- LuCI no longer treats a short loss of connection during a 5 GHz mode switch as a failure and waits for the real result.
+- The Wireless page handles MLO on two radios correctly, hides parked network copies and shows the lower radio channel and width.
+- The 5 GHz mode block shows both MLO links as active with their own channels and widths.
+- Status, Overview shows MLO on both radios and leaves out parked network copies.
+- The Build update page reads multiline release notes with quotes after a line break. The 1.4.0 notes also work with the older page.
+- The update page and `be7000-update` no longer treat a separate Nimbus release as new firmware. Only Beam WRT releases with a sysupgrade image and checksums are selected.
+- Hybrid Failover installs from Add-ons again. Packages are downloaded and checked first, and `rpcd` is started again after installation.
+- Hybrid Failover APKs are signed and verified before publication. Feed filenames that made `apk` receive 404 were fixed.
+- The Docker script checks OverlayFS support before writing a new `data_root` and does not leave Docker on an incompatible filesystem.
+- Docker command messages were translated into Chinese. Their language follows LuCI.
+
 **1.4.0**, October 1, 2026.
 - Three 5 GHz modes instead of two. Besides one radio and two radios there is now MLO. In MLO one Wi-Fi 7 network runs on both radios at once, the lower one on channels 36-64 up to 160 MHz, the upper one from 149 up to 80 MHz. Wi-Fi 7 devices keep a link on two channels at once, the rest join one of them like an ordinary network. The mode changes in the 5 GHz mode block on Network, Wireless or with be7000-5g-split mode, without a reboot.
 - Older devices can join the MLO network too. Its base protection is WPA2 and WPA3, and Wi-Fi 7 gets its own WPA3 with GCMP-256. Before, a Mac with Wi-Fi 7 stayed on 2.4 GHz with such a network.

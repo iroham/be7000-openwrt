@@ -11,7 +11,7 @@
 # build without it is "dev" and never offers itself an upgrade.
 
 REPO="timofey-maykov/be7000-openwrt"
-API="https://api.github.com/repos/$REPO/releases/latest"
+API="https://api.github.com/repos/$REPO/releases?per_page=30"
 RELEASE_FILE=/etc/be7000-release
 STATE=/tmp/be7000-update.json
 DIR=/tmp/be7000-update
@@ -91,18 +91,31 @@ fetch() {
 }
 
 do_check() {
-	local tmp=/tmp/be7000-release-latest.json
+	local tmp=/tmp/be7000-releases.json release=/tmp/be7000-release-latest.json
 	: >"$LOG"
 	fetch "$API" "$tmp" || fail "$(t "GitHub не отвечает или нет https (нужны ca-bundle и libustream, они есть с 1.2.5)" "GitHub does not answer or there is no https (needs ca-bundle and libustream, present since 1.2.5)")"
-	local tag name date body img_url sums_url
-	tag=$(jsonfilter -i "$tmp" -e '@.tag_name' 2>/dev/null)
-	[ -n "$tag" ] || fail "$(t "не удалось разобрать ответ GitHub" "could not parse the GitHub answer")"
-	name=$(jsonfilter -i "$tmp" -e '@.name')
-	date=$(jsonfilter -i "$tmp" -e '@.published_at')
-	body=$(jsonfilter -i "$tmp" -e '@.body')
-	img_url=$(jsonfilter -i "$tmp" -e '@.assets[*].browser_download_url' | grep -- '-squashfs-sysupgrade\.bin$' | head -1)
-	sums_url=$(jsonfilter -i "$tmp" -e '@.assets[*].browser_download_url' | grep -- '/sha256sums\.txt$' | head -1)
-	img_size=$(jsonfilter -i "$tmp" -e '@.assets[*]' | jsonfilter -a -e '$[@.name~/sysupgrade\.bin$/].size' 2>/dev/null | head -1)
+	local tag name date body img_url sums_url img_size draft prerelease i=0
+	while [ "$i" -lt 30 ]; do
+		jsonfilter -i "$tmp" -e "@[$i]" >"$release" 2>/dev/null || true
+		tag=$(jsonfilter -i "$release" -e '@.tag_name' 2>/dev/null)
+		[ -n "$tag" ] || break
+		draft=$(jsonfilter -i "$release" -e '@.draft' 2>/dev/null)
+		prerelease=$(jsonfilter -i "$release" -e '@.prerelease' 2>/dev/null)
+		img_url=$(jsonfilter -i "$release" -e '@.assets[*].browser_download_url' 2>/dev/null | grep -- '-squashfs-sysupgrade\.bin$' | head -1)
+		sums_url=$(jsonfilter -i "$release" -e '@.assets[*].browser_download_url' 2>/dev/null | grep -- '/sha256sums\.txt$' | head -1)
+		if printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+(\.[0-9]+)?([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$' &&
+			[ "$draft" != true ] && [ "$prerelease" != true ] &&
+			[ -n "$img_url" ] && [ -n "$sums_url" ]; then
+			break
+		fi
+		tag=
+		i=$((i + 1))
+	done
+	[ -n "$tag" ] || fail "$(t "не найден подходящий релиз прошивки" "no suitable firmware release found")"
+	name=$(jsonfilter -i "$release" -e '@.name')
+	date=$(jsonfilter -i "$release" -e '@.published_at')
+	body=$(jsonfilter -i "$release" -e '@.body')
+	img_size=$(jsonfilter -i "$release" -e '@.assets[*]' | jsonfilter -a -e '$[@.name~/sysupgrade\.bin$/].size' 2>/dev/null | head -1)
 	local latest cur avail=0
 	latest=$(tag_to_version "$tag")
 	cur=$(installed_version)
@@ -110,7 +123,7 @@ do_check() {
 	cat >"$STATE" <<EOJ
 {"checked_at":"$(date +%s)","tag":"$(json_escape "$tag")","latest":"$latest","name":"$(json_escape "$name")","published_at":"$(json_escape "$date")","body":"$(json_escape "$body")","image_url":"$(json_escape "$img_url")","sums_url":"$(json_escape "$sums_url")","image_size":${img_size:-0},"available":$avail}
 EOJ
-	rm -f "$tmp"
+	rm -f "$tmp" "$release"
 }
 
 do_download() {
