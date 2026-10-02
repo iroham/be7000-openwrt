@@ -69,9 +69,20 @@ jobs:
           HF_BUILD_ARCHS_OVERRIDE: ${{ env.ARCH }}
           HF_PKG_FORMAT: apk
           GOTOOLCHAIN: local
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
         run: |
+          [ -n "$APK_SIGNING_KEY" ] || { echo "APK_SIGNING_KEY secret is not set" >&2; exit 1; }
+          printf '%s\n' "$APK_SIGNING_KEY" > "$RUNNER_TEMP/hybrid-failover-key.pem"
+          chmod 600 "$RUNNER_TEMP/hybrid-failover-key.pem"
+          export APK_SIGNING_KEY_FILE="$RUNNER_TEMP/hybrid-failover-key.pem"
           chmod +x scripts/build-packages.sh scripts/lib/*.sh
           ./scripts/build-packages.sh
+          openssl ec -in "$APK_SIGNING_KEY_FILE" -pubout -out "$RUNNER_TEMP/hybrid-failover-public.pem" 2>/dev/null
+          docker run --rm \
+            -v "$PWD/dist/apk:/packages:ro" \
+            -v "$RUNNER_TEMP/hybrid-failover-public.pem:/keys/public-key.pem:ro" \
+            alpine:edge sh -c 'apk verify --keys-dir /keys /packages/*.apk'
+          rm -f "$APK_SIGNING_KEY_FILE" "$RUNNER_TEMP/hybrid-failover-public.pem"
           ls -la dist/apk
 
       - name: Sign the index
@@ -81,6 +92,12 @@ jobs:
         run: |
           mkdir -p out
           cp hf/dist/apk/*.apk out/
+          # Repository URLs are derived from package metadata and never carry
+          # the architecture suffix used by the upstream release assets.
+          for f in out/*_"$ARCH".apk; do
+            [ -e "$f" ] || continue
+            mv "$f" "${f%_"$ARCH".apk}.apk"
+          done
           printf '%s\n' "$APK_SIGNING_KEY" > key.pem
           docker run --rm -v "$PWD:/w" -w /w alpine:edge \
             apk mkndx --allow-untrusted --sign-key key.pem --output out/packages.adb $(cd out && ls *.apk | sed 's|^|out/|')
