@@ -85,7 +85,7 @@ OpenWrt main r20260929-d958caf，内核 6.18.52，Wi-Fi 驱动来自 backports 7
 | be7000-slots | 显示各个槽位里装的是什么，切换启动槽位，对应 系统, 槽位 页面 |
 | be7000-docker | 把 Docker 安装到磁盘，并为容器设置防火墙和 DNS，命令有 setup、firewall、diag |
 | be7000-update | 检查并安装新版本，每天提示一次是否有新版本发布 |
-| be7000-leds | 指示灯：琥珀色网络灯显示 2.4 GHz Wi-Fi，白色 AIoT 灯显示 Hybrid Failover 在运行 |
+| be7000-leds | 指示灯：琥珀色网络灯显示 2.4 GHz Wi-Fi，白色 AIoT 灯可以绑定到任何东西，默认绑定 Hybrid Failover |
 
 软件包开箱即可安装。官方镜像站给 qualcommbe 编译的是 cortex-a53，而这个固件的目标是 cortex-a73，所以镜像站上没有 aarch64_cortex-a73 目录，所有常用软件源都返回 404。镜像里配好了自己的软件源，用同一套源码树编译，签名用的密钥镜像本身已经信任。执行 `apk update` 之后有 600 多个软件包可装，包括 nano、htop、tcpdump、strace、tmux、rsync、jq、带 USB 调制解调器驱动的 modemmanager、ksmbd 和 ttyd。内核模块放在单独的软件源里，因为镜像站上的模块是给别的内核编译的。还有一个单独的软件源放 hybrid-failover，每次发布新版本它都会自己重新编译。
 

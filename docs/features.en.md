@@ -73,7 +73,7 @@ The full list of changes is in [CHANGELOG.en.md](../CHANGELOG.en.md).
 
 - Moving settings and packages to a USB disk with one button on System, Storage.
 - Docker with ready-made container sets (AdGuard Home, Home Assistant, Portainer and more) on Services, "Docker: stacks". The firewall for the containers is set up by itself, including the networks of compose stacks, and Docker works together with Hybrid Failover.
-- LEDs: the amber network LED shows Wi-Fi 2.4 GHz traffic, the white AIoT LED is lit while Hybrid Failover runs. System, LEDs page.
+- LEDs: the amber network LED shows Wi-Fi 2.4 GHz traffic, the white AIoT LED can be tied to anything, by default to Hybrid Failover running. System, LEDs page.
 - The Nimbus theme.
 - The interface in Russian, English and Chinese.
 - UPnP, off by default.

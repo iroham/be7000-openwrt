@@ -1,8 +1,12 @@
 'use strict';
 
-import { popen } from 'fs';
+import { popen, lsdir, readfile } from 'fs';
+import { cursor } from 'uci';
 
 const BIN = '/usr/libexec/be7000-leds';
+
+const SOURCES = [ 'hf', 'netdev', 'service', 'internet', 'command', 'on', 'off', 'timer', 'heartbeat' ];
+const AIOT_OPTS = [ 'aiot_source', 'aiot_dev', 'aiot_flags', 'aiot_service', 'aiot_target', 'aiot_cmd', 'aiot_show', 'aiot_invert', 'aiot_on_ms', 'aiot_off_ms' ];
 
 function run(args) {
 	let fd = popen(`${BIN} ${args} 2>&1`, 'r');
@@ -11,12 +15,33 @@ function run(args) {
 	return { rc, out };
 }
 
+function num(v, def) {
+	v = +v;
+	return (v >= 50 && v <= 10000) ? v : def;
+}
+
 return {
 	'be7000-leds': {
 		status: {
 			call: function() {
 				let r = run('status');
-				try { return json(r.out); } catch (e) { return { error: r.out }; }
+				let st;
+				try { st = json(r.out); } catch (e) { return { error: r.out }; }
+				let uci = cursor();
+				let sec = uci.get_all('be7000', 'leds') ?? {};
+				st.source = sec.aiot_source ?? ((sec.aiot == '0') ? 'off' : 'hf');
+				st.dev = sec.aiot_dev ?? '';
+				st.flags = sec.aiot_flags ?? 'link tx rx';
+				st.service = sec.aiot_service ?? '';
+				st.target = sec.aiot_target ?? '1.1.1.1';
+				st.cmd = sec.aiot_cmd ?? '';
+				st.show = (sec.aiot_show == 'blink') ? 'blink' : 'on';
+				st.invert = (sec.aiot_invert == '1');
+				st.on_ms = num(sec.aiot_on_ms, 500);
+				st.off_ms = num(sec.aiot_off_ms, 500);
+				let ifaces = filter(lsdir('/sys/class/net') ?? [], (n) => n != 'lo' && !match(n, /^(bonding_masters|ifb|teql|gre|sit|ip6)/));
+				st.ifaces = sort(ifaces);
+				return st;
 			}
 		},
 		set: {
@@ -26,6 +51,43 @@ return {
 				if (what != 'wlan2g' && what != 'aiot')
 					return { ok: false, output: 'what is wlan2g or aiot' };
 				let r = run(`${what} ${req.args?.on ? 'on' : 'off'}`);
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+		aiot_set: {
+			args: { source: '', dev: '', flags: '', service: '', target: '', cmd: '', show: '', invert: false, on_ms: 0, off_ms: 0 },
+			call: function(req) {
+				let a = req.args ?? {};
+				if (index(SOURCES, a.source) < 0)
+					return { ok: false, output: 'unknown source' };
+				if (a.source == 'netdev' && !match(a.dev ?? '', /^[A-Za-z0-9_.:-]{1,15}$/))
+					return { ok: false, output: 'interface name is not valid' };
+				if (a.source == 'service' && !match(a.service ?? '', /^[A-Za-z0-9_.@+-]{1,40}$/))
+					return { ok: false, output: 'process name is not valid' };
+				if (a.source == 'internet' && !match(a.target ?? '', /^[A-Za-z0-9_.:-]{1,253}$/))
+					return { ok: false, output: 'host name is not valid' };
+				if (a.source == 'command' && (length(a.cmd ?? '') < 1 || length(a.cmd) > 200 || match(a.cmd, /[\n\r]/)))
+					return { ok: false, output: 'command is empty, too long or has several lines' };
+				let flags = filter(split(trim(a.flags ?? ''), /\s+/), (f) => f != '');
+				for (let f in flags)
+					if (index([ 'link', 'tx', 'rx' ], f) < 0)
+						return { ok: false, output: 'flags are link, tx and rx' };
+
+				let uci = cursor();
+				if (uci.get('be7000', 'leds') == null)
+					uci.set('be7000', 'leds', 'leds');
+				uci.set('be7000', 'leds', 'aiot_source', a.source);
+				uci.set('be7000', 'leds', 'aiot_show', a.show == 'blink' ? 'blink' : 'on');
+				uci.set('be7000', 'leds', 'aiot_invert', a.invert ? '1' : '0');
+				uci.set('be7000', 'leds', 'aiot_on_ms', '' + num(a.on_ms, 500));
+				uci.set('be7000', 'leds', 'aiot_off_ms', '' + num(a.off_ms, 500));
+				uci.set('be7000', 'leds', 'aiot_dev', a.dev ?? '');
+				uci.set('be7000', 'leds', 'aiot_flags', join(' ', flags));
+				uci.set('be7000', 'leds', 'aiot_service', a.service ?? '');
+				uci.set('be7000', 'leds', 'aiot_target', a.target ?? '');
+				uci.set('be7000', 'leds', 'aiot_cmd', a.cmd ?? '');
+				uci.commit('be7000');
+				let r = run('apply');
 				return { ok: r.rc == 0, output: r.out };
 			}
 		}

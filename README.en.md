@@ -85,7 +85,7 @@ Services that are not in regular OpenWrt live in overlay-files.
 | be7000-slots | shows what the slots hold and switches the boot, the System, Slots page |
 | be7000-docker | installs Docker on a disk and sets up the firewall and DNS for the containers, commands setup, firewall, diag |
 | be7000-update | checks for and installs new versions, tells you once a day about a new release |
-| be7000-leds | LEDs: the amber network LED shows Wi-Fi 2.4 GHz, the white AIoT LED shows that Hybrid Failover runs |
+| be7000-leds | LEDs: the amber network LED shows Wi-Fi 2.4 GHz, the white AIoT LED can be tied to anything, by default to Hybrid Failover |
 
 Packages install out of the box. The official mirror builds qualcommbe for cortex-a53, while this build targets cortex-a73, so there is no aarch64_cortex-a73 directory on the mirror and all the common feeds return 404. The image has its own feed configured, built from the same tree and signed with a key the image already trusts. After `apk update` there are more than 600 packages available, including nano, htop, tcpdump, strace, tmux, rsync, jq, modemmanager with USB modem drivers, ksmbd and ttyd. Kernel modules are in a separate feed, because on the mirror they are built for a different kernel. One more separate feed holds hybrid-failover, it rebuilds itself with every new release.
 

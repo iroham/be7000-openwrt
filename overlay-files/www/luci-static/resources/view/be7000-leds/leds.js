@@ -9,6 +9,10 @@
 
 var callStatus = rpc.declare({ object: 'be7000-leds', method: 'status' });
 var callSet = rpc.declare({ object: 'be7000-leds', method: 'set', params: [ 'what', 'on' ] });
+var callAiot = rpc.declare({
+	object: 'be7000-leds', method: 'aiot_set',
+	params: [ 'source', 'dev', 'flags', 'service', 'target', 'cmd', 'show', 'invert', 'on_ms', 'off_ms' ]
+});
 
 var CSS = `
 .bl-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin:12px 0 18px}
@@ -20,6 +24,10 @@ var CSS = `
 .bl-text{font-size:13px}
 .bl-note{font-size:12px;color:var(--nb-muted,#888)}
 .bl-act{margin-top:auto;display:flex;flex-wrap:wrap;gap:8px}
+.bl-form{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:8px 12px;align-items:center;margin-top:6px}
+.bl-form label{font-size:13px}
+.bl-form .cbi-input-text,.bl-form select{width:100%;max-width:420px}
+.bl-form .bl-flags{display:flex;flex-wrap:wrap;gap:12px}
 .bl-about{max-width:860px;margin-top:8px}
 .bl-about h3{margin:18px 0 6px}
 .bl-sec{margin:0 0 14px}
@@ -77,13 +85,100 @@ return view.extend({
 			st.wlan2g_busy ? _('Этот светодиод уже настроен вами на странице Индикаторы, поэтому он не тронут.') : _('Применяется сразу.'),
 			'wlan2g', st.wlan2g_busy);
 
-		var ai = this.card(st.aiot, _('Hybrid Failover, белый AIoT'),
-			st.aiot_on ? [ E('span', { 'class': 'bl-badge' }, _('горит')) ] : [],
-			_('Светодиод AIoT горит, пока работает Hybrid Failover и его правила маршрутизации на месте. Если служба остановлена или упала, он гаснет.'),
-			st.hf ? _('Применяется сразу.') : _('Hybrid Failover не установлен, светодиод не горит. Его можно поставить на странице Службы, Дополнения.'),
-			'aiot', false);
+		var ai = this.aiotCard(st);
 
 		return E([], head.concat([ E('div', { 'class': 'bl-cards' }, [ w2, ai ]), this.about() ]));
+	},
+
+	aiotCard: function(st) {
+		var self = this;
+		var SRC = [
+			[ 'hf', _('Работу Hybrid Failover') ],
+			[ 'netdev', _('Связь или трафик интерфейса') ],
+			[ 'service', _('Работу процесса') ],
+			[ 'internet', _('Доступность интернета') ],
+			[ 'command', _('Результат своей команды') ],
+			[ 'on', _('Горит всегда') ],
+			[ 'timer', _('Мигает всегда') ],
+			[ 'heartbeat', _('Пульс') ],
+			[ 'off', _('Выключен') ]
+		];
+		var POLLED = { hf: 1, service: 1, internet: 1, command: 1 };
+
+		var sel = E('select', { 'class': 'cbi-input-select' }, SRC.map(function(o) {
+			return E('option', { 'value': o[0], 'selected': o[0] == st.source ? true : null }, o[1]);
+		}));
+		var dev = E('select', { 'class': 'cbi-input-select' }, (st.ifaces || []).map(function(n) {
+			return E('option', { 'value': n, 'selected': n == st.dev ? true : null }, n);
+		}));
+		var flag = function(name, label) {
+			return E('label', {}, [ E('input', { 'type': 'checkbox', 'data-flag': name, 'checked': (st.flags || '').split(' ').indexOf(name) >= 0 ? true : null }), ' ', label ]);
+		};
+		var flags = E('div', { 'class': 'bl-flags' }, [ flag('link', _('связь')), flag('rx', _('приём')), flag('tx', _('передача')) ]);
+		var service = E('input', { 'class': 'cbi-input-text', 'type': 'text', 'value': st.service || '', 'placeholder': 'sing-box' });
+		var target = E('input', { 'class': 'cbi-input-text', 'type': 'text', 'value': st.target || '1.1.1.1' });
+		var cmd = E('input', { 'class': 'cbi-input-text', 'type': 'text', 'value': st.cmd || '', 'placeholder': 'ip link show awg0' });
+		var show = E('select', { 'class': 'cbi-input-select' }, [
+			E('option', { 'value': 'on', 'selected': st.show != 'blink' ? true : null }, _('горит')),
+			E('option', { 'value': 'blink', 'selected': st.show == 'blink' ? true : null }, _('мигает'))
+		]);
+		var inv = E('input', { 'type': 'checkbox', 'checked': st.invert ? true : null });
+		var onms = E('input', { 'class': 'cbi-input-text', 'type': 'number', 'min': 50, 'max': 10000, 'value': st.on_ms || 500, 'style': 'max-width:120px' });
+		var offms = E('input', { 'class': 'cbi-input-text', 'type': 'number', 'min': 50, 'max': 10000, 'value': st.off_ms || 500, 'style': 'max-width:120px' });
+
+		var rows = {
+			dev: [ E('label', {}, _('Интерфейс')), dev ],
+			flags: [ E('label', {}, _('Что считать')), flags ],
+			service: [ E('label', {}, _('Имя процесса')), service ],
+			target: [ E('label', {}, _('Адрес для проверки')), target ],
+			cmd: [ E('label', {}, _('Команда')), cmd ],
+			show: [ E('label', {}, _('Когда выполнено')), show ],
+			inv: [ E('label', {}, _('Наоборот')), E('label', {}, [ inv, ' ', _('светодиод показывает, что условие не выполнено') ]) ],
+			ms: [ E('label', {}, _('Мигание, мс')), E('div', {}, [ onms, ' ', _('горит'), ' ', offms, ' ', _('не горит') ]) ]
+		};
+		var form = E('div', { 'class': 'bl-form' });
+		var order = [ 'dev', 'flags', 'service', 'target', 'cmd', 'show', 'inv', 'ms' ];
+		order.forEach(function(k) { rows[k].forEach(function(n) { n.setAttribute && n.setAttribute('data-row', k); form.appendChild(n); }); });
+
+		var refresh = function() {
+			var src = sel.value, polled = !!POLLED[src], blinkMs = (src == 'timer') || (polled && show.value == 'blink');
+			var vis = { dev: src == 'netdev', flags: src == 'netdev', service: src == 'service', target: src == 'internet', cmd: src == 'command', show: polled, inv: polled, ms: blinkMs };
+			order.forEach(function(k) {
+				form.querySelectorAll('[data-row="' + k + '"]').forEach(function(n) { n.style.display = vis[k] ? '' : 'none'; });
+			});
+		};
+		sel.addEventListener('change', refresh);
+		show.addEventListener('change', refresh);
+		refresh();
+
+		var save = function() {
+			var fl = [];
+			flags.querySelectorAll('input[data-flag]').forEach(function(i) { if (i.checked) fl.push(i.getAttribute('data-flag')); });
+			return callAiot(sel.value, dev.value, fl.join(' '), service.value.trim(), target.value.trim(), cmd.value.trim(),
+				show.value, inv.checked, +onms.value || 500, +offms.value || 500).then(function(r) {
+				if (!r || !r.ok) {
+					ui.addNotification(null, E('p', (r && r.output) || _('Не удалось применить')), 'danger');
+					return;
+				}
+				window.location.reload();
+			});
+		};
+
+		var busy = st.aiot_busy;
+		return E('div', { 'class': 'bl-card' + (st.source != 'off' ? ' on' : '') }, [
+			E('h4', {}, [ _('Светодиод AIoT, белый'),
+				st.aiot_on ? E('span', { 'class': 'bl-badge' }, _('горит')) : E('span', { 'class': 'bl-badge soft' }, _('не горит')),
+				busy ? E('span', { 'class': 'bl-badge soft' }, _('занят')) : '' ]),
+			E('div', { 'class': 'bl-text' },
+				_('Этот светодиод можно привязать к чему угодно. Выберите, что он показывает, и как. По умолчанию он горит, пока работает Hybrid Failover.')),
+			busy ? E('div', { 'class': 'bl-note' }, _('Этот светодиод уже настроен вами на странице Индикаторы, поэтому он не тронут.')) : '',
+			E('div', { 'class': 'bl-form' }, [ E('label', {}, _('Что показывает')), sel ]),
+			form,
+			E('div', { 'class': 'bl-act' }, [
+				E('button', { 'class': 'cbi-button cbi-button-action important', 'disabled': busy ? true : null,
+					'click': ui.createHandlerFn(this, save) }, _('Сохранить'))
+			])
+		]);
 	},
 
 	about: function() {
@@ -104,8 +199,15 @@ return view.extend({
 			sec(_('Wi-Fi 2,4 ГГц'), [
 				_('Янтарный светодиод сети привязывается к интерфейсу точки доступа 2,4 ГГц и мигает при приёме и передаче. В режиме MLO белый светодиод следует за общим интерфейсом MLO, это делается само при переключении режима 5 ГГц.')
 			]),
-			sec(_('Hybrid Failover'), [
-				_('Белый светодиод AIoT проверяется каждые пять секунд. Он горит, если процесс Hybrid Failover работает и таблица его правил в межсетевом экране есть. Раньше узнать, что служба упала и трафик пошёл мимо неё, можно было только по странице службы.')
+			sec(_('Светодиод AIoT'), [
+				_('Белый светодиод AIoT свободен, ему можно дать любую роль. Источники, которые можно выбрать'),
+				[ _('Работа Hybrid Failover. Процесс запущен и таблица его правил в межсетевом экране на месте. Проверка каждые пять секунд.'),
+				  _('Связь или трафик интерфейса. Светодиод сам следует за интерфейсом, мигает при приёме и передаче или горит, пока есть связь. Подходит любой интерфейс, например wan, awg0 или br-lan.'),
+				  _('Работа процесса. Горит, пока в системе есть процесс с таким именем.'),
+				  _('Доступность интернета. Роутер раз в 15 секунд проверяет адрес командой ping.'),
+				  _('Результат своей команды. Команда выполняется раз в пять секунд от имени root, светодиод показывает, завершилась ли она с кодом 0.'),
+				  _('Горит всегда, мигает всегда, пульс или выключен.') ],
+				_('Для проверяемых источников можно выбрать, как показывать выполненное условие, горением или миганием, и перевернуть логику: тогда светодиод покажет, что условие не выполнено. Это удобно для сигнала о неполадке.')
 			]),
 			sec(_('Если светодиод уже настроен вами'), [
 				_('Если вы сами назначили янтарный светодиод сети или белый AIoT на странице Индикаторы, Beam WRT их не трогает. Чтобы вернуть управление сюда, удалите свою настройку на той странице.')

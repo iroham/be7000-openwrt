@@ -4,12 +4,23 @@
 #   status         JSON for the LuCI page
 #   wlan2g on|off  the amber LED of the network indicator shows 2.4 GHz traffic
 #                  (the white one is the 5 GHz LED from the board setup)
-#   aiot on|off    the white AIoT LED shows that Hybrid Failover is running
+#   aiot on|off    the white AIoT LED shows what be7000.leds.aiot_* names, off
+#                  turns it off (default: Hybrid Failover is running)
 #   sync           write the 2.4 GHz LED into /etc/config/system from the choice
-#   watch          keeps the AIoT LED in step with Hybrid Failover
+#   watch          keeps the AIoT LED in step with a polled source
 #
 # The choices live in be7000.leds, both are on by default. A LED the user
 # already set up in /etc/config/system is left alone.
+#
+# What the AIoT LED shows (be7000.leds.aiot_source):
+#   hf         Hybrid Failover runs                 (default)
+#   netdev     link or traffic of an interface      aiot_dev, aiot_flags
+#   service    a process is running                 aiot_service
+#   internet   a host answers a ping                aiot_target
+#   command    a command exits with 0               aiot_cmd
+#   on, off, timer, heartbeat
+# and how: aiot_show on|blink, aiot_invert 0|1, aiot_on_ms and aiot_off_ms
+# for blinking.
 
 AIOT=/sys/class/leds/white:aiot
 AMBER=amber:network
@@ -60,44 +71,134 @@ hf_up() {
 		nft list table inet hybrid_failover >/dev/null 2>&1
 }
 
+opt() {
+	uci -q get be7000.leds.$1
+}
+
+aiot_source() {
+	local src
+	src="$(opt aiot_source)"
+	if [ -z "$src" ]; then
+		[ "$(opt aiot)" = 0 ] && src=off || src=hf
+	fi
+	echo "$src"
+}
+
+polled() {
+	case "$1" in hf|service|internet|command) return 0 ;; esac
+	return 1
+}
+
+led_off() {
+	echo none > $AIOT/trigger 2>/dev/null
+	echo 0 > $AIOT/brightness 2>/dev/null
+}
+
+led_on() {
+	echo none > $AIOT/trigger 2>/dev/null
+	echo 1 > $AIOT/brightness 2>/dev/null
+}
+
+led_blink() {
+	echo timer > $AIOT/trigger 2>/dev/null
+	echo "${1:-500}" > $AIOT/delay_on 2>/dev/null
+	echo "${2:-500}" > $AIOT/delay_off 2>/dev/null
+}
+
+# sources the kernel can follow by itself, and the fixed modes
+aiot_static() {
+	local src f v
+	src="$(aiot_source)"
+	case "$src" in
+	off) led_off ;;
+	on) led_on ;;
+	timer) led_blink "$(opt aiot_on_ms)" "$(opt aiot_off_ms)" ;;
+	heartbeat) echo heartbeat > $AIOT/trigger 2>/dev/null ;;
+	netdev)
+		echo netdev > $AIOT/trigger 2>/dev/null
+		echo "$(opt aiot_dev)" > $AIOT/device_name 2>/dev/null
+		for f in link tx rx; do
+			case " $(opt aiot_flags) " in *" $f "*) v=1 ;; *) v=0 ;; esac
+			echo $v > $AIOT/$f 2>/dev/null
+		done
+		;;
+	esac
+}
+
+cond() {
+	case "$1" in
+	hf) hf_up ;;
+	service) [ -n "$(opt aiot_service)" ] && pidof "$(opt aiot_service)" >/dev/null 2>&1 ;;
+	internet) ping -c1 -W2 "$(opt aiot_target)" >/dev/null 2>&1 ;;
+	command) [ -n "$(opt aiot_cmd)" ] && sh -c "$(opt aiot_cmd)" >/dev/null 2>&1 ;;
+	esac
+}
+
 watch_aiot() {
-	local v
+	local src show v want cur="" every=5
 	[ -d $AIOT ] || exit 0
 	used_by_user white:aiot && exit 0
-	echo none > $AIOT/trigger 2>/dev/null
+	src="$(aiot_source)"
+	polled "$src" || { aiot_static; exit 0; }
+	[ "$src" = internet ] && every=15
 	while :; do
-		hf_up && v=1 || v=0
-		[ "$(cat $AIOT/brightness)" = "$v" ] || echo $v > $AIOT/brightness
-		sleep 5
+		show="$(opt aiot_show)"
+		[ "$show" = blink ] || show=on
+		cond "$src" && v=1 || v=0
+		[ "$(opt aiot_invert)" = 1 ] && v=$((1 - v))
+		[ $v = 1 ] && want=$show || want=off
+		if [ "$want" != "$cur" ]; then
+			case "$want" in
+			on) led_on ;;
+			blink) led_blink "$(opt aiot_on_ms)" "$(opt aiot_off_ms)" ;;
+			*) led_off ;;
+			esac
+			cur="$want"
+		fi
+		sleep $every
 	done
 }
 
 case "$1" in
 status)
-	printf '{"wlan2g":%s,"wlan2g_active":%s,"wlan2g_busy":%s,"aiot":%s,"hf":%s,"aiot_on":%s}\n' \
+	printf '{"wlan2g":%s,"wlan2g_active":%s,"wlan2g_busy":%s,"aiot":%s,"hf":%s,"aiot_on":%s,"aiot_busy":%s}\n' \
 		$(cfg_on wlan2g && echo true || echo false) \
 		$(uci -q get system.led_wlan2g >/dev/null && echo true || echo false) \
 		$(! uci -q get system.led_wlan2g >/dev/null && used_by_user $AMBER && echo true || echo false) \
-		$(cfg_on aiot && echo true || echo false) \
+		$([ "$(aiot_source)" != off ] && echo true || echo false) \
 		$([ -x /usr/sbin/hybrid-failover ] && echo true || echo false) \
-		$([ "$(cat $AIOT/brightness 2>/dev/null)" = 1 ] && echo true || echo false)
+		$([ "$(cat $AIOT/brightness 2>/dev/null)" = 1 ] && echo true || echo false) \
+		$(used_by_user white:aiot && echo true || echo false)
 	;;
 wlan2g)
 	case "$2" in on) set_cfg wlan2g 1 ;; off) set_cfg wlan2g 0 ;; *) echo "usage: $0 wlan2g on|off"; exit 1 ;; esac
 	sync_wlan2g
 	;;
 aiot)
-	case "$2" in on) set_cfg aiot 1 ;; off) set_cfg aiot 0 ;; *) echo "usage: $0 aiot on|off"; exit 1 ;; esac
+	case "$2" in
+	on) [ -f /etc/config/be7000 ] && uci -q delete be7000.leds.aiot_source; uci -q commit be7000 ;;
+	off) set_cfg aiot_source off ;;
+	*) echo "usage: $0 aiot on|off"; exit 1 ;;
+	esac
 	/etc/init.d/be7000-leds restart >/dev/null 2>&1
 	;;
 sync)
 	sync_wlan2g
+	if [ -d $AIOT ] && ! used_by_user white:aiot && ! polled "$(aiot_source)"; then
+		aiot_static
+	fi
+	;;
+polled)
+	polled "$(aiot_source)"
+	;;
+apply)
+	/etc/init.d/be7000-leds restart >/dev/null 2>&1
 	;;
 watch)
 	watch_aiot
 	;;
 *)
-	echo "usage: $0 status | wlan2g on|off | aiot on|off | sync | watch"
+	echo "usage: $0 status | wlan2g on|off | aiot on|off | sync | watch | polled | apply"
 	exit 1
 	;;
 esac

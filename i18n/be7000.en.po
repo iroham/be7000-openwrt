@@ -905,3 +905,108 @@ msgstr "If you assigned the amber network LED or the white AIoT one yourself on 
 
 msgid "Из консоли"
 msgstr "From the console"
+
+msgid "Работу Hybrid Failover"
+msgstr "Hybrid Failover running"
+
+msgid "Связь или трафик интерфейса"
+msgstr "Link or traffic of an interface"
+
+msgid "Работу процесса"
+msgstr "A process running"
+
+msgid "Доступность интернета"
+msgstr "Internet reachable"
+
+msgid "Результат своей команды"
+msgstr "Result of your own command"
+
+msgid "Горит всегда"
+msgstr "Always on"
+
+msgid "Мигает всегда"
+msgstr "Always blinking"
+
+msgid "Пульс"
+msgstr "Heartbeat"
+
+msgid "Выключен"
+msgstr "Off"
+
+msgid "связь"
+msgstr "link"
+
+msgid "приём"
+msgstr "receive"
+
+msgid "передача"
+msgstr "transmit"
+
+msgid "мигает"
+msgstr "blinks"
+
+msgid "Интерфейс"
+msgstr "Interface"
+
+msgid "Что считать"
+msgstr "What counts"
+
+msgid "Имя процесса"
+msgstr "Process name"
+
+msgid "Адрес для проверки"
+msgstr "Address to check"
+
+msgid "Команда"
+msgstr "Command"
+
+msgid "Когда выполнено"
+msgstr "When it holds"
+
+msgid "Наоборот"
+msgstr "Inverted"
+
+msgid "светодиод показывает, что условие не выполнено"
+msgstr "the LED shows that the condition does not hold"
+
+msgid "Мигание, мс"
+msgstr "Blinking, ms"
+
+msgid "не горит"
+msgstr "off"
+
+msgid "Светодиод AIoT, белый"
+msgstr "AIoT LED, white"
+
+msgid "Этот светодиод можно привязать к чему угодно. Выберите, что он показывает, и как. По умолчанию он горит, пока работает Hybrid Failover."
+msgstr "This LED can be tied to anything. Choose what it shows and how. By default it is lit while Hybrid Failover runs."
+
+msgid "Что показывает"
+msgstr "What it shows"
+
+msgid "Светодиод AIoT"
+msgstr "The AIoT LED"
+
+msgid "Белый светодиод AIoT свободен, ему можно дать любую роль. Источники, которые можно выбрать"
+msgstr "The white AIoT LED is free and can be given any role. The sources to choose from"
+
+msgid "Работа Hybrid Failover. Процесс запущен и таблица его правил в межсетевом экране на месте. Проверка каждые пять секунд."
+msgstr "Hybrid Failover running. The process is up and the table of its rules in the firewall is in place. Checked every five seconds."
+
+msgid "Связь или трафик интерфейса. Светодиод сам следует за интерфейсом, мигает при приёме и передаче или горит, пока есть связь. Подходит любой интерфейс, например wan, awg0 или br-lan."
+msgstr "Link or traffic of an interface. The LED follows the interface by itself, blinks on receive and transmit or stays lit while there is a link. Any interface works, for example wan, awg0 or br-lan."
+
+msgid "Работа процесса. Горит, пока в системе есть процесс с таким именем."
+msgstr "A process running. Lit while a process with that name exists."
+
+msgid "Доступность интернета. Роутер раз в 15 секунд проверяет адрес командой ping."
+msgstr "Internet reachable. The router pings the address every 15 seconds."
+
+msgid "Результат своей команды. Команда выполняется раз в пять секунд от имени root, светодиод показывает, завершилась ли она с кодом 0."
+msgstr "Result of your own command. The command runs every five seconds as root, and the LED shows whether it exited with code 0."
+
+msgid "Горит всегда, мигает всегда, пульс или выключен."
+msgstr "Always on, always blinking, heartbeat or off."
+
+msgid "Для проверяемых источников можно выбрать, как показывать выполненное условие, горением или миганием, и перевернуть логику: тогда светодиод покажет, что условие не выполнено. Это удобно для сигнала о неполадке."
+msgstr "For the checked sources you can choose how to show that the condition holds, lit or blinking, and turn the logic around so that the LED shows the condition does not hold. This is handy as a fault signal."
