@@ -17,6 +17,7 @@
 - The Zapret Manager button on the Add-ons page could stay inactive after a reboot until `apk update` was run by hand. The index now refreshes by itself. Installing Zapret Manager no longer downloads all its dependencies as well.
 - Translations of the Add-ons page into English and Chinese were added. The new-version block on Overview shows its title.
 - Services, Dockerman now speaks Russian and Chinese, the translations are installed together with Docker. Long values on the Overview page no longer stick out of the table.
+- In MLO mode the 5 GHz Wi-Fi LED stayed dark: it was tied to the interface of one radio, which does not exist in MLO. It now switches to the shared MLO interface with the mode and goes back.
 
 **1.4.2**, October 3, 2026.
 - Zapret Manager was added to Services, Add-ons. The manager is installed separately and does not enable anything until the user chooses it.

@@ -228,6 +228,25 @@ config_off() {
 	uci commit wireless
 }
 
+# The 5 GHz LED follows the access point netdev. In MLO there is no phyN-apM,
+# the traffic is on the MLD interface ap-mld0, so the LED shows nothing unless
+# it is pointed there. The original device is kept to put it back.
+led_follow() {
+	local cur orig
+	cur="$(uci -q get system.led_wlan5g.dev)" || return 0
+	if [ "$1" = mlo ]; then
+		[ "$cur" = ap-mld0 ] && return 0
+		uci -q get system.led_wlan5g.be7000_dev >/dev/null || uci set system.led_wlan5g.be7000_dev="$cur"
+		uci set system.led_wlan5g.dev=ap-mld0
+	else
+		orig="$(uci -q get system.led_wlan5g.be7000_dev)" || return 0
+		uci set system.led_wlan5g.dev="$orig"
+		uci -q delete system.led_wlan5g.be7000_dev
+	fi
+	uci commit system
+	/etc/init.d/led restart >/dev/null 2>&1
+}
+
 # wifi-ifaces this script made for MLO, and the ones it switched off
 mlo_ifaces() {
 	uci -q show wireless | sed -n "s/^wireless\.\([^.]*\)\.be7000_mlo='1'$/\1/p"
@@ -276,6 +295,7 @@ config_mlo_on() {
 		fi
 	done
 	uci commit wireless
+	led_follow mlo
 }
 
 config_mlo_off() {
@@ -299,6 +319,7 @@ config_mlo_off() {
 		uci -q delete wireless.$low.be7000_htmode
 	fi
 	uci commit wireless
+	led_follow off
 }
 
 # every MLD has a working link on both radios (a link that is not on air
