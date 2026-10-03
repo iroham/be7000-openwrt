@@ -37,7 +37,7 @@ Beam WRT 是给 Xiaomi BE7000 (RC06 主板，IPQ9554 处理器) 用的新版 Ope
 - 2.4 和 5 GHz Wi-Fi 以 Wi-Fi 6 模式工作，能读到 ART 分区里的校准数据，5 GHz 的 TLMM6 和 TLMM7 修正已经生效。
 - 接入点模式下的 Wi-Fi 7 (EHT80) 能用，用笔记本测过。macOS 显示 PHY Mode 802.11be，36 信道 80 MHz，iperf3 945 Mbit/s。5 GHz 自动选信道也正常。
 - 国家代码设成 RU 时，QCN9274 的射频固件自己会禁用 802.11be (`iw reg get` 里能看到 NO-EHT)，接入点就按 Wi-Fi 6 工作。这是射频固件的决定，不是驱动的问题。从 1.4.0 开始，5 GHz 模式块里会提示这一点，旁边有个按钮，只给 5 GHz 设成 US。
-- MLO 模式几秒钟就能起来，低频段射频在 36 信道 160 MHz，高频段射频在 149 信道 80 MHz。Wi-Fi 7 笔记本连上这种网络时只用一条链路，一台设备上两条链路叠加还没测过。
+- MLO 模式几秒钟就能起来，低频段射频在 36 信道 160 MHz，高频段射频在 149 信道 80 MHz。MLO 已经测试过，能正常工作。Wi-Fi 7 笔记本连上这种网络时只用一条链路，一台设备上两条链路叠加没有测过，目前没有条件做这项测试。
 - 真实线路上的 PPPoE、保留设置和已启用服务列表的 sysupgrade、WireGuard 和 AmneziaWG (模块和 awg 工具都是按这个内核编译的)。
 
 ## 已知问题
@@ -45,7 +45,7 @@ Beam WRT 是给 Xiaomi BE7000 (RC06 主板，IPQ9554 处理器) 用的新版 Ope
 - **1.3.0 之前部分板子上的以太网问题。** 网口有连接，但路由器一帧都收不到。原因是内核通过 RPM 请求了 l2 稳压器，1.3.0 已经修好，详情见 [patches.zh.md](docs/patches.zh.md)。如果你的板子上网线还是不通，请到 [issue #1](https://github.com/timofey-maykov/be7000-openwrt/issues/1) 或 4PDA 帖子里反馈。可以先通过 Wi-Fi 连进去 (网络 OpenWrt-BE7000，密码 be7000openwrt)。
 - 在双射频和 MLO 模式下，每个射频只分到一半天线，所以单台设备的速度比单射频模式慢。模式在 网络, 无线 页面上选，或者用 be7000-5g-split mode 命令切换，详情见 [patches.zh.md](docs/patches.zh.md)。
 - /overlay 只有 19.4 MB 空间。要装大东西，最好用 be7000-extroot 命令把它搬到 USB 上。
-- 内核用的是主线的 qcom-ppe，不是厂商的 NSS。PPE 上的硬件 NAT 加速在 1.4.0 里加上了，但还是实验功能，默认关闭。Wi-Fi 客户端的数据包仍然要经过一次 CPU。
+- 内核用的是主线的 qcom-ppe，不是厂商的 NSS。PPE 上的硬件 NAT 加速在 1.4.0 里加上了，已经测试过并能正常工作，默认关闭。Wi-Fi 客户端的数据包仍然要经过一次 CPU。
 - 这个移植落后于 OpenWrt main，更新基础版本时可能需要重做补丁。
 
 ## 安装、更新和回滚

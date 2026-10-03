@@ -421,8 +421,8 @@ msgstr "Turn on"
 msgid "Аппаратная разгрузка"
 msgstr "Hardware offload"
 
-msgid "Маршрутизацию и NAT может выполнять сетевой процессор PPE вместо основного процессора. Функция экспериментальная и по умолчанию выключена. Если после включения что-то перестало работать, выключите её здесь."
-msgstr "Routing and NAT can be done by the PPE network engine instead of the main CPU. The feature is experimental and off by default. If something stops working after you turn it on, turn it off here."
+msgid "Маршрутизацию и NAT может выполнять сетевой процессор PPE вместо основного процессора. Функция проверена и работает, по умолчанию выключена. Если после включения что-то перестало работать, выключите её здесь."
+msgstr "Routing and NAT can be done by the PPE network engine instead of the main CPU. The feature is tested and works, and it is off by default. If something stops working after you turn it on, turn it off here."
 
 msgid "В этой сборке нет драйвера PPE с поддержкой разгрузки."
 msgstr "This build has no PPE driver with offload support."
@@ -469,8 +469,8 @@ msgstr "What the PPE is"
 msgid "В процессоре IPQ9554 кроме ядер ARM есть отдельный сетевой блок PPE (packet processing engine). Он умеет сам коммутировать кадры между портами и маршрутизировать пакеты с NAT по таблице соединений, не нагружая основной процессор. Заводская прошивка Xiaomi им пользуется, в обычном OpenWrt он до сих пор простаивает."
 msgstr "Besides the ARM cores, the IPQ9554 has a separate network block, the PPE (packet processing engine). It can switch frames between ports and route packets with NAT from a connection table on its own, without loading the main CPU. The Xiaomi factory firmware uses it, in regular OpenWrt it still sits idle."
 
-msgid "Поддержка разгрузки в Beam WRT построена на открытой работе для OpenWrt и наших исправлениях к ней. Она ещё не принята в основной OpenWrt, поэтому здесь она экспериментальная."
-msgstr "Offload support in Beam WRT is built on open work for OpenWrt plus our fixes to it. It is not in mainline OpenWrt yet, so here it is experimental."
+msgid "Поддержка разгрузки в Beam WRT построена на открытой работе для OpenWrt и наших исправлениях к ней. Она ещё не принята в основной OpenWrt."
+msgstr "Offload support in Beam WRT is built on open work for OpenWrt plus our fixes to it. It is not in mainline OpenWrt yet."
 
 msgid "Первые пакеты каждого соединения, как обычно, проходят межсетевой экран на процессоре. Когда соединение установлено, ядро записывает его в таблицу PPE, и дальше PPE пересылает его пакеты сам, с подменой адресов и портов. Это обычная функция OpenWrt, она называется аппаратной разгрузкой потоков (flow offloading). Включить её здесь то же самое, что поставить галку в настройках межсетевого экрана."
 msgstr "The first packets of every connection pass the firewall on the CPU as usual. Once the connection is established, the kernel writes it into the PPE table, and from then on the PPE forwards its packets itself, rewriting addresses and ports. This is a regular OpenWrt feature called hardware flow offloading. Turning it on here is the same as ticking the box in the firewall settings."

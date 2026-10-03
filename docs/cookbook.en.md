@@ -141,7 +141,7 @@ The flash has two slots. System, Slots shows what each one holds, which one runs
 
 ## Hardware offload
 
-Offload is turned on at Network, Hardware offload. The PPE network engine can take over NAT and routing, and the LAN port bridge too. The feature is experimental and off by default. The page explains what is offloaded and what it does not mix with, for example SQM.
+Offload is turned on at Network, Hardware offload. The PPE network engine can take over NAT and routing, and the LAN port bridge too. The feature is tested and works, and it is off by default. The page explains what is offloaded and what it does not mix with, for example SQM.
 
 From the console it is turned on like this.
 
