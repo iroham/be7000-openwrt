@@ -116,20 +116,35 @@ fw_wan_zone() {
 	return 1
 }
 
-fw_docker_zone_exists() {
+# section reference of the docker zone, e.g. @zone[3]
+fw_docker_zone_ref() {
 	local i
 	i=0
 	while uci -q get "firewall.@zone[$i]" >/dev/null; do
-		[ "$(uci -q get "firewall.@zone[$i].name")" = docker ] && return 0
+		[ "$(uci -q get "firewall.@zone[$i].name")" = docker ] && { echo "@zone[$i]"; return 0; }
 		i=$((i + 1))
 	done
 	return 1
 }
 
+fw_docker_zone_exists() {
+	fw_docker_zone_ref >/dev/null
+}
+
+# The zone only names the netifd interface "docker" (proto none, never up), so
+# fw4 finds no device in it and emits no rule that sends docker0 traffic into
+# the zone: every packet from a container hits the forward chain's drop
+# policy. The bridge has to be named in the zone itself.
+fw_has_device() {
+	local ref
+	ref="$(fw_docker_zone_ref)" || return 1
+	uci -q get "firewall.$ref.device" | tr ' ' '\n' | grep -qx docker0
+}
+
 fw_ok() {
 	local wan
 	wan="$(fw_wan_zone)" || return 1
-	fw_docker_zone_exists && fw_has_forwarding docker "$wan" && fw_has_forwarding lan docker
+	fw_docker_zone_exists && fw_has_device && fw_has_forwarding docker "$wan" && fw_has_forwarding lan docker
 }
 
 cmd_firewall() {
@@ -152,6 +167,9 @@ cmd_firewall() {
 		fw_docker_zone_exists || die "$(t "Не получилось создать зону docker. Установите Docker: be7000-docker setup" "Could not create the docker zone. Install Docker first: be7000-docker setup" "无法创建 docker 区域。请先安装 Docker: be7000-docker setup")"
 	fi
 
+	if ! fw_has_device; then
+		uci -q add_list "firewall.$(fw_docker_zone_ref).device=docker0"
+	fi
 	if ! fw_has_forwarding docker "$wan"; then
 		uci -q set "firewall.$FW_WAN_SECTION=forwarding"
 		uci -q set "firewall.$FW_WAN_SECTION.name=docker-$wan"

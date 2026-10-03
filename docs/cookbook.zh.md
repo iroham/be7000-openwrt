@@ -61,7 +61,7 @@ be7000-docker setup
 
 ### 容器无法上网
 
-如果 qBittorrent 什么也下载不了，其他容器连不上网，或者容器的网页界面无法从局域网打开，原因在防火墙。Docker 会为自己的容器建立单独的 docker 区域，而路由器的防火墙默认不会在区域之间转发任何流量。需要两条转发规则，从 docker 到 wan 让容器访问互联网，从 lan 到 docker 让局域网访问已发布的端口。
+如果 qBittorrent 什么也下载不了，其他容器连不上网，或者容器的网页界面无法从局域网打开，原因在防火墙。Docker 会为自己的容器建立单独的 docker 区域，而路由器的防火墙默认不会在区域之间转发任何流量。需要两条转发规则，从 docker 到 wan 让容器访问互联网，从 lan 到 docker 让局域网访问已发布的端口。此外还必须在该区域中写明 docker0 网桥。否则防火墙不会把容器的数据包交给这个区域，即使两条转发规则都在，也会被丢弃。用户网络和堆栈使用的网桥会自动加入该区域。
 
 用 be7000-docker setup 安装时会自动设置好。如果 Docker 是之前装的，请运行下面的命令，或者在 "服务, Docker 堆栈" 页面点击 "允许" 按钮。
 
@@ -78,6 +78,7 @@ uci set firewall.docker_wan.dest='wan'
 uci set firewall.docker_lan=forwarding
 uci set firewall.docker_lan.src='lan'
 uci set firewall.docker_lan.dest='docker'
+uci add_list firewall.docker.device='docker0'
 uci commit firewall
 /etc/init.d/firewall restart
 ```

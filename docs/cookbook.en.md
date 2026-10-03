@@ -61,7 +61,7 @@ The script finds a mounted disk with free space and moves the Docker data there.
 
 ### Containers without internet
 
-If qBittorrent downloads nothing, another container cannot get online, or a container web interface does not open from the local network, the cause is the firewall. Docker creates a separate docker zone for its containers, but the router firewall forwards nothing between zones by default. Two forwardings are needed, docker to wan for the way out to the internet and lan to docker for access to published ports.
+If qBittorrent downloads nothing, another container cannot get online, or a container web interface does not open from the local network, the cause is the firewall. Docker creates a separate docker zone for its containers, but the router firewall forwards nothing between zones by default. Two forwardings are needed, docker to wan for the way out to the internet and lan to docker for access to published ports. The docker0 bridge also has to be named in the zone itself. Without that the firewall never sends container packets into the zone and drops them even though both forwardings exist. Bridges of user networks and stacks are added to the zone automatically.
 
 Installing with be7000-docker setup does this by itself. If Docker was installed earlier, run the command below or press the "Allow" button on Services, "Docker: stacks".
 
@@ -78,6 +78,7 @@ uci set firewall.docker_wan.dest='wan'
 uci set firewall.docker_lan=forwarding
 uci set firewall.docker_lan.src='lan'
 uci set firewall.docker_lan.dest='docker'
+uci add_list firewall.docker.device='docker0'
 uci commit firewall
 /etc/init.d/firewall restart
 ```
