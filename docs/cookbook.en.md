@@ -91,7 +91,7 @@ If the forwardings are in place but `uci show firewall` shows no docker zone, st
 /etc/init.d/dockerd start
 ```
 
-If Hybrid Failover is installed on the router, `be7000-docker firewall` also gives the containers public DNS servers. Otherwise they would get the service addresses of Hybrid Failover from the router and could not connect to them. Without Hybrid Failover the DNS is left alone. Container traffic goes out directly in both cases.
+The latest Hybrid Failover treats containers like the other devices on the network and picks up the Docker bridges by itself. With an older version `be7000-docker firewall` gives the containers public DNS servers, because they would otherwise get the service addresses of Hybrid Failover from the router and could not connect to them. Without Hybrid Failover the DNS is left alone.
 
 ## 5 GHz modes
 

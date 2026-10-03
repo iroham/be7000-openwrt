@@ -142,16 +142,23 @@ fw_has_device() {
 }
 
 # Hybrid Failover answers the router's DNS with fake addresses (198.18.x.x) and
-# only steers traffic that comes from its own LAN interfaces. A container that
-# asks the router for a name gets such an address and cannot reach it. So when
-# Hybrid Failover is installed the containers get plain public resolvers; their
-# traffic then goes out directly, as it does without Hybrid Failover.
+# only steers traffic that comes from its own source interfaces. Newer versions
+# put Docker's bridges among them, so containers are treated like LAN clients
+# and need nothing. An older Hybrid Failover does not, and a container that asks
+# the router for a name gets an address it cannot reach. For that case the
+# containers get plain public resolvers and go out directly.
 hf_present() {
 	[ -x /usr/sbin/hybrid-failover ]
 }
 
+hf_steers_docker() {
+	grep -q source_docker /usr/sbin/hybrid-failover 2>/dev/null &&
+		[ "$(uci -q get hybrid-failover.settings.source_docker)" != 0 ]
+}
+
 dns_ok() {
 	hf_present || return 0
+	hf_steers_docker && return 0
 	[ -n "$(uci -q get dockerd.globals.dns)" ]
 }
 

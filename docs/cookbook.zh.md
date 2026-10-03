@@ -91,7 +91,7 @@ uci commit firewall
 /etc/init.d/dockerd start
 ```
 
-如果路由器上安装了 Hybrid Failover，`be7000-docker firewall` 还会为容器设置公共 DNS 服务器，否则容器会从路由器拿到 Hybrid Failover 的内部地址而无法连接。没有 Hybrid Failover 时不会改动 DNS。两种情况下容器流量都是直接出网。
+最新版本的 Hybrid Failover 会像对待网络中的其他设备一样处理容器，并自动识别 Docker 网桥。如果是旧版本，`be7000-docker firewall` 会为容器设置公共 DNS 服务器，否则容器会从路由器拿到 Hybrid Failover 的内部地址而无法连接。没有 Hybrid Failover 时不会改动 DNS。
 
 ## 5 GHz 模式
 
