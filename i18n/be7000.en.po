@@ -834,3 +834,12 @@ msgstr "Check for a new version automatically"
 
 msgid "Сборки без номера версии, например собранные самостоятельно, не проверяются."
 msgstr "Builds without a version number, such as self-built ones, are not checked."
+
+msgid "нужно доустановить"
+msgstr "needs finishing"
+
+msgid "Доустановить"
+msgstr "Finish install"
+
+msgid "Пакет Zapret Manager стоит, но сама панель не создалась. Обычно так бывает, когда во время установки не было интернета. Нажмите кнопку, чтобы завершить установку, роутеру понадобится доступ в интернет."
+msgstr "The Zapret Manager package is installed, but the panel itself was not created. This usually happens when there was no internet during the install. Press the button to finish it, the router needs internet access for this."

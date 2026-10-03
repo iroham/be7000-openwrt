@@ -125,9 +125,13 @@ return view.extend({
 
 		var zmInstalled = zm.installed || '';
 		var zmFeed = zm.feed || '';
+		// the package is there but its installer step did not finish
+		var zmBroken = zmInstalled && !zm.panel;
 		var zmBadges = [ E('span', { 'class': 'ba-badge ' + (zmInstalled ? '' : 'soft') },
 			zmInstalled ? _('установлен %s').format(zmInstalled) : _('не установлен')) ];
-		var zmLabel = !zmFeed ? (zmInstalled ? _('Установлен') : _('Пока недоступен')) :
+		if (zmBroken)
+			zmBadges.push(E('span', { 'class': 'ba-badge soft' }, _('нужно доустановить')));
+		var zmLabel = zmBroken ? _('Доустановить') : !zmFeed ? (zmInstalled ? _('Установлен') : _('Пока недоступен')) :
 			!zmInstalled ? _('Установить') : zmInstalled == zmFeed ? _('Переустановить') : _('Обновить до %s').format(zmFeed);
 		var zmLog = E('pre', { 'class': 'ba-log', 'style': 'display:none' });
 
@@ -153,12 +157,13 @@ return view.extend({
 				E('div', { 'class': 'ba-act' }, [
 					E('button', {
 						'class': 'cbi-button cbi-button-action important',
-					'disabled': zm.running || !zmFeed ? true : null,
+					'disabled': zm.running || (!zmFeed && !zmBroken) ? true : null,
 						'click': ui.createHandlerFn(this, 'installSimple', 'zapret-manager', zmLog)
 					}, zmLabel),
 					zm.panel ? E('a', { 'class': 'cbi-button cbi-button-neutral', 'href': L.url('admin/services/zapret-manager') }, _('Открыть Zapret Manager')) : ''
 				]),
-				!zmFeed ? E('div', { 'class': 'ba-note' }, _('Пакет пока не найден в фиде. Сначала нужно опубликовать новую сборку фида.')) : '',
+				zmBroken ? E('div', { 'class': 'ba-note' }, _('Пакет Zapret Manager стоит, но сама панель не создалась. Обычно так бывает, когда во время установки не было интернета. Нажмите кнопку, чтобы завершить установку, роутеру понадобится доступ в интернет.')) : '',
+				!zmFeed && !zmBroken ? E('div', { 'class': 'ba-note' }, _('Пакет пока не найден в фиде. Сначала нужно опубликовать новую сборку фида.')) : '',
 				zmLog,
 				E('div', { 'class': 'ba-note' }, [
 					_('Исходный проект'), ' ',

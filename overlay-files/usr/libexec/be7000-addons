@@ -99,6 +99,23 @@ install_hf() {
 
 install_zm() {
 	running && { echo "an install is already running"; return 1; }
+	# package is there but the panel was never created: the installer step
+	# of the package failed (no network at that moment, for example), so
+	# run just that step again
+	if apk info -e zapret-manager-beam >/dev/null 2>&1 && [ ! -x /opt/zapret-manager-luci/backend.sh ]; then
+		(
+			echo "zapret-manager-beam-install"
+			/usr/libexec/zapret-manager-beam-install 2>&1
+			rc=$?
+			rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache 2>/dev/null
+			/etc/init.d/rpcd reload >/dev/null 2>&1 || /etc/init.d/rpcd restart >/dev/null 2>&1
+			[ $rc = 0 ] && echo "=== done" || echo "=== failed, exit code $rc"
+			rm -f $PID
+		) > $LOG 2>&1 < /dev/null &
+		echo $! > $PID
+		echo started
+		return 0
+	fi
 	(
 		tmp=$(mktemp -d)
 		echo "apk update"
