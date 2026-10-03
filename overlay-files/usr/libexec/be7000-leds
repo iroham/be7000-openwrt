@@ -142,6 +142,11 @@ aiot)
 	;;
 sync)
 	seed_wlan2g
+	# not driven here and not set up on the stock page: it must not stay lit
+	# from an earlier choice
+	if [ -d $AIOT ] && ! used_by_user white:aiot && ! polled "$(aiot_source)"; then
+		led_off
+	fi
 	;;
 watch)
 	watch_aiot
