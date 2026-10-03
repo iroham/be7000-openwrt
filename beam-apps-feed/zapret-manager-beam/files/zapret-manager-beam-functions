@@ -66,3 +66,40 @@ zm_update_status() {
 zm_update_action() {
 	job_start zm_update _beam_pkg_install zapret-manager-beam
 }
+
+# The panel removes itself from a script that rpcd started, and that script
+# ends with "rpcd restart". procd stops the whole instance, the script with it,
+# so rpcd is never started again and LuCI loses its login. Reload instead:
+# rpcd rescans its plugins on SIGHUP and nothing gets killed.
+system_uninstall_panel() {
+	local script="/tmp/zm_uninstall_panel.sh" j
+	if j="$(_zm_busy_job)"; then
+		printf '{"error":"%s"}\n' "$(esc "идёт операция «$j» — дождитесь её окончания и удалите панель")"
+		return 1
+	fi
+	cat > "$script" << 'ZM_UNINSTALL_EOF'
+sleep 1
+/opt/zapret-manager-luci/backend.sh redbtn_panel_gone >/dev/null 2>&1
+rm -rf /opt/zapret-manager-luci /usr/libexec/rpcd/zapret-manager \
+	/usr/share/luci/menu.d/luci-app-zapret-manager.json \
+	/usr/share/rpcd/acl.d/luci-app-zapret-manager.json \
+	/www/luci-static/resources/view/zapret-manager \
+	/www/luci-static/resources/zapret-manager \
+	/www/luci-static/resources/bytetube \
+	/www/luci-static/resources/view/bytetube \
+	/tmp/zapret-manager-luci /tmp/luci-indexcache* /tmp/luci-modulecache/* \
+	/www/zm /www/zm-webui.html /etc/zm-warp-own.conf 2>/dev/null
+[ -s /etc/zm-steer/owned ] || rm -rf /usr/share/zm-redbtn
+if grep -q '/opt/zapret-manager-luci/backend.sh' /etc/crontabs/root 2>/dev/null; then
+	sed -i '\#/opt/zapret-manager-luci/backend.sh#d' /etc/crontabs/root
+	/etc/init.d/cron restart >/dev/null 2>&1
+fi
+uci -q delete uhttpd.zmweb && uci -q commit uhttpd
+/etc/init.d/rpcd reload >/dev/null 2>&1
+/etc/init.d/uhttpd restart >/dev/null 2>&1
+rm -f "$0"
+ZM_UNINSTALL_EOF
+	chmod 0755 "$script"
+	( sh "$script" >/dev/null 2>&1 & )
+	printf '{"ok":true}\n'
+}
