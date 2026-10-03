@@ -141,6 +141,8 @@ watch_aiot() {
 	src="$(aiot_source)"
 	polled "$src" || { aiot_static; exit 0; }
 	[ "$src" = internet ] && every=15
+	# leave at once when the service is stopped, not after the next sleep
+	trap 'kill $! 2>/dev/null; exit 0' TERM INT
 	while :; do
 		show="$(opt aiot_show)"
 		[ "$show" = blink ] || show=on
@@ -155,7 +157,8 @@ watch_aiot() {
 			esac
 			cur="$want"
 		fi
-		sleep $every
+		sleep $every &
+		wait $!
 	done
 }
 
