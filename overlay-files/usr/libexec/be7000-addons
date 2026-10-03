@@ -20,8 +20,24 @@ ver_installed() {
 	apk info "$1" 2>/dev/null | sed -n "s/^$1-\([^ ]*\) description:.*/\1/p" | head -1
 }
 
+# /var is a tmpfs, so after a boot apk has no package index until something
+# runs apk update. Do it once here, at most every ten minutes.
+refresh_index() {
+	local stamp=/tmp/be7000-addons.indexed now
+	now=$(date +%s)
+	[ -e $stamp ] && [ $((now - $(cat $stamp 2>/dev/null || echo 0))) -lt 600 ] && return 0
+	echo $now > $stamp
+	timeout 25 apk update >/dev/null 2>&1
+}
+
 ver_feed() {
-	apk search -x "$1" 2>/dev/null | sed -n "s/^$1-//p" | head -1
+	local v
+	v=$(apk search -x "$1" 2>/dev/null | sed -n "s/^$1-//p" | head -1)
+	if [ -z "$v" ]; then
+		refresh_index
+		v=$(apk search -x "$1" 2>/dev/null | sed -n "s/^$1-//p" | head -1)
+	fi
+	echo "$v"
 }
 
 status_hf() {
@@ -88,7 +104,7 @@ install_zm() {
 		echo "apk update"
 		apk update 2>&1 | tail -3
 		echo "apk fetch zapret-manager-beam"
-		if ! apk fetch --recursive --output "$tmp" zapret-manager-beam; then
+		if ! apk fetch --output "$tmp" zapret-manager-beam; then
 			rm -rf "$tmp"
 			echo "=== failed, package download or signature check failed"
 			exit 1

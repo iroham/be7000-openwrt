@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=zapret-manager-beam
 PKG_VERSION:=9.90.2.06
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/StressOzz/Zapret-Manager.git
@@ -50,6 +50,20 @@ endef
 define Package/zapret-manager-beam/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] || /usr/libexec/zapret-manager-beam-install
+exit 0
+endef
+
+define Package/zapret-manager-beam/postrm
+#!/bin/sh
+# what the upstream installer and our patch step wrote outside the package
+[ -z "$${IPKG_INSTROOT}" ] || exit 0
+rm -rf /opt/zapret-manager-luci /usr/bin/zmsA /www/zm /www/luci-static/resources/view/zapret-manager
+rm -rf /usr/lib/zapret-manager* /etc/zapret_manager_expert_mode* /tmp/zapret-manager* /tmp/luci-indexcache* /tmp/luci-modulecache
+if grep -q zapret-manager-luci /etc/crontabs/root 2>/dev/null; then
+	sed -i '/zapret-manager-luci/d' /etc/crontabs/root
+	/etc/init.d/cron restart >/dev/null 2>&1
+fi
+/etc/init.d/rpcd reload >/dev/null 2>&1 || true
 exit 0
 endef
 

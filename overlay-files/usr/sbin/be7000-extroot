@@ -309,7 +309,10 @@ cmd_boot_sync() {
 		marker=/etc/.be7000_overlay_retry
 		bigdev="$(uci -q get fstab.bigoverlay.device || true)"
 		bigen="$(uci -q get fstab.bigoverlay.enabled || true)"
-		if [ "${bigen:-0}" = 1 ] && [ -n "$bigdev" ] && [ -e "$bigdev" ] && [ ! -e "$marker" ]; then
+		# bigoverlay's own switch and failure flag count too: with the volume
+		# switched off or a failed migration, the overlay is not there to use
+		if [ "$(uci -q get bigoverlay.main.enabled)" = 1 ] && [ ! -e /etc/bigoverlay.failed ] &&
+			[ "${bigen:-0}" = 1 ] && [ -n "$bigdev" ] && [ -e "$bigdev" ] && [ ! -e "$marker" ]; then
 			touch "$marker"
 			sync
 			logger -t be7000-extroot "fstab was restored after early boot, rebooting once to use $bigdev"
