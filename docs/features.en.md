@@ -73,7 +73,7 @@ The full list of changes is in [CHANGELOG.en.md](../CHANGELOG.en.md).
 
 - Moving settings and packages to a USB disk with one button on System, Storage.
 - Docker with ready-made container sets (AdGuard Home, Home Assistant, Portainer and more) on Services, "Docker: stacks". The firewall for the containers is set up by itself, including the networks of compose stacks, and Docker works together with Hybrid Failover.
-- LEDs: the amber network LED shows Wi-Fi 2.4 GHz traffic, the white AIoT LED is tied to the state of a process, the internet or a command. System, LEDs page, the rest on the LED Configuration page.
+- LEDs: the LED Configuration page has a State (Beam WRT) trigger, any LED can show a process, an address or the result of a command. The amber network LED shows Wi-Fi 2.4 GHz traffic.
 - The Nimbus theme.
 - The interface in Russian, English and Chinese.
 - UPnP, off by default.

@@ -73,7 +73,7 @@ IPQ9554 有一个单独的网络模块，叫 PPE。它自己就能做路由和 N
 
 - 在 "系统, 存储" 里一键把设置和软件包移到 USB 硬盘。
 - Docker 和现成的容器组合（AdGuard Home、Home Assistant、Portainer 等），在 "服务, Docker 堆栈" 里。容器的防火墙会自动设置，包括 compose 堆栈使用的网络，并且可以和 Hybrid Failover 一起使用。
-- 指示灯：琥珀色网络灯显示 2.4 GHz Wi-Fi 流量，白色 AIoT 灯绑定到进程、互联网或命令的状态。系统，指示灯 页面，其余在 LED 配置页面。
+- 指示灯：LED 配置页面新增触发器 状态（Beam WRT），任何指示灯都可以显示进程、地址或命令的结果。琥珀色网络灯显示 2.4 GHz Wi-Fi 流量。
 - Nimbus 主题。
 - 俄文、英文和中文界面。
 - UPnP，默认关闭。

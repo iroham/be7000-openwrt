@@ -1055,3 +1055,33 @@ msgstr "Here the AIoT LED is tied to a state: a process running, an address answ
 
 msgid "Работа процесса. Горит, пока в системе есть процесс с таким именем, например hybrid-failover или sing-box. Проверка каждые пять секунд."
 msgstr "A process running. Lit while a process with that name exists, for example hybrid-failover or sing-box. Checked every five seconds."
+
+msgid "Состояние (Beam WRT)"
+msgstr "State (Beam WRT)"
+
+msgid "Светодиод показывает, выполнено ли условие: работает ли процесс, отвечает ли адрес или завершилась ли команда с кодом 0. Выполненное условие можно показать горением или миганием, а можно перевернуть."
+msgstr "The LED shows whether a condition holds: a process is running, an address answers or a command exits with code 0. A condition that holds can be shown as lit or blinking, and the logic can be turned around."
+
+msgid "Что проверять"
+msgstr "What to check"
+
+msgid "Доступность адреса"
+msgstr "An address answering"
+
+msgid "Например hybrid-failover или sing-box. Проверка каждые пять секунд."
+msgstr "For example hybrid-failover or sing-box. Checked every five seconds."
+
+msgid "Проверяется командой ping раз в 15 секунд."
+msgstr "Checked with ping every 15 seconds."
+
+msgid "Выполняется раз в пять секунд от имени root. Светодиод показывает, завершилась ли она с кодом 0."
+msgstr "Runs every five seconds as root. The LED shows whether it exited with code 0."
+
+msgid "Светодиод показывает, что условие не выполнено. Удобно для сигнала о неполадке."
+msgstr "The LED shows that the condition does not hold. Handy as a fault signal."
+
+msgid "Горит, мс"
+msgstr "On, ms"
+
+msgid "Не горит, мс"
+msgstr "Off, ms"
