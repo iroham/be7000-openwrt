@@ -46,11 +46,13 @@ cleanup() {
 stock_root() {
 	local n dev dir
 	ROOT=
+	SAW_VOL=
 	[ -n "$BE7000_STOCK_ROOT" ] && { ROOT="$BE7000_STOCK_ROOT"; return 0; }
 	[ -e /overlay/sec_cfg/data.vol ] && { ROOT=/overlay; return 0; }
 	for n in /sys/class/ubi/ubi*_*/name; do
 		[ -e "$n" ] || continue
 		case "$(cat "$n")" in cfg|data) ;; *) continue ;; esac
+		SAW_VOL=1
 		dev=/dev/$(basename "$(dirname "$n")")
 		dir="$(mount | awk -v d="$dev" '$1 == d { print $3; exit }')"
 		if [ -n "$dir" ]; then
@@ -86,7 +88,12 @@ open_stock() {
 	local vol
 	command -v cryptsetup >/dev/null || die "cryptsetup is missing"
 	mkdir -p $WORK/mnt
-	stock_root || die "no stock settings found (sec_cfg/data.vol), be7000-stock-import diag shows what this router sees"
+	if ! stock_root; then
+		if [ -n "$SAW_VOL" ]; then
+			die "the settings volume of stock is there but holds no sec_cfg/data.vol: stock was never set up, or its settings were erased (a stock reset, or an older Beam WRT that formatted the partition); be7000-stock-import diag shows what is there"
+		fi
+		die "no volume named cfg or data on the settings partition (mtd overlay); be7000-stock-import diag shows what this router sees"
+	fi
 	vol="$ROOT/sec_cfg/data.vol"
 	[ -s "$vol" ] || vol="$ROOT/usr/sec_cfg/data.vol"
 	[ -s "$vol" ] || die "no stock settings found (sec_cfg/data.vol), be7000-stock-import diag shows what this router sees"
