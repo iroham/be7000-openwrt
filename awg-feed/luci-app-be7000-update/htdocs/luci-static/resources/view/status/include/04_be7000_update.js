@@ -38,7 +38,8 @@ function lang() {
 }
 
 return baseclass.extend({
-	title: '',
+	// the page reads the title before it calls render, so it cannot be set there
+	title: TEXT[lang()].title,
 
 	load: function() {
 		return L.resolveDefault(callStatus(), {});
@@ -51,7 +52,6 @@ return baseclass.extend({
 
 		var tx = TEXT[lang()];
 		var cur = (st.installed && st.installed.version) || '';
-		this.title = tx.title;
 
 		var rows = [
 			E('tr', { 'class': 'tr' }, [ E('td', { 'class': 'td left', 'width': '33%' }, tx.installed), E('td', { 'class': 'td left' }, cur) ]),
