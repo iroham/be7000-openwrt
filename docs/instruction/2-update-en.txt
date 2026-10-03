@@ -66,7 +66,7 @@ Regular update
 
 From the web interface
 
-Since 1.2.6 there is a System, Build update page. It checks GitHub for a newer version and shows what is in it. With one button it downloads the image, checks the checksum and updates the router keeping the settings. From the console be7000-update check and be7000-update apply do the same. Before 1.4.0 this menu entry may show in Russian as "Обновление сборки".
+Since 1.2.6 there is a System, Build update page. It checks GitHub for a newer version and shows what is in it. With one button it downloads the image, checks the checksum and updates the router keeping the settings. From the console be7000-update check and be7000-update apply do the same. Before 1.4.0 this menu entry may show in Russian as "Обновление сборки". The router tells you about a new release by itself. It checks GitHub once a day and shows a button in the top bar and a block on Status, Overview. The check can be turned off on the same page.
 
 If you do not have this page yet, install it from the feed with apk add luci-app-be7000-update. You need 1.2.5 or newer for that. The firmware version is written in /etc/be7000-release. Without this file the firmware counts as self-built and does not offer itself updates.
 
