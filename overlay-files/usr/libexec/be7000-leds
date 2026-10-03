@@ -2,8 +2,7 @@
 # Indicator roles of Beam WRT that the stock LED page cannot express.
 #
 #   status         JSON for the LuCI page
-#   aiot on|off    on gives the white AIoT LED back to Hybrid Failover (the
-#                  default), off leaves it dark
+#   aiot off       leave the white AIoT LED dark and unmanaged (the default)
 #   sync           put the amber 2.4 GHz LED into /etc/config/system once,
 #                  set the fixed AIoT mode
 #   watch          keeps the AIoT LED in step with a polled source
@@ -16,11 +15,10 @@
 # entry in /etc/config/system is left alone.
 #
 # What the AIoT LED shows (be7000.leds.aiot_source):
-#   hf         Hybrid Failover runs                 (default)
 #   service    a process is running                 aiot_service
 #   internet   a host answers a ping                aiot_target
 #   command    a command exits with 0               aiot_cmd
-#   off        not managed here
+#   off        not managed here                     (default)
 # and how: aiot_show on|blink, aiot_invert 0|1, aiot_on_ms and aiot_off_ms
 # for blinking.
 
@@ -60,22 +58,17 @@ seed_wlan2g() {
 	set_cfg wlan2g_seeded 1
 }
 
-hf_up() {
-	[ -x /usr/sbin/hybrid-failover ] && pidof hybrid-failover >/dev/null 2>&1 &&
-		nft list table inet hybrid_failover >/dev/null 2>&1
-}
-
 aiot_source() {
 	local src
 	src="$(opt aiot_source)"
 	case "$src" in
-	hf|service|internet|command|off) echo "$src" ;;
-	*) echo hf ;;
+	service|internet|command) echo "$src" ;;
+	*) echo off ;;
 	esac
 }
 
 polled() {
-	case "$1" in hf|service|internet|command) return 0 ;; esac
+	case "$1" in service|internet|command) return 0 ;; esac
 	return 1
 }
 
@@ -97,7 +90,6 @@ led_blink() {
 
 cond() {
 	case "$1" in
-	hf) hf_up ;;
 	service) [ -n "$(opt aiot_service)" ] && pidof "$(opt aiot_service)" >/dev/null 2>&1 ;;
 	internet) ping -c1 -W2 "$(opt aiot_target)" >/dev/null 2>&1 ;;
 	command) [ -n "$(opt aiot_cmd)" ] && sh -c "$(opt aiot_cmd)" >/dev/null 2>&1 ;;
@@ -139,17 +131,13 @@ watch_aiot() {
 
 case "$1" in
 status)
-	printf '{"hf":%s,"aiot_on":%s,"aiot_busy":%s}\n' \
-		$([ -x /usr/sbin/hybrid-failover ] && echo true || echo false) \
+	printf '{"aiot_on":%s,"aiot_busy":%s}\n' \
 		$([ "$(cat $AIOT/brightness 2>/dev/null)" = 1 ] && echo true || echo false) \
 		$(used_by_user white:aiot && echo true || echo false)
 	;;
 aiot)
-	case "$2" in
-	on) uci -q delete be7000.leds.aiot_source; uci -q commit be7000 ;;
-	off) set_cfg aiot_source off ;;
-	*) echo "usage: $0 aiot on|off"; exit 1 ;;
-	esac
+	[ "$2" = off ] || { echo "usage: $0 aiot off (choose a source on the page System, LEDs)"; exit 1; }
+	set_cfg aiot_source off
 	/etc/init.d/be7000-leds restart >/dev/null 2>&1
 	;;
 sync)
@@ -165,7 +153,7 @@ apply)
 	/etc/init.d/be7000-leds restart >/dev/null 2>&1
 	;;
 *)
-	echo "usage: $0 status | aiot on|off | sync | watch | polled | apply"
+	echo "usage: $0 status | aiot off | sync | watch | polled | apply"
 	exit 1
 	;;
 esac

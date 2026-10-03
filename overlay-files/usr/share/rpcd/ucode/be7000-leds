@@ -5,7 +5,7 @@ import { cursor } from 'uci';
 
 const BIN = '/usr/libexec/be7000-leds';
 
-const SOURCES = [ 'hf', 'service', 'internet', 'command', 'off' ];
+const SOURCES = [ 'service', 'internet', 'command', 'off' ];
 
 function run(args) {
 	let fd = popen(`${BIN} ${args} 2>&1`, 'r');
@@ -27,7 +27,7 @@ return {
 				let st;
 				try { st = json(r.out); } catch (e) { return { error: r.out }; }
 				let sec = cursor().get_all('be7000', 'leds') ?? {};
-				st.source = (index(SOURCES, sec.aiot_source) >= 0) ? sec.aiot_source : 'hf';
+				st.source = (index(SOURCES, sec.aiot_source) >= 0) ? sec.aiot_source : 'off';
 				st.service = sec.aiot_service ?? '';
 				st.target = sec.aiot_target ?? '1.1.1.1';
 				st.cmd = sec.aiot_cmd ?? '';

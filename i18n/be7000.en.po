@@ -1046,3 +1046,12 @@ msgstr "A condition that holds can be shown as lit or blinking, and the logic ca
 
 msgid "Если вы сами назначили светодиод AIoT на странице Индикаторы, Beam WRT его не трогает, а здесь он помечен как занятый. Чтобы вернуть управление сюда, удалите свою настройку на той странице."
 msgstr "If you set the AIoT LED up yourself on the LED Configuration page, Beam WRT leaves it alone and it is marked as in use here. To hand control back, delete your entry on that page."
+
+msgid "Светодиод показывает, выполнено ли условие. Выберите условие и то, как оно будет выглядеть. По умолчанию светодиод свободен."
+msgstr "The LED shows whether a condition holds. Choose the condition and how it looks. By default the LED is free."
+
+msgid "Здесь светодиод AIoT привязывается к состоянию: работе процесса, доступности адреса или результату команды. Всё, что ядро умеет само, например трафик интерфейса, мигание или пульс, настраивается для любого светодиода на странице"
+msgstr "Here the AIoT LED is tied to a state: a process running, an address answering or the result of a command. Everything the kernel can do by itself, such as interface traffic, blinking or a heartbeat, is set for any LED on the page"
+
+msgid "Работа процесса. Горит, пока в системе есть процесс с таким именем, например hybrid-failover или sing-box. Проверка каждые пять секунд."
+msgstr "A process running. Lit while a process with that name exists, for example hybrid-failover or sing-box. Checked every five seconds."
