@@ -285,6 +285,9 @@ Plug in a disk, mount it and give the path: be7000-docker setup --data-root /mnt
 		apk add $PKGS || die "$(t "Не удалось поставить пакеты. Проверьте apk update." "Could not install the packages. Check apk update." "软件包安装失败。请检查 apk update。")"
 	fi
 
+	# Dockerman's own texts; not fatal when the feed does not have them yet
+	apk add luci-i18n-dockerman-ru luci-i18n-dockerman-zh-cn >/dev/null 2>&1 || true
+
 	mkdir -p "$dr"
 	local fs
 	fs="$(fs_type_of "$dr")"
