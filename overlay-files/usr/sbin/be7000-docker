@@ -287,13 +287,26 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
+# Everything needed to see why a container has no network, in one paste
+cmd_diag() {
+	echo "== release"; grep -E '^(VERSION|KERNEL)=' /etc/be7000-release 2>/dev/null
+	echo "== firewall (docker, wan)"; uci -q show firewall | grep -E "docker|zone.*wan|\.wan\b|forwarding" | head -60
+	echo "== ip_forward"; cat /proc/sys/net/ipv4/ip_forward
+	echo "== interfaces"; ip -br a 2>/dev/null | grep -E "docker|br-|veth"
+	echo "== nft docker"; nft list ruleset 2>/dev/null | grep -n -i docker | head -40
+	echo "== iptables"; iptables -V 2>&1 | head -1; iptables -S FORWARD 2>&1 | head -20
+	echo "== dockerd"; /etc/init.d/dockerd running >/dev/null 2>&1 && echo running || echo stopped
+	logread 2>/dev/null | grep -iE "dockerd|docker" | tail -15
+}
+
 case "$ACTION" in
+diag)      cmd_diag ;;
 status)    cmd_status ;;
 setup)     cmd_setup "$DR" "$YES" ;;
 portainer) cmd_portainer "$YES" ;;
 firewall)  cmd_firewall "$CHECK" ;;
 *)
-	echo "usage: be7000-docker {status|setup [--data-root PATH] [--yes]|portainer [--yes]|firewall [--check]}"
+	echo "usage: be7000-docker {status|setup [--data-root PATH] [--yes]|portainer [--yes]|firewall [--check]|diag}"
 	exit 1
 	;;
 esac
