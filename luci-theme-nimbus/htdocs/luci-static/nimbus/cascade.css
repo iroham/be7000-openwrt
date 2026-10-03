@@ -1932,6 +1932,12 @@ input[type="reset"]:hover {
 #cbi-dhcp-__leases6__ .td,
 .table.leases .td,
 .table.leases6 .td { overflow-wrap: anywhere; }
+/* Dockerman overview: values like the Plugins JSON string have no spaces and
+   pushed the table out of its card */
+#cbi-json-vb .td:last-child,
+#cbi-json-ib .td:last-child { overflow-wrap: anywhere; }
+#cbi-json-vb .td:first-child,
+#cbi-json-ib .td:first-child { white-space: nowrap; }
 
 .table .tr:not(.table-titles):not(.cbi-section-table-titles) > .td:first-child { padding-left: 4px; }
 .table .tr > .th:first-child { padding-left: 4px; }
