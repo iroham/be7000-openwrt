@@ -5,6 +5,8 @@
 
 var callStatus = rpc.declare({ object: 'be7000-docker', method: 'status' });
 var callDf = rpc.declare({ object: 'be7000-docker', method: 'df' });
+var callFwStatus = rpc.declare({ object: 'be7000-docker', method: 'firewall_status' });
+var callFwFix = rpc.declare({ object: 'be7000-docker', method: 'firewall_fix' });
 var callPrune = rpc.declare({ object: 'be7000-docker', method: 'prune', params: ['what'] });
 var callStacks = rpc.declare({ object: 'be7000-docker', method: 'stacks' });
 var callRead = rpc.declare({ object: 'be7000-docker', method: 'stack_read', params: ['name'] });
@@ -92,7 +94,8 @@ return view.extend({
 	load: function() {
 		return Promise.all([
 			callStatus().catch(function() { return {}; }),
-			callStacks().catch(function() { return {}; })
+			callStacks().catch(function() { return {}; }),
+			callFwStatus().catch(function() { return {}; })
 		]);
 	},
 
@@ -158,6 +161,7 @@ return view.extend({
 		var self = this;
 		var st = (data[0] && data[0].data) || {};
 		var stacks = (data[1] && data[1].data) || [];
+		var fw = (data[2] && data[2].data) || {};
 
 		var head = [];
 		if (!st.installed) {
@@ -171,6 +175,16 @@ return view.extend({
 		}
 		else {
 			head.push(E('p', {}, _('Docker %s работает. Контейнеры, образы, сети и тома по отдельности живут в разделе Сервисы, Dockerman.').format(st.version)));
+			if (fw.configured === false)
+				head.push(E('div', { 'class': 'alert-message warning' }, [
+					E('p', {}, _('Контейнеры сейчас не выходят в интернет, и опубликованные порты, например веб-интерфейс qBittorrent, не открываются из локальной сети. Файрволу роутера нужно разрешить пересылку между зоной docker, интернетом и локальной сетью.')),
+					E('button', {
+						'class': 'cbi-button cbi-button-action important',
+						'click': ui.createHandlerFn(self, function() {
+							return busy(_('Настраиваю файрвол'), callFwFix(), function() { window.setTimeout(function() { window.location.reload(); }, 2500); });
+						})
+					}, _('Разрешить'))
+				]));
 		}
 
 		var table = E('table', { 'class': 'table' }, [

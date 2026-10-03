@@ -720,3 +720,12 @@ msgstr "Once the service is on, it takes over the router DNS and turns IPv6 off 
 
 msgid "Исходники и подробная документация на GitHub"
 msgstr "Sources and detailed docs on GitHub"
+
+msgid "Контейнеры сейчас не выходят в интернет, и опубликованные порты, например веб-интерфейс qBittorrent, не открываются из локальной сети. Файрволу роутера нужно разрешить пересылку между зоной docker, интернетом и локальной сетью."
+msgstr "Containers cannot reach the internet right now, and published ports, the qBittorrent web interface for example, do not open from the local network. The router firewall has to allow forwarding between the docker zone, the internet and the local network."
+
+msgid "Разрешить"
+msgstr "Allow"
+
+msgid "Настраиваю файрвол"
+msgstr "Setting up the firewall"
