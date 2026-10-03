@@ -184,6 +184,9 @@ cmd_firewall() {
 	fi
 	uci -q commit firewall
 	/etc/init.d/firewall reload >/dev/null 2>&1 || true
+	# br_netfilter comes with Docker and switches these on, see
+	# /etc/sysctl.d/99-be7000-bridge-nf.conf
+	sysctl -q -p /etc/sysctl.d/99-be7000-bridge-nf.conf >/dev/null 2>&1 || true
 	if [ "$restart" = 1 ]; then trap - EXIT; /etc/init.d/dockerd start; fi
 
 	t "Файрвол настроен. Контейнеры выходят в интернет через $wan, а из локальной сети открываются опубликованные порты." "Firewall is set. Containers reach the internet through $wan, and published ports open from the local network." "防火墙已设置。容器通过 $wan 访问互联网，局域网可以访问已发布的端口。"
