@@ -12,7 +12,7 @@ Beam WRT is OpenWrt-based firmware for the Xiaomi BE7000 router. This page cover
 
 **Its own package feed.** More than 600 packages install with apk right on the router. Among them are modem drivers, Docker, tcpdump, htop and much more. AmneziaWG is already built into the firmware. hybrid-failover lives in a separate feed and updates itself there as soon as a new version is out. It installs with one button on the Services, Add-ons page, which also explains what it is and why.
 
-**One-click updates.** The System, Build update page finds a new version, checks its checksum and installs it keeping your settings. Packages you installed yourself come back automatically after the update.
+**One-click updates.** The System, Build update page finds a new version, checks its checksum and installs it keeping your settings. Packages you installed yourself come back automatically after the update. The router tells you about a new release by itself, with a button in the top bar and a block on Status, Overview.
 
 **The factory firmware is always close.** Beam WRT takes one slot in flash, the factory firmware stays in the other. You can go back to it with a button. If a new version does not boot after the install, the router goes back to the factory firmware by itself.
 
@@ -72,7 +72,7 @@ The full list of changes is in [CHANGELOG.en.md](../CHANGELOG.en.md).
 ## What else the firmware has
 
 - Moving settings and packages to a USB disk with one button on System, Storage.
-- Docker with ready-made container sets (AdGuard Home, Home Assistant, Portainer and more) on Services, "Docker: stacks".
+- Docker with ready-made container sets (AdGuard Home, Home Assistant, Portainer and more) on Services, "Docker: stacks". The firewall for the containers is set up by itself, including the networks of compose stacks, and Docker works together with Hybrid Failover.
 - The Nimbus theme.
 - The interface in Russian, English and Chinese.
 - UPnP, off by default.

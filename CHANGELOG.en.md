@@ -2,6 +2,21 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.4.3**, October 3, 2026.
+- The router tells you about a new version by itself. A button appears in the top bar and a block with an install button on Status, Overview. The check runs once a day and has a switch on the Build update page.
+- Services, Docker: stacks now has a description of what Docker is and how it works here. If containers cannot reach the internet, there is a button at the top that fixes it. The commands `be7000-docker firewall` and `be7000-docker diag` do the same.
+- Zapret Manager on the Add-ons page has a Finish install button. It appears when the package is installed but the panel itself was not created, for example because the internet was down during the install.
+- Docker containers had no internet and their ports did not open from the local network. The docker zone in the firewall had no docker0 device, so container packets were dropped. `be7000-docker setup` and `firewall` now set what is needed, and the bridges of user networks and compose stacks are added and removed automatically.
+- After Docker was installed, some devices on the network could no longer open sites that go through Hybrid Failover. Docker turned on `bridge-nf-call-iptables`, it is now kept off.
+- Hybrid Failover 1.7.54 steers containers like the other devices on the network. With an older version the containers get public DNS servers, otherwise they received service addresses they cannot reach.
+- Removing Zapret Manager from its own panel stopped `rpcd` and left its cron jobs behind. `rpcd` now keeps running, and removing the package cleans up its files too.
+- Switching to MLO could be cut off by a timeout before the fallback to two radios, leaving 5 GHz off. The time allowance is larger.
+- Routers updated from 1.4.1 did not get the new feeds in the repository list. The missing lines are now added at boot.
+- If Hybrid Failover could not start within the allowed time after an update, direct DNS could stay for good. The switch back is now retried on the next boot.
+- After an update with bigoverlay turned off, the router could reboot once more and come up on factory settings.
+- The Zapret Manager button on the Add-ons page could stay inactive after a reboot until `apk update` was run by hand. The index now refreshes by itself. Installing Zapret Manager no longer downloads all its dependencies as well.
+- Translations of the Add-ons page into English and Chinese were added. The new-version block on Overview shows its title.
+
 **1.4.2**, October 3, 2026.
 - Zapret Manager was added to Services, Add-ons. The manager is installed separately and does not enable anything until the user chooses it.
 - Zapret, Zapret2, ByeDPI, NetShift, sing-box, hev-socks5-tunnel and the AmneziaWG interface are built for Beam WRT and installed from its signed feed.

@@ -2,6 +2,21 @@
 
 [Русский](CHANGELOG.md) · [English](CHANGELOG.en.md)
 
+**1.4.3**，2026 年 10 月 3 日。
+- 路由器会自己提示有新版本。顶部栏会出现提示按钮，状态，概览页面会出现带安装按钮的区块。每天检查一次，开关在固件更新页面。
+- 服务，Docker: 堆栈 页面新增了说明，介绍 Docker 是什么以及在这里如何使用。如果容器无法访问互联网，页面顶部有一个修复按钮。命令 `be7000-docker firewall` 和 `be7000-docker diag` 的作用相同。
+- 扩展程序页面上的 Zapret Manager 新增了 完成安装 按钮。当软件包已安装但面板本身没有创建时会出现，例如安装时没有网络。
+- Docker 容器无法访问互联网，容器端口也无法从局域网打开。防火墙里的 docker 区域没有 docker0 设备，容器的数据包被丢弃。现在 `be7000-docker setup` 和 `firewall` 会设置好，用户网络和 compose 堆栈使用的网桥会自动加入和移除。
+- 安装 Docker 后，网络中的部分设备打不开经由 Hybrid Failover 的网站。原因是 Docker 开启了 `bridge-nf-call-iptables`，现在保持关闭。
+- Hybrid Failover 1.7.54 会像对待网络中的其他设备一样处理容器。旧版本下会给容器设置公共 DNS 服务器，否则容器会拿到无法访问的内部地址。
+- 从 Zapret Manager 自己的面板中删除它会停止 `rpcd`，并留下 cron 任务。现在 `rpcd` 会继续运行，删除软件包时也会清理它的文件。
+- 切换到 MLO 时，可能在回退到两个射频之前就因超时被中断，导致 5 GHz 关闭。现在预留的时间更长。
+- 从 1.4.1 更新的路由器没有获得软件源列表中的新条目。现在缺少的条目会在启动时补上。
+- 更新后如果 Hybrid Failover 没能在规定时间内启动，直连 DNS 可能一直保留。现在下次启动时会重试恢复。
+- 关闭 bigoverlay 的情况下更新后，路由器可能多重启一次并以出厂设置启动。
+- 扩展程序页面上的 Zapret Manager 按钮在重启后可能一直不可用，需要手动执行 `apk update`。现在索引会自动刷新。安装 Zapret Manager 时也不再下载它的全部依赖。
+- 新增扩展程序页面的英文和中文翻译。概览页面中的新版本区块现在会显示标题。
+
 **1.4.2**，2026 年 10 月 3 日。
 - 服务，扩展程序 页面新增了 Zapret Manager。安装管理器本身不会自动启用任何绕过方案，只有用户选择后才会安装和启用对应组件。
 - Zapret、Zapret2、ByeDPI、NetShift、sing-box、hev-socks5-tunnel 和 AmneziaWG 界面都为 Beam WRT 单独构建，并从签名软件源安装。

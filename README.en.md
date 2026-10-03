@@ -13,7 +13,7 @@ Beam WRT is fresh OpenWrt from main for the Xiaomi BE7000 (RC06 board, IPQ9554 S
 
 Since 1.4.0 it is based on OpenWrt main (commit d958caf, September 29, 2026) with the kravasuper port on top, as the patch series in patches/port. Up to 1.4.0 the build sat on the kravasuper branch xiaomi_be7000, commit 790d036a. On top of it I added fixes to the Ethernet driver, without which the system on my board never got as far as the network ([patches.en.md](docs/patches.en.md)), and a set of services that make life with two slots and the factory bootloader predictable.
 
-The current version is **1.4.2**. Images are in [Releases](../../releases), checksums in sha256sums.txt. How to install it is in the section [Installation, updating, rollback](#installation-updating-rollback).
+The current version is **1.4.3**. Images are in [Releases](../../releases), checksums in sha256sums.txt. How to install it is in the section [Installation, updating, rollback](#installation-updating-rollback).
 
 ## Contents
 
@@ -83,6 +83,8 @@ Services that are not in regular OpenWrt live in overlay-files.
 | be7000-extroot | moves /overlay to a USB disk and keeps it there across updates |
 | be7000-ppe | copies the PPE bridge offload choice into the module options before the module loads |
 | be7000-slots | shows what the slots hold and switches the boot, the System, Slots page |
+| be7000-docker | installs Docker on a disk and sets up the firewall and DNS for the containers, commands setup, firewall, diag |
+| be7000-update | checks for and installs new versions, tells you once a day about a new release |
 
 Packages install out of the box. The official mirror builds qualcommbe for cortex-a53, while this build targets cortex-a73, so there is no aarch64_cortex-a73 directory on the mirror and all the common feeds return 404. The image has its own feed configured, built from the same tree and signed with a key the image already trusts. After `apk update` there are more than 600 packages available, including nano, htop, tcpdump, strace, tmux, rsync, jq, modemmanager with USB modem drivers, ksmbd and ttyd. Kernel modules are in a separate feed, because on the mirror they are built for a different kernel. One more separate feed holds hybrid-failover, it rebuilds itself with every new release.
 
