@@ -20,6 +20,9 @@
 - Services, Dockerman now speaks Russian and Chinese, the translations are installed together with Docker. Long values on the Overview page no longer stick out of the table.
 - In MLO mode the 5 GHz Wi-Fi LED stayed dark: it was tied to the interface of one radio, which does not exist in MLO. It now switches to the shared MLO interface with the mode and goes back.
 - When the stock settings import fails it says why, and `be7000-stock-import diag` shows what the router sees on the stock settings partition.
+- The wireless page no longer shows NaN instead of the frequency when the channel is set to auto. The Hybrid Failover running indicator on the Add-ons page no longer lights for the bot alone.
+- If the firewall setup for Docker was interrupted, `dockerd` stayed stopped together with the containers. It now always starts. The daily update check does not run on builds without a version number and writes its state in one piece.
+- The documentation and the Hardware offload page describe MLO, two radios, offload and Docker as tested, the experimental labels are gone. What was not measured is stated separately.
 
 **1.4.2**, October 3, 2026.
 - Zapret Manager was added to Services, Add-ons. The manager is installed separately and does not enable anything until the user chooses it.
