@@ -11,6 +11,78 @@ var callApply = rpc.declare({ object: 'be7000-update', method: 'apply' });
 var callLog = rpc.declare({ object: 'be7000-update', method: 'log' });
 var callAutoSet = rpc.declare({ object: 'be7000-update', method: 'autocheck_set', params: [ 'on' ] });
 
+// The release text on GitHub is Markdown and carries Russian, English and
+// Chinese one after another. Show the part in the language of the page and
+// draw the Markdown that is used there: headings, lists, `code`, **bold**,
+// links. Everything goes through E(), so nothing from the text is ever parsed
+// as HTML.
+function uiLang() {
+	var l = document.documentElement.lang || '';
+	return /^zh/i.test(l) ? 'zh' : /^en/i.test(l) ? 'en' : 'ru';
+}
+
+function blockLang(text) {
+	if (/[㐀-鿿]/.test(text))
+		return 'zh';
+	if (/[Ѐ-ӿ]/.test(text))
+		return 'ru';
+	return 'en';
+}
+
+function inlineMd(text) {
+	var out = [], re = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g, last = 0, m;
+
+	while ((m = re.exec(text)) !== null) {
+		if (m.index > last)
+			out.push(text.slice(last, m.index));
+		var t = m[0];
+		if (t[0] === '`')
+			out.push(E('code', {}, t.slice(1, -1)));
+		else if (t[0] === '*')
+			out.push(E('strong', {}, t.slice(2, -2)));
+		else {
+			var k = t.indexOf('](');
+			out.push(E('a', { 'href': t.slice(k + 2, -1), 'target': '_blank', 'rel': 'noopener' }, t.slice(1, k)));
+		}
+		last = m.index + t.length;
+	}
+	if (last < text.length)
+		out.push(text.slice(last));
+	return out;
+}
+
+function renderNotes(body) {
+	var want = uiLang(), blocks = [], res = [];
+
+	String(body).replace(/\r/g, '').split(/\n\s*\n/).forEach(function(b) {
+		b = b.replace(/^\s+|\s+$/g, '');
+		if (b !== '' && !/^-{3,}$/.test(b))
+			blocks.push(b);
+	});
+
+	var mine = blocks.filter(function(b) { return blockLang(b) === want; });
+	if (mine.length)
+		blocks = mine;
+
+	blocks.forEach(function(b) {
+		var lines = b.split('\n'), h = /^(#{1,4})\s+(.*)$/.exec(lines[0]);
+
+		if (h && lines.length === 1)
+			res.push(E('h4', {}, inlineMd(h[2])));
+		else if (lines.every(function(l) { return /^\s*[-*]\s+/.test(l); }))
+			res.push(E('ul', { 'style': 'margin:.3em 0 .6em 1.2em;padding:0' }, lines.map(function(l) {
+				return E('li', { 'style': 'margin:.25em 0' }, inlineMd(l.replace(/^\s*[-*]\s+/, '')));
+			})));
+		else if (lines.length === 1 && /^Beam WRT \d/.test(lines[0]))
+			res.push(E('h4', { 'style': 'margin:.4em 0' }, inlineMd(lines[0])));
+		else if (lines.length === 1 && lines[0].length < 60 && !/[.:;,\u3002\uff0c\uff1b\uff1a]$/.test(lines[0]))
+			res.push(E('h4', { 'style': 'margin:.9em 0 .3em' }, inlineMd(lines[0])));
+		else
+			res.push(E('p', { 'style': 'margin:.4em 0' }, inlineMd(lines.join(' '))));
+	});
+	return res;
+}
+
 function fmtDate(iso) {
 	if (!iso)
 		return '';
@@ -148,7 +220,7 @@ return view.extend({
 		if (latest && latest.body)
 			notes = E('div', { 'class': 'cbi-section' }, [
 				E('h3', {}, _('Что в %s').format(latest.latest)),
-				E('pre', { 'style': 'white-space:pre-wrap;font-family:inherit' }, latest.body)
+				E('div', { 'class': 'be7000-notes' }, renderNotes(latest.body))
 			]);
 
 		return E('div', { 'id': 'be7000-update' }, [

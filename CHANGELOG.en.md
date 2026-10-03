@@ -4,6 +4,7 @@
 
 **1.4.4**, October 3, 2026.
 - After updating to 1.4.3, a router whose /overlay is on a USB disk with bigoverlay turned off stayed on the small internal partition, and its packages and Hybrid Failover were missing until the router was restarted by hand. The cause was my change in 1.4.3, it stopped the service from restarting onto the USB disk. Now the disk named in the extroot settings decides by itself, and a turned off bigoverlay does not matter.
+- On the Build update page the release text is shown formatted, with headings, lists and highlighted code, and only in the interface language instead of one run of text in three languages.
 
 **1.4.3**, October 3, 2026.
 - The router tells you about a new version by itself. A button appears in the top bar and a block with an install button on Status, Overview. The check runs once a day and has a switch on the Build update page.
