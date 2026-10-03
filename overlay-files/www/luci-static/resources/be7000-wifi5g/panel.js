@@ -413,7 +413,7 @@ return baseclass.extend({
 				// Switching the 5 GHz radios briefly disconnects clients. An
 				// RPC failure during that gap is not a failed mode switch.
 				if (typeof st.available != 'boolean') {
-					if (Date.now() - started < 330000) {
+					if (Date.now() - started < 510000) {
 						window.setTimeout(tick, 3000);
 						return;
 					}

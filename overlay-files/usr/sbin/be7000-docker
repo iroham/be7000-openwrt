@@ -146,7 +146,7 @@ cmd_firewall() {
 	# which only does it at boot and only with the daemon stopped
 	if ! fw_docker_zone_exists; then
 		if [ -x /etc/init.d/dockerd ]; then
-			/etc/init.d/dockerd running >/dev/null 2>&1 && { /etc/init.d/dockerd stop; restart=1; }
+			/etc/init.d/dockerd running >/dev/null 2>&1 && { /etc/init.d/dockerd stop; restart=1; trap "/etc/init.d/dockerd start >/dev/null 2>&1" EXIT; }
 			/etc/init.d/dockerd uciadd >/dev/null 2>&1 || true
 		fi
 		fw_docker_zone_exists || die "$(t "Не получилось создать зону docker. Установите Docker: be7000-docker setup" "Could not create the docker zone. Install Docker first: be7000-docker setup" "无法创建 docker 区域。请先安装 Docker: be7000-docker setup")"
@@ -166,7 +166,7 @@ cmd_firewall() {
 	fi
 	uci -q commit firewall
 	/etc/init.d/firewall reload >/dev/null 2>&1 || true
-	[ "$restart" = 1 ] && /etc/init.d/dockerd start
+	if [ "$restart" = 1 ]; then trap - EXIT; /etc/init.d/dockerd start; fi
 
 	t "Файрвол настроен. Контейнеры выходят в интернет через $wan, а из локальной сети открываются опубликованные порты." "Firewall is set. Containers reach the internet through $wan, and published ports open from the local network." "防火墙已设置。容器通过 $wan 访问互联网，局域网可以访问已发布的端口。"
 }
@@ -246,7 +246,9 @@ Use an ext4 partition or a directory under /overlay if /overlay has already been
 
 	/etc/init.d/dockerd enable >/dev/null 2>&1 || true
 	/etc/init.d/dockerd stop >/dev/null 2>&1 || true
+	trap "/etc/init.d/dockerd start >/dev/null 2>&1" EXIT
 	cmd_firewall 0 || true
+	trap - EXIT
 	/etc/init.d/dockerd start
 
 	echo

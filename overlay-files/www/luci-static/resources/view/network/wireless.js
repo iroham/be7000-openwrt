@@ -140,7 +140,7 @@ function render_radio_status(radioDev, wifiNets) {
 	let frequency = info.frequency > 0 ? '%.03f'.format(info.frequency / 1000) : null;
 	let bitrate = info.bitrate > 0 ? info.bitrate / 1000 : null;
 
-	if (!frequency && channel && radioDev.get('band') == '5g')
+	if (!frequency && channel && !isNaN(+channel) && radioDev.get('band') == '5g')
 		frequency = '%.03f'.format((5000 + 5 * channel) / 1000);
 
 	wifiNets.forEach(wifiNet => {

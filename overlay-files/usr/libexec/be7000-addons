@@ -36,7 +36,7 @@ status_hf() {
 		$([ -n "$bot" ] && echo true || echo false) \
 		$manual \
 		$(running && echo true || echo false) \
-		$(pgrep -f '/usr/sbin/hybrid-failover' >/dev/null 2>&1 && echo true || echo false)
+		$(pgrep -x hybrid-failover >/dev/null 2>&1 && echo true || echo false)
 }
 
 status_zm() {
@@ -75,6 +75,7 @@ install_hf() {
 		rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache 2>/dev/null
 		/etc/init.d/rpcd start >/dev/null 2>&1
 		[ $rc = 0 ] && echo "=== done" || echo "=== failed, apk exit code $rc"
+		rm -f $PID
 	) > $LOG 2>&1 < /dev/null &
 	echo $! > $PID
 	echo started
@@ -99,6 +100,7 @@ install_zm() {
 		rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache 2>/dev/null
 		/etc/init.d/rpcd reload >/dev/null 2>&1 || /etc/init.d/rpcd restart >/dev/null 2>&1
 		[ $rc = 0 ] && echo "=== done" || echo "=== failed, apk exit code $rc"
+		rm -f $PID
 	) > $LOG 2>&1 < /dev/null &
 	echo $! > $PID
 	echo started

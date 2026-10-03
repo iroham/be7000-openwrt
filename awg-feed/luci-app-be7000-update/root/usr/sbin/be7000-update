@@ -122,9 +122,11 @@ do_check() {
 	latest=$(tag_to_version "$tag")
 	cur=$(installed_version)
 	newer "$latest" "$cur" && avail=1
-	cat >"$STATE" <<EOJ
+	# written aside and moved over, a reader never sees half a file
+	cat >"$STATE.new" <<EOJ
 {"checked_at":"$(date +%s)","tag":"$(json_escape "$tag")","latest":"$latest","name":"$(json_escape "$name")","published_at":"$(json_escape "$date")","body":"$(json_escape "$body")","image_url":"$(json_escape "$img_url")","sums_url":"$(json_escape "$sums_url")","image_size":${img_size:-0},"available":$avail}
 EOJ
+	mv "$STATE.new" "$STATE"
 	rm -f "$tmp" "$release"
 }
 
@@ -177,6 +179,9 @@ autocheck_on() {
 watch_loop() {
 	local wait
 	[ "$(installed_version)" = dev ] && exit 0
+	# its own log, so a check in the background cannot wipe the log of an
+	# update that is downloading right now
+	LOG=/tmp/be7000-update-watch.log
 	sleep 240
 	while :; do
 		wait=1800

@@ -89,11 +89,11 @@ return {
 				let mode = req.args?.mode;
 				if (index([ 'single', 'split', 'mlo' ], mode) < 0)
 					mode = req.args?.split ? 'split' : 'single';
-				// takes 20-300 s (firmware reload, wifi reload, MLO check): run
+				// takes 20-480 s (firmware reload, wifi reload, MLO check): run
 				// it detached and let the page poll status
 				// a switch that hangs somewhere must not leave the page waiting forever
 				sh(`touch ${RUN}`);
-				sh(`(timeout 300 ${BIN} mode ${mode}; rc=$?; [ "$rc" -eq 0 ] || echo "switch stopped or failed, rc $rc"; rm -f ${RUN}) >${LOG} 2>&1 </dev/null &`);
+				sh(`(timeout 480 ${BIN} mode ${mode}; rc=$?; [ "$rc" -eq 0 ] || echo "switch stopped or failed, rc $rc"; rm -f ${RUN}) >${LOG} 2>&1 </dev/null &`);
 				return { ok: true, mode };
 			}
 		}
