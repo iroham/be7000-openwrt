@@ -2,6 +2,14 @@
 
 [Русский](CHANGELOG.md) · [English](CHANGELOG.en.md)
 
+**1.4.2**，2026 年 10 月 3 日。
+- 服务，扩展程序 页面新增了 Zapret Manager。安装管理器本身不会自动启用任何绕过方案，只有用户选择后才会安装和启用对应组件。
+- Zapret、Zapret2、ByeDPI、NetShift、sing-box、hev-socks5-tunnel 和 AmneziaWG 界面都为 Beam WRT 单独构建，并从签名软件源安装。
+- Zapret Manager 不会关闭 APK 签名检查，也不会把 `zms` 命令替换成网络下载脚本。终端界面通过 Bash 运行，Bash 会作为普通依赖安装。
+- 固件更新后，`/overlay` 会重新挂载到用户选择的 USB 磁盘。如果第一次启动落在内部 `rootfs_data`，系统只会额外重启一次，不会进入重启循环。
+- 更新后恢复软件包时，如果 Hybrid Failover 的 DNS 已指向 `127.0.0.42`，但程序包还没有恢复，系统会临时使用直连 DNS。Hybrid Failover 启动后会恢复原来的 DNS 设置。
+- 软件源列表中删除了不兼容的官方 target snapshot。内核模块只从与 Beam WRT 内核匹配的软件源安装。
+
 **1.4.1**，2026 年 10 月 3 日。
 - 一条 MLO 链路临时启动失败时，路由器不会再永久切换到双射频模式。两个射频启动时不再扫描，射频恢复后会自动重试，保存的 MLO 选择也不会改变。
 - 切换 5 GHz 模式时的短暂断线不再被 LuCI 当成失败，页面会等待真正的结果。

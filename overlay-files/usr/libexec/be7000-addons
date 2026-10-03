@@ -5,8 +5,8 @@
 #   install <id> [bot]   apk update and install in the background, log in $LOG
 #   log                  the log of the last install
 #
-# Only hybrid-failover for now. It lives in its own feed directory,
-# feed/hybrid-failover/, rebuilt from every upstream release.
+# Hybrid Failover has its own rolling feed. Zapret Manager and every native
+# package it uses are built by the main Beam WRT feed.
 
 LOG=/tmp/be7000-addons.log
 PID=/tmp/be7000-addons.pid
@@ -37,6 +37,15 @@ status_hf() {
 		$manual \
 		$(running && echo true || echo false) \
 		$(pgrep -f '/usr/sbin/hybrid-failover' >/dev/null 2>&1 && echo true || echo false)
+}
+
+status_zm() {
+	local inst feed panel=false
+	inst=$(ver_installed zapret-manager-beam)
+	feed=$(ver_feed zapret-manager-beam)
+	[ -x /opt/zapret-manager-luci/backend.sh ] && panel=true
+	printf '{"id":"zapret-manager","installed":"%s","feed":"%s","panel":%s,"running":%s}\n' \
+		"$inst" "$feed" "$panel" "$(running && echo true || echo false)"
 }
 
 install_hf() {
@@ -71,16 +80,42 @@ install_hf() {
 	echo started
 }
 
+install_zm() {
+	running && { echo "an install is already running"; return 1; }
+	(
+		tmp=$(mktemp -d)
+		echo "apk update"
+		apk update 2>&1 | tail -3
+		echo "apk fetch zapret-manager-beam"
+		if ! apk fetch --recursive --output "$tmp" zapret-manager-beam; then
+			rm -rf "$tmp"
+			echo "=== failed, package download or signature check failed"
+			exit 1
+		fi
+		echo "apk add zapret-manager-beam"
+		apk add "$tmp"/*.apk 2>&1
+		rc=$?
+		rm -rf "$tmp"
+		rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache 2>/dev/null
+		/etc/init.d/rpcd reload >/dev/null 2>&1 || /etc/init.d/rpcd restart >/dev/null 2>&1
+		[ $rc = 0 ] && echo "=== done" || echo "=== failed, apk exit code $rc"
+	) > $LOG 2>&1 < /dev/null &
+	echo $! > $PID
+	echo started
+}
+
 case "$1" in
 status)
 	case "$2" in
 	hybrid-failover) status_hf ;;
+	zapret-manager) status_zm ;;
 	*) echo '{"error":"unknown add-on"}' ;;
 	esac
 	;;
 install)
 	case "$2" in
 	hybrid-failover) install_hf "$3" ;;
+	zapret-manager) install_zm ;;
 	*) echo "unknown add-on"; exit 1 ;;
 	esac
 	;;

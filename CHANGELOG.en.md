@@ -2,6 +2,14 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.4.2**, October 3, 2026.
+- Zapret Manager was added to Services, Add-ons. The manager is installed separately and does not enable anything until the user chooses it.
+- Zapret, Zapret2, ByeDPI, NetShift, sing-box, hev-socks5-tunnel and the AmneziaWG interface are built for Beam WRT and installed from its signed feed.
+- Zapret Manager keeps APK signature checks enabled and does not replace the `zms` command with an Internet downloader. Its terminal interface runs through Bash, installed as a regular dependency.
+- After a firmware update, `/overlay` moves back to the selected USB disk. If the first boot used the internal `rootfs_data`, the service reboots once and cannot create a reboot loop.
+- Package recovery after an update temporarily uses direct DNS when Hybrid Failover settings already point to `127.0.0.42` but the package has not been restored yet. The previous DNS settings return after the service starts.
+- The incompatible official target snapshot was removed from the repository list. Kernel modules now come only from the feed built for the Beam WRT kernel.
+
 **1.4.1**, October 3, 2026.
 - A temporary failure of one MLO link no longer permanently switches the router to two-radio mode. Both radios start without scanning, the firmware retries after radio recovery, and the saved MLO choice is kept.
 - LuCI no longer treats a short loss of connection during a 5 GHz mode switch as a failure and waits for the real result.
