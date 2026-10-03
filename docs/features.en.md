@@ -2,7 +2,7 @@
 
 [Русский](features.md) · [中文](features.zh.md)
 
-Beam WRT is OpenWrt-based firmware for the Xiaomi BE7000 router. This page covers what it has, what is new in version 1.4.0 and how it differs from the factory firmware and other builds.
+Beam WRT is OpenWrt-based firmware for the Xiaomi BE7000 router. This page covers what it has, what is new in version 1.4 and how it differs from the factory firmware and other builds.
 
 ## How Beam WRT differs from other firmware
 
@@ -20,7 +20,9 @@ Beam WRT is OpenWrt-based firmware for the Xiaomi BE7000 router. This page cover
 
 **Docs in Russian, English and Chinese.** Installing, updating, going back, recipes for common tasks and measurements with a method you can repeat yourself.
 
-## New in 1.4.0
+## New in 1.4
+
+The main part came in 1.4.0, and 1.4.1, 1.4.2, 1.4.3 and 1.4.4 added and fixed many smaller things, the full list is in [CHANGELOG.en.md](../CHANGELOG.en.md). The notable ones after 1.4.0 are the Add-ons page with Zapret Manager, the new-version notice, the fixed firewall for Docker, the State trigger for the LEDs and a more reliable update with a USB disk.
 
 ### A new base
 

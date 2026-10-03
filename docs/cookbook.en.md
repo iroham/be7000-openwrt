@@ -166,4 +166,4 @@ be7000-update check     # is there a new version
 be7000-update apply     # download, verify and install
 ```
 
-Packages you installed are installed again for the new kernel after the update, once the router is online. If you update to 1.4.0 from 1.x, first read the section on it at the top of docs/instruction/2-update-en.txt. The file is in the release archive too.
+Packages you installed are installed again for the new kernel after the update, once the router is online. If you update to 1.4 from 1.x, first read the section on it at the top of docs/instruction/2-update-en.txt. The file is in the release archive too.
