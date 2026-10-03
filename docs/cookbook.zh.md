@@ -69,7 +69,7 @@ be7000-docker setup
 be7000-docker firewall
 ```
 
-手动设置的方法如下，在任何版本上都可以使用。
+手动设置的方法如下，在任何版本上都可以使用。docker 区域必须已经存在，也就是说 Docker 至少启动过一次。
 
 ```
 uci set firewall.docker_wan=forwarding
@@ -90,6 +90,8 @@ uci commit firewall
 /etc/init.d/dockerd uciadd
 /etc/init.d/dockerd start
 ```
+
+如果容器仍然没有网络，`be7000-docker diag` 会输出防火墙区域和规则、网络接口以及 dockerd 的状态。把输出附在问题报告里会很方便。
 
 最新版本的 Hybrid Failover 会像对待网络中的其他设备一样处理容器，并自动识别 Docker 网桥。如果是旧版本，`be7000-docker firewall` 会为容器设置公共 DNS 服务器，否则容器会从路由器拿到 Hybrid Failover 的内部地址而无法连接。没有 Hybrid Failover 时不会改动 DNS。
 

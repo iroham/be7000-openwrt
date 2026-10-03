@@ -69,7 +69,7 @@ Installing with be7000-docker setup does this by itself. If Docker was installed
 be7000-docker firewall
 ```
 
-By hand the same is done like this, it works on any version.
+By hand the same is done like this, it works on any version. The docker zone has to exist already, which means Docker must have started at least once.
 
 ```
 uci set firewall.docker_wan=forwarding
@@ -90,6 +90,8 @@ If the forwardings are in place but `uci show firewall` shows no docker zone, st
 /etc/init.d/dockerd uciadd
 /etc/init.d/dockerd start
 ```
+
+If a container still has no network, `be7000-docker diag` prints the firewall zones and rules, the interfaces and the state of dockerd. Its output is handy to attach to a bug report.
 
 The latest Hybrid Failover treats containers like the other devices on the network and picks up the Docker bridges by itself. With an older version `be7000-docker firewall` gives the containers public DNS servers, because they would otherwise get the service addresses of Hybrid Failover from the router and could not connect to them. Without Hybrid Failover the DNS is left alone.
 
