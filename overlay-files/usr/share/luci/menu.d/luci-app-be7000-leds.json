@@ -1,0 +1,13 @@
+{
+	"admin/system/be7000-leds": {
+		"title": "Светодиоды",
+		"order": 46,
+		"action": {
+			"type": "view",
+			"path": "be7000-leds/leds"
+		},
+		"depends": {
+			"acl": [ "luci-app-be7000-leds" ]
+		}
+	}
+}

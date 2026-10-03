@@ -846,3 +846,62 @@ msgstr "The Zapret Manager package is installed, but the panel itself was not cr
 
 msgid "Hybrid Failover последних версий ведёт контейнеры так же, как остальные устройства сети: их трафик идёт по тем же правилам, а мосты Docker он подхватывает сам. Если стоит старая версия, контейнерам прописываются публичные DNS-серверы, иначе роутер отвечал бы им служебными адресами Hybrid Failover, до которых не достучаться. Тогда трафик контейнеров идёт напрямую. Если Hybrid Failover поставлен позже Docker, нажмите ту же кнопку или выполните be7000-docker firewall."
 msgstr "The latest Hybrid Failover treats containers like the other devices on the network: their traffic follows the same rules, and it picks up the Docker bridges by itself. With an older version the containers get public DNS servers, because the router would otherwise answer them with service addresses of Hybrid Failover that cannot be reached. Their traffic then goes out directly. If Hybrid Failover was installed after Docker, press the same button or run be7000-docker firewall."
+msgid "Светодиоды"
+msgstr "LEDs"
+
+msgid "На передней панели два индикатора, которым в Beam WRT можно дать дополнительные роли. Оба включены по умолчанию, здесь их можно выключить. Всё применяется сразу."
+msgstr "Beam WRT can give two of the indicators on the front panel extra roles. Both are on by default and can be turned off here. Everything applies at once."
+
+msgid "Wi-Fi 2,4 ГГц, янтарный"
+msgstr "Wi-Fi 2.4 GHz, amber"
+
+msgid "занят"
+msgstr "in use"
+
+msgid "Янтарный светодиод индикатора сети мигает, когда по Wi-Fi 2,4 ГГц идёт трафик. Белый светодиод рядом остаётся индикатором 5 ГГц, так что по цвету видно, какой диапазон работает."
+msgstr "The amber LED of the network indicator blinks while Wi-Fi 2.4 GHz carries traffic. The white one next to it stays the 5 GHz indicator, so the colour shows which band is busy."
+
+msgid "Этот светодиод уже настроен вами на странице Индикаторы, поэтому он не тронут."
+msgstr "You have already set this LED up on the LED page, so it is left alone."
+
+msgid "Hybrid Failover, белый AIoT"
+msgstr "Hybrid Failover, white AIoT"
+
+msgid "горит"
+msgstr "lit"
+
+msgid "Светодиод AIoT горит, пока работает Hybrid Failover и его правила маршрутизации на месте. Если служба остановлена или упала, он гаснет."
+msgstr "The AIoT LED is lit while Hybrid Failover runs and its routing rules are in place. If the service is stopped or has died, it goes out."
+
+msgid "Hybrid Failover не установлен, светодиод не горит. Его можно поставить на странице Службы, Дополнения."
+msgstr "Hybrid Failover is not installed, so the LED stays dark. You can install it on Services, Add-ons."
+
+msgid "Какие светодиоды есть"
+msgstr "Which LEDs there are"
+
+msgid "На плате есть белые и янтарные светодиоды. Яркость у них не регулируется, они либо горят, либо нет. Белый светодиод сети по умолчанию показывает трафик Wi-Fi 5 ГГц, белый системный горит, когда роутер загрузился. Янтарный системный показывает проблемы при загрузке."
+msgstr "The board has white and amber LEDs. Their brightness cannot be changed, they are either on or off. The white network LED shows Wi-Fi 5 GHz traffic by default, the white system LED is on once the router has booted. The amber system LED shows boot problems."
+
+msgid "Светодиоды LAN и WAN у разъёмов показывают связь и трафик порта."
+msgstr "The LAN and WAN LEDs at the sockets show link and traffic of the port."
+
+msgid "Wi-Fi 2,4 ГГц"
+msgstr "Wi-Fi 2.4 GHz"
+
+msgid "Янтарный светодиод сети привязывается к интерфейсу точки доступа 2,4 ГГц и мигает при приёме и передаче. В режиме MLO белый светодиод следует за общим интерфейсом MLO, это делается само при переключении режима 5 ГГц."
+msgstr "The amber network LED is tied to the 2.4 GHz access point interface and blinks on receive and transmit. In MLO mode the white LED follows the shared MLO interface, which happens by itself when the 5 GHz mode is switched."
+
+msgid "Hybrid Failover"
+msgstr "Hybrid Failover"
+
+msgid "Белый светодиод AIoT проверяется каждые пять секунд. Он горит, если процесс Hybrid Failover работает и таблица его правил в межсетевом экране есть. Раньше узнать, что служба упала и трафик пошёл мимо неё, можно было только по странице службы."
+msgstr "The white AIoT LED is checked every five seconds. It is lit if the Hybrid Failover process runs and the table of its rules in the firewall exists. Before, the only way to notice that the service had died and traffic went around it was the service page."
+
+msgid "Если светодиод уже настроен вами"
+msgstr "If you have already set a LED up"
+
+msgid "Если вы сами назначили янтарный светодиод сети или белый AIoT на странице Индикаторы, Beam WRT их не трогает. Чтобы вернуть управление сюда, удалите свою настройку на той странице."
+msgstr "If you assigned the amber network LED or the white AIoT one yourself on the LED page, Beam WRT leaves them alone. To hand control back here, delete your setting on that page."
+
+msgid "Из консоли"
+msgstr "From the console"

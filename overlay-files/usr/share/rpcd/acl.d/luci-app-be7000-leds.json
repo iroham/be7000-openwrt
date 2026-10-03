@@ -1,0 +1,15 @@
+{
+	"luci-app-be7000-leds": {
+		"description": "Indicator roles of Beam WRT",
+		"read": {
+			"ubus": {
+				"be7000-leds": [ "status" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"be7000-leds": [ "set" ]
+			}
+		}
+	}
+}

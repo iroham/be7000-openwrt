@@ -6,6 +6,7 @@
 - The router tells you about a new version by itself. A button appears in the top bar and a block with an install button on Status, Overview. The check runs once a day and has a switch on the Build update page.
 - Services, Docker: stacks now has a description of what Docker is and how it works here. If containers cannot reach the internet, there is a button at the top that fixes it. The commands `be7000-docker firewall` and `be7000-docker diag` do the same.
 - Zapret Manager on the Add-ons page has a Finish install button. It appears when the package is installed but the panel itself was not created, for example because the internet was down during the install.
+- System, LEDs page. The amber network LED shows Wi-Fi 2.4 GHz traffic and the white AIoT LED is lit while Hybrid Failover runs. Both are on by default and can be turned off on the page.
 - Docker containers had no internet and their ports did not open from the local network. The docker zone in the firewall had no docker0 device, so container packets were dropped. `be7000-docker setup` and `firewall` now set what is needed, and the bridges of user networks and compose stacks are added and removed automatically.
 - After Docker was installed, some devices on the network could no longer open sites that go through Hybrid Failover. Docker turned on `bridge-nf-call-iptables`, it is now kept off.
 - Hybrid Failover 1.7.54 steers containers like the other devices on the network. With an older version the containers get public DNS servers, otherwise they received service addresses they cannot reach.

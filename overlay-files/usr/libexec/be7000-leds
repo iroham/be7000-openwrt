@@ -1,0 +1,103 @@
+#!/bin/sh
+# Two indicator roles of Beam WRT.
+#
+#   status         JSON for the LuCI page
+#   wlan2g on|off  the amber LED of the network indicator shows 2.4 GHz traffic
+#                  (the white one is the 5 GHz LED from the board setup)
+#   aiot on|off    the white AIoT LED shows that Hybrid Failover is running
+#   sync           write the 2.4 GHz LED into /etc/config/system from the choice
+#   watch          keeps the AIoT LED in step with Hybrid Failover
+#
+# The choices live in be7000.leds, both are on by default. A LED the user
+# already set up in /etc/config/system is left alone.
+
+AIOT=/sys/class/leds/white:aiot
+AMBER=amber:network
+
+cfg_on() {
+	[ "$(uci -q get be7000.leds.$1)" != 0 ]
+}
+
+set_cfg() {
+	[ -f /etc/config/be7000 ] || : > /etc/config/be7000
+	uci -q get be7000.leds >/dev/null || uci set be7000.leds=leds
+	uci set be7000.leds.$1="$2"
+	uci commit be7000
+}
+
+used_by_user() {
+	uci -q show system | grep -q "sysfs='$1'" 
+}
+
+sync_wlan2g() {
+	local has=0 changed=0
+	uci -q get system.led_wlan2g >/dev/null && has=1
+	if cfg_on wlan2g; then
+		[ $has = 1 ] && return 0
+		used_by_user $AMBER && return 0
+		[ -d /sys/class/leds/$AMBER ] || return 0
+		uci set system.led_wlan2g=led
+		uci set system.led_wlan2g.name='WIFI 2.4GHz'
+		uci set system.led_wlan2g.sysfs="$AMBER"
+		uci set system.led_wlan2g.trigger='netdev'
+		uci set system.led_wlan2g.mode='tx rx'
+		uci set system.led_wlan2g.dev='phy0-ap0'
+		uci set system.led_wlan2g.be7000_managed=1
+		changed=1
+	elif [ $has = 1 ] && [ "$(uci -q get system.led_wlan2g.be7000_managed)" = 1 ]; then
+		uci delete system.led_wlan2g
+		changed=1
+		echo none > /sys/class/leds/$AMBER/trigger 2>/dev/null
+		echo 0 > /sys/class/leds/$AMBER/brightness 2>/dev/null
+	fi
+	[ $changed = 1 ] || return 0
+	uci commit system
+	/etc/init.d/led reload >/dev/null 2>&1
+}
+
+hf_up() {
+	[ -x /usr/sbin/hybrid-failover ] && pidof hybrid-failover >/dev/null 2>&1 &&
+		nft list table inet hybrid_failover >/dev/null 2>&1
+}
+
+watch_aiot() {
+	local v
+	[ -d $AIOT ] || exit 0
+	used_by_user white:aiot && exit 0
+	echo none > $AIOT/trigger 2>/dev/null
+	while :; do
+		hf_up && v=1 || v=0
+		[ "$(cat $AIOT/brightness)" = "$v" ] || echo $v > $AIOT/brightness
+		sleep 5
+	done
+}
+
+case "$1" in
+status)
+	printf '{"wlan2g":%s,"wlan2g_active":%s,"wlan2g_busy":%s,"aiot":%s,"hf":%s,"aiot_on":%s}\n' \
+		$(cfg_on wlan2g && echo true || echo false) \
+		$(uci -q get system.led_wlan2g >/dev/null && echo true || echo false) \
+		$(! uci -q get system.led_wlan2g >/dev/null && used_by_user $AMBER && echo true || echo false) \
+		$(cfg_on aiot && echo true || echo false) \
+		$([ -x /usr/sbin/hybrid-failover ] && echo true || echo false) \
+		$([ "$(cat $AIOT/brightness 2>/dev/null)" = 1 ] && echo true || echo false)
+	;;
+wlan2g)
+	case "$2" in on) set_cfg wlan2g 1 ;; off) set_cfg wlan2g 0 ;; *) echo "usage: $0 wlan2g on|off"; exit 1 ;; esac
+	sync_wlan2g
+	;;
+aiot)
+	case "$2" in on) set_cfg aiot 1 ;; off) set_cfg aiot 0 ;; *) echo "usage: $0 aiot on|off"; exit 1 ;; esac
+	/etc/init.d/be7000-leds restart >/dev/null 2>&1
+	;;
+sync)
+	sync_wlan2g
+	;;
+watch)
+	watch_aiot
+	;;
+*)
+	echo "usage: $0 status | wlan2g on|off | aiot on|off | sync | watch"
+	exit 1
+	;;
+esac
