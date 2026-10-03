@@ -3,15 +3,15 @@
 'require rpc';
 'require ui';
 
-// System, LEDs: two indicator roles that the board can show but stock
-// OpenWrt does not set up. The work is /usr/libexec/be7000-leds behind the
-// rpcd object be7000-leds.
+// System, LEDs: roles that follow a state, which the stock LED page cannot
+// do. What the kernel can do by itself is set on the stock page System,
+// Indicators. The work is /usr/libexec/be7000-leds behind the rpcd object
+// be7000-leds.
 
 var callStatus = rpc.declare({ object: 'be7000-leds', method: 'status' });
-var callSet = rpc.declare({ object: 'be7000-leds', method: 'set', params: [ 'what', 'on' ] });
 var callAiot = rpc.declare({
 	object: 'be7000-leds', method: 'aiot_set',
-	params: [ 'source', 'dev', 'flags', 'service', 'target', 'cmd', 'show', 'invert', 'on_ms', 'off_ms' ]
+	params: [ 'source', 'service', 'target', 'cmd', 'show', 'invert', 'on_ms', 'off_ms' ]
 });
 
 var CSS = `
@@ -42,79 +42,19 @@ return view.extend({
 		return L.resolveDefault(callStatus(), {});
 	},
 
-	toggle: function(what, on) {
-		return callSet(what, on).then(function(r) {
-			if (!r || !r.ok) {
-				ui.addNotification(null, E('p', (r && r.output) || _('Не удалось применить')), 'danger');
-				return;
-			}
-			window.location.reload();
-		});
-	},
-
-	card: function(on, title, badges, text, note, what, disabled) {
-		return E('div', { 'class': 'bl-card' + (on ? ' on' : '') }, [
-			E('h4', {}, [ title ].concat(badges)),
-			E('div', { 'class': 'bl-text' }, text),
-			note ? E('div', { 'class': 'bl-note' }, note) : '',
-			E('div', { 'class': 'bl-act' }, [
-				E('button', {
-					'class': on ? 'cbi-button cbi-button-neutral' : 'cbi-button cbi-button-action important',
-					'disabled': disabled ? true : null,
-					'click': ui.createHandlerFn(this, 'toggle', what, !on)
-				}, on ? _('Выключить') : _('Включить'))
-			])
-		]);
-	},
-
-	render: function(st) {
-		var head = [
-			E('style', {}, CSS),
-			E('h2', {}, _('Светодиоды')),
-			E('div', { 'class': 'cbi-map-descr' },
-				_('На передней панели два индикатора, которым в Beam WRT можно дать дополнительные роли. Оба включены по умолчанию, здесь их можно выключить. Всё применяется сразу.'))
-		];
-
-		if (st.error)
-			return E([], head.concat([ E('p', {}, st.error) ]));
-
-		var w2 = this.card(st.wlan2g, _('Wi-Fi 2,4 ГГц, янтарный'),
-			st.wlan2g_active ? [ E('span', { 'class': 'bl-badge' }, _('включено')) ] :
-				(st.wlan2g_busy ? [ E('span', { 'class': 'bl-badge soft' }, _('занят')) ] : []),
-			_('Янтарный светодиод индикатора сети мигает, когда по Wi-Fi 2,4 ГГц идёт трафик. Белый светодиод рядом остаётся индикатором 5 ГГц, так что по цвету видно, какой диапазон работает.'),
-			st.wlan2g_busy ? _('Этот светодиод уже настроен вами на странице Индикаторы, поэтому он не тронут.') : _('Применяется сразу.'),
-			'wlan2g', st.wlan2g_busy);
-
-		var ai = this.aiotCard(st);
-
-		return E([], head.concat([ E('div', { 'class': 'bl-cards' }, [ w2, ai ]), this.about() ]));
-	},
-
 	aiotCard: function(st) {
-		var self = this;
 		var SRC = [
 			[ 'hf', _('Работу Hybrid Failover') ],
-			[ 'netdev', _('Связь или трафик интерфейса') ],
 			[ 'service', _('Работу процесса') ],
 			[ 'internet', _('Доступность интернета') ],
 			[ 'command', _('Результат своей команды') ],
-			[ 'on', _('Горит всегда') ],
-			[ 'timer', _('Мигает всегда') ],
-			[ 'heartbeat', _('Пульс') ],
-			[ 'off', _('Выключен') ]
+			[ 'off', _('Не управляется здесь') ]
 		];
-		var POLLED = { hf: 1, service: 1, internet: 1, command: 1 };
+		var busy = st.aiot_busy;
 
 		var sel = E('select', { 'class': 'cbi-input-select' }, SRC.map(function(o) {
 			return E('option', { 'value': o[0], 'selected': o[0] == st.source ? true : null }, o[1]);
 		}));
-		var dev = E('select', { 'class': 'cbi-input-select' }, (st.ifaces || []).map(function(n) {
-			return E('option', { 'value': n, 'selected': n == st.dev ? true : null }, n);
-		}));
-		var flag = function(name, label) {
-			return E('label', {}, [ E('input', { 'type': 'checkbox', 'data-flag': name, 'checked': (st.flags || '').split(' ').indexOf(name) >= 0 ? true : null }), ' ', label ]);
-		};
-		var flags = E('div', { 'class': 'bl-flags' }, [ flag('link', _('связь')), flag('rx', _('приём')), flag('tx', _('передача')) ]);
 		var service = E('input', { 'class': 'cbi-input-text', 'type': 'text', 'value': st.service || '', 'placeholder': 'sing-box' });
 		var target = E('input', { 'class': 'cbi-input-text', 'type': 'text', 'value': st.target || '1.1.1.1' });
 		var cmd = E('input', { 'class': 'cbi-input-text', 'type': 'text', 'value': st.cmd || '', 'placeholder': 'ip link show awg0' });
@@ -127,8 +67,6 @@ return view.extend({
 		var offms = E('input', { 'class': 'cbi-input-text', 'type': 'number', 'min': 50, 'max': 10000, 'value': st.off_ms || 500, 'style': 'max-width:120px' });
 
 		var rows = {
-			dev: [ E('label', {}, _('Интерфейс')), dev ],
-			flags: [ E('label', {}, _('Что считать')), flags ],
 			service: [ E('label', {}, _('Имя процесса')), service ],
 			target: [ E('label', {}, _('Адрес для проверки')), target ],
 			cmd: [ E('label', {}, _('Команда')), cmd ],
@@ -136,13 +74,13 @@ return view.extend({
 			inv: [ E('label', {}, _('Наоборот')), E('label', {}, [ inv, ' ', _('светодиод показывает, что условие не выполнено') ]) ],
 			ms: [ E('label', {}, _('Мигание, мс')), E('div', {}, [ onms, ' ', _('горит'), ' ', offms, ' ', _('не горит') ]) ]
 		};
+		var order = [ 'service', 'target', 'cmd', 'show', 'inv', 'ms' ];
 		var form = E('div', { 'class': 'bl-form' });
-		var order = [ 'dev', 'flags', 'service', 'target', 'cmd', 'show', 'inv', 'ms' ];
-		order.forEach(function(k) { rows[k].forEach(function(n) { n.setAttribute && n.setAttribute('data-row', k); form.appendChild(n); }); });
+		order.forEach(function(k) { rows[k].forEach(function(n) { n.setAttribute('data-row', k); form.appendChild(n); }); });
 
 		var refresh = function() {
-			var src = sel.value, polled = !!POLLED[src], blinkMs = (src == 'timer') || (polled && show.value == 'blink');
-			var vis = { dev: src == 'netdev', flags: src == 'netdev', service: src == 'service', target: src == 'internet', cmd: src == 'command', show: polled, inv: polled, ms: blinkMs };
+			var src = sel.value, checked = src != 'off';
+			var vis = { service: src == 'service', target: src == 'internet', cmd: src == 'command', show: checked, inv: checked, ms: checked && show.value == 'blink' };
 			order.forEach(function(k) {
 				form.querySelectorAll('[data-row="' + k + '"]').forEach(function(n) { n.style.display = vis[k] ? '' : 'none'; });
 			});
@@ -152,9 +90,7 @@ return view.extend({
 		refresh();
 
 		var save = function() {
-			var fl = [];
-			flags.querySelectorAll('input[data-flag]').forEach(function(i) { if (i.checked) fl.push(i.getAttribute('data-flag')); });
-			return callAiot(sel.value, dev.value, fl.join(' '), service.value.trim(), target.value.trim(), cmd.value.trim(),
+			return callAiot(sel.value, service.value.trim(), target.value.trim(), cmd.value.trim(),
 				show.value, inv.checked, +onms.value || 500, +offms.value || 500).then(function(r) {
 				if (!r || !r.ok) {
 					ui.addNotification(null, E('p', (r && r.output) || _('Не удалось применить')), 'danger');
@@ -164,14 +100,14 @@ return view.extend({
 			});
 		};
 
-		var busy = st.aiot_busy;
-		return E('div', { 'class': 'bl-card' + (st.source != 'off' ? ' on' : '') }, [
+		return E('div', { 'class': 'bl-card' + (st.source != 'off' && !busy ? ' on' : '') }, [
 			E('h4', {}, [ _('Светодиод AIoT, белый'),
 				st.aiot_on ? E('span', { 'class': 'bl-badge' }, _('горит')) : E('span', { 'class': 'bl-badge soft' }, _('не горит')),
 				busy ? E('span', { 'class': 'bl-badge soft' }, _('занят')) : '' ]),
 			E('div', { 'class': 'bl-text' },
-				_('Этот светодиод можно привязать к чему угодно. Выберите, что он показывает, и как. По умолчанию он горит, пока работает Hybrid Failover.')),
-			busy ? E('div', { 'class': 'bl-note' }, _('Этот светодиод уже настроен вами на странице Индикаторы, поэтому он не тронут.')) : '',
+				_('Светодиод показывает, выполнено ли условие. Выберите условие и то, как оно будет выглядеть. По умолчанию он горит, пока работает Hybrid Failover.')),
+			busy ? E('div', { 'class': 'bl-note' }, [ _('Этот светодиод настроен на странице Индикаторы, поэтому здесь он не управляется. Удалите его настройку там, чтобы вернуть управление сюда.'), ' ',
+				E('a', { 'href': L.url('admin/system/leds') }, _('Открыть Индикаторы')) ]) : '',
 			E('div', { 'class': 'bl-form' }, [ E('label', {}, _('Что показывает')), sel ]),
 			form,
 			E('div', { 'class': 'bl-act' }, [
@@ -179,6 +115,22 @@ return view.extend({
 					'click': ui.createHandlerFn(this, save) }, _('Сохранить'))
 			])
 		]);
+	},
+
+	render: function(st) {
+		var head = [
+			E('style', {}, CSS),
+			E('h2', {}, _('Светодиоды')),
+			E('div', { 'class': 'cbi-map-descr' }, [
+				_('Здесь светодиод AIoT привязывается к состоянию: работе Hybrid Failover, процессу, доступности адреса или результату команды. Всё, что ядро умеет само, например трафик интерфейса, мигание или пульс, настраивается для любого светодиода на странице'),
+				' ', E('a', { 'href': L.url('admin/system/leds') }, _('Индикаторы')), '.'
+			])
+		];
+
+		if (st.error)
+			return E([], head.concat([ E('p', {}, st.error) ]));
+
+		return E([], head.concat([ E('div', { 'class': 'bl-cards' }, [ this.aiotCard(st) ]), this.about() ]));
 	},
 
 	about: function() {
@@ -193,27 +145,24 @@ return view.extend({
 		return E('div', { 'class': 'bl-about' }, [
 			E('h3', {}, _('Как это устроено')),
 			sec(_('Какие светодиоды есть'), [
-				_('На плате есть белые и янтарные светодиоды. Яркость у них не регулируется, они либо горят, либо нет. Белый светодиод сети по умолчанию показывает трафик Wi-Fi 5 ГГц, белый системный горит, когда роутер загрузился. Янтарный системный показывает проблемы при загрузке.'),
-				_('Светодиоды LAN и WAN у разъёмов показывают связь и трафик порта.')
+				_('На плате есть белые и янтарные светодиоды. Яркость у них не регулируется, они либо горят, либо нет. Белый светодиод сети по умолчанию показывает трафик Wi-Fi 5 ГГц, белый системный горит, когда роутер загрузился. Янтарный системный показывает проблемы при загрузке. Светодиоды LAN и WAN у разъёмов показывают связь и трафик порта.')
 			]),
-			sec(_('Wi-Fi 2,4 ГГц'), [
-				_('Янтарный светодиод сети привязывается к интерфейсу точки доступа 2,4 ГГц и мигает при приёме и передаче. В режиме MLO белый светодиод следует за общим интерфейсом MLO, это делается само при переключении режима 5 ГГц.')
+			sec(_('Что настраивается на странице Индикаторы'), [
+				_('Любому светодиоду там можно задать любой режим из тех, что умеет ядро: трафик или связь интерфейса, мигание с нужными интервалами, пульс, постоянное свечение и другие. По умолчанию янтарный светодиод сети уже стоит там как Wi-Fi 2.4GHz и мигает при трафике 2,4 ГГц, его можно изменить или удалить. В режиме MLO светодиод 5 ГГц сам переключается на общий интерфейс MLO.')
 			]),
 			sec(_('Светодиод AIoT'), [
-				_('Белый светодиод AIoT свободен, ему можно дать любую роль. Источники, которые можно выбрать'),
+				_('Белый светодиод AIoT свободен. Здесь он привязывается к тому, что ядро само отследить не может. Условия, которые можно выбрать'),
 				[ _('Работа Hybrid Failover. Процесс запущен и таблица его правил в межсетевом экране на месте. Проверка каждые пять секунд.'),
-				  _('Связь или трафик интерфейса. Светодиод сам следует за интерфейсом, мигает при приёме и передаче или горит, пока есть связь. Подходит любой интерфейс, например wan, awg0 или br-lan.'),
 				  _('Работа процесса. Горит, пока в системе есть процесс с таким именем.'),
 				  _('Доступность интернета. Роутер раз в 15 секунд проверяет адрес командой ping.'),
-				  _('Результат своей команды. Команда выполняется раз в пять секунд от имени root, светодиод показывает, завершилась ли она с кодом 0.'),
-				  _('Горит всегда, мигает всегда, пульс или выключен.') ],
-				_('Для проверяемых источников можно выбрать, как показывать выполненное условие, горением или миганием, и перевернуть логику: тогда светодиод покажет, что условие не выполнено. Это удобно для сигнала о неполадке.')
+				  _('Результат своей команды. Команда выполняется раз в пять секунд от имени root, светодиод показывает, завершилась ли она с кодом 0.') ],
+				_('Выполненное условие можно показать горением или миганием, а логику перевернуть: тогда светодиод покажет, что условие не выполнено. Это удобно для сигнала о неполадке.')
 			]),
 			sec(_('Если светодиод уже настроен вами'), [
-				_('Если вы сами назначили янтарный светодиод сети или белый AIoT на странице Индикаторы, Beam WRT их не трогает. Чтобы вернуть управление сюда, удалите свою настройку на той странице.')
+				_('Если вы сами назначили светодиод AIoT на странице Индикаторы, Beam WRT его не трогает, а здесь он помечен как занятый. Чтобы вернуть управление сюда, удалите свою настройку на той странице.')
 			]),
 			sec(_('Из консоли'), [
-				E('pre', {}, '/usr/libexec/be7000-leds status\n/usr/libexec/be7000-leds wlan2g off\n/usr/libexec/be7000-leds aiot off')
+				E('pre', {}, '/usr/libexec/be7000-leds status\n/usr/libexec/be7000-leds aiot off\n/usr/libexec/be7000-leds aiot on')
 			])
 		]);
 	},

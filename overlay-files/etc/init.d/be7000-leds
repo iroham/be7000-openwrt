@@ -14,7 +14,8 @@ start_service() {
 }
 
 stop_service() {
-	echo 0 > /sys/class/leds/white:aiot/brightness 2>/dev/null
+	/usr/libexec/be7000-leds polled && echo 0 > /sys/class/leds/white:aiot/brightness 2>/dev/null
+	# only a LED this service drives; one set up on the stock LED page stays
 }
 
 service_triggers() {

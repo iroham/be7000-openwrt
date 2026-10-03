@@ -11,7 +11,6 @@
 		"write": {
 			"ubus": {
 				"be7000-leds": [
-					"set",
 					"aiot_set"
 				]
 			}

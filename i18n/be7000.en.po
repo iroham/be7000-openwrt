@@ -1010,3 +1010,39 @@ msgstr "Always on, always blinking, heartbeat or off."
 
 msgid "Для проверяемых источников можно выбрать, как показывать выполненное условие, горением или миганием, и перевернуть логику: тогда светодиод покажет, что условие не выполнено. Это удобно для сигнала о неполадке."
 msgstr "For the checked sources you can choose how to show that the condition holds, lit or blinking, and turn the logic around so that the LED shows the condition does not hold. This is handy as a fault signal."
+
+msgid "Не управляется здесь"
+msgstr "Not managed here"
+
+msgid "Светодиод показывает, выполнено ли условие. Выберите условие и то, как оно будет выглядеть. По умолчанию он горит, пока работает Hybrid Failover."
+msgstr "The LED shows whether a condition holds. Choose the condition and how it looks. By default the LED is lit while Hybrid Failover runs."
+
+msgid "Этот светодиод настроен на странице Индикаторы, поэтому здесь он не управляется. Удалите его настройку там, чтобы вернуть управление сюда."
+msgstr "This LED is set up on the LED Configuration page, so it is not managed here. Delete its entry there to hand control back."
+
+msgid "Открыть Индикаторы"
+msgstr "Open LED Configuration"
+
+msgid "Здесь светодиод AIoT привязывается к состоянию: работе Hybrid Failover, процессу, доступности адреса или результату команды. Всё, что ядро умеет само, например трафик интерфейса, мигание или пульс, настраивается для любого светодиода на странице"
+msgstr "Here the AIoT LED is tied to a state: Hybrid Failover running, a process, an address answering or the result of a command. Everything the kernel can do by itself, such as interface traffic, blinking or a heartbeat, is set for any LED on the page"
+
+msgid "Индикаторы"
+msgstr "LED Configuration"
+
+msgid "На плате есть белые и янтарные светодиоды. Яркость у них не регулируется, они либо горят, либо нет. Белый светодиод сети по умолчанию показывает трафик Wi-Fi 5 ГГц, белый системный горит, когда роутер загрузился. Янтарный системный показывает проблемы при загрузке. Светодиоды LAN и WAN у разъёмов показывают связь и трафик порта."
+msgstr "The board has white and amber LEDs. Their brightness cannot be changed, they are either on or off. The white network LED shows Wi-Fi 5 GHz traffic by default, the white system LED is on once the router has booted. The amber system LED shows boot problems. The LAN and WAN LEDs at the sockets show link and traffic of the port."
+
+msgid "Что настраивается на странице Индикаторы"
+msgstr "What is set on the LED Configuration page"
+
+msgid "Любому светодиоду там можно задать любой режим из тех, что умеет ядро: трафик или связь интерфейса, мигание с нужными интервалами, пульс, постоянное свечение и другие. По умолчанию янтарный светодиод сети уже стоит там как Wi-Fi 2.4GHz и мигает при трафике 2,4 ГГц, его можно изменить или удалить. В режиме MLO светодиод 5 ГГц сам переключается на общий интерфейс MLO."
+msgstr "Any LED can be given any mode the kernel offers there: interface traffic or link, blinking with the intervals you want, a heartbeat, steady light and more. The amber network LED is already there as WIFI 2.4GHz and blinks with 2.4 GHz traffic, you can change or delete it. In MLO mode the 5 GHz LED switches to the shared MLO interface by itself."
+
+msgid "Белый светодиод AIoT свободен. Здесь он привязывается к тому, что ядро само отследить не может. Условия, которые можно выбрать"
+msgstr "The white AIoT LED is free. Here it is tied to what the kernel cannot follow by itself. The conditions to choose from"
+
+msgid "Выполненное условие можно показать горением или миганием, а логику перевернуть: тогда светодиод покажет, что условие не выполнено. Это удобно для сигнала о неполадке."
+msgstr "A condition that holds can be shown as lit or blinking, and the logic can be turned around so that the LED shows the condition does not hold. This is handy as a fault signal."
+
+msgid "Если вы сами назначили светодиод AIoT на странице Индикаторы, Beam WRT его не трогает, а здесь он помечен как занятый. Чтобы вернуть управление сюда, удалите свою настройку на той странице."
+msgstr "If you set the AIoT LED up yourself on the LED Configuration page, Beam WRT leaves it alone and it is marked as in use here. To hand control back, delete your entry on that page."
