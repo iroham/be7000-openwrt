@@ -822,3 +822,15 @@ msgstr "Docker does not answer. Check the state with the /etc/init.d/dockerd sta
 
 msgid "Не хватает места. Кнопки очистки внизу страницы убирают лишние образы и неподключённые тома."
 msgstr "Out of space. The cleanup buttons at the bottom of the page remove unused images and unattached volumes."
+
+msgid "Автоматическая проверка"
+msgstr "Automatic check"
+
+msgid "Раз в сутки роутер сам спрашивает у GitHub, вышла ли новая версия, и сообщает об этом. На странице Статус, Обзор появляется блок с новой версией, а в верхней панели темы Nimbus кнопка. Роутер отправляет один запрос к api.github.com и ничего о вас не передаёт. Обновление само не ставится, решение всегда за вами."
+msgstr "Once a day the router asks GitHub by itself whether a new version is out and tells you about it. A block with the new version appears on Status, Overview, and a button in the top bar of the Nimbus theme. The router sends one request to api.github.com and tells nothing about you. The update is never installed by itself, the decision is always yours."
+
+msgid "Проверять наличие новой версии автоматически"
+msgstr "Check for a new version automatically"
+
+msgid "Сборки без номера версии, например собранные самостоятельно, не проверяются."
+msgstr "Builds without a version number, such as self-built ones, are not checked."

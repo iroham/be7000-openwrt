@@ -154,7 +154,7 @@ grep -c HW_OFFLOAD /proc/net/nf_conntrack
 
 ## Updating
 
-System, Build update checks for a new version and installs it in one click. Settings are kept. From the console the same is done like this.
+The router asks GitHub by itself once a day whether a new version is out. When there is one, a block appears on Status, Overview and a button in the top bar of the Nimbus theme. The check can be turned off on System, Build update, where the new version also installs in one click. Settings are kept. From the console the same is done like this.
 
 ```
 be7000-update check     # is there a new version

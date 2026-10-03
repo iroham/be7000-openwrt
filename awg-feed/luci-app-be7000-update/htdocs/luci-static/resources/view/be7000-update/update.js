@@ -9,6 +9,7 @@ var callCheck = rpc.declare({ object: 'be7000-update', method: 'check' });
 var callDownload = rpc.declare({ object: 'be7000-update', method: 'download' });
 var callApply = rpc.declare({ object: 'be7000-update', method: 'apply' });
 var callLog = rpc.declare({ object: 'be7000-update', method: 'log' });
+var callAutoSet = rpc.declare({ object: 'be7000-update', method: 'autocheck_set', params: [ 'on' ] });
 
 function fmtDate(iso) {
 	if (!iso)
@@ -49,6 +50,17 @@ return view.extend({
 				ui.addNotification(null, E('p', res.error || _('не удалось проверить')), 'error');
 			return self.refresh();
 		}).finally(function() { btn.disabled = false; });
+	},
+
+	setAuto: function(ev) {
+		var self = this;
+		var box = ev.target;
+		box.disabled = true;
+		return callAutoSet(box.checked).then(function(res) {
+			if (res && res.ok === false)
+				ui.addNotification(null, E('p', res.error || _('Не получилось сохранить')), 'error');
+			return self.refresh();
+		}).finally(function() { box.disabled = false; });
 	},
 
 	apply: function(ev, st) {
@@ -123,6 +135,15 @@ return view.extend({
 		if (avail)
 			buttons.push(E('button', { 'class': 'btn cbi-button-action important', 'style': 'margin-left:.5em', 'click': function(ev) { return self.apply(ev, st); } }, _('Скачать и установить %s').format(latest.latest)));
 
+		var autoBox = E('input', { 'type': 'checkbox', 'change': ui.createHandlerFn(self, 'setAuto') });
+		autoBox.checked = (st.autocheck !== false);
+		var auto = E('div', { 'class': 'cbi-section' }, [
+			E('h3', {}, _('Автоматическая проверка')),
+			E('p', {}, _('Раз в сутки роутер сам спрашивает у GitHub, вышла ли новая версия, и сообщает об этом. На странице Статус, Обзор появляется блок с новой версией, а в верхней панели темы Nimbus кнопка. Роутер отправляет один запрос к api.github.com и ничего о вас не передаёт. Обновление само не ставится, решение всегда за вами.')),
+			E('label', { 'style': 'display:flex;align-items:center;gap:.5em' }, [ autoBox, _('Проверять наличие новой версии автоматически') ]),
+			E('p', { 'style': 'opacity:.7;font-size:90%' }, _('Сборки без номера версии, например собранные самостоятельно, не проверяются.'))
+		]);
+
 		var notes = null;
 		if (latest && latest.body)
 			notes = E('div', { 'class': 'cbi-section' }, [
@@ -138,6 +159,7 @@ return view.extend({
 				status,
 				E('div', { 'style': 'margin-top:.5em' }, buttons)
 			]),
+			auto,
 			notes
 		].filter(Boolean));
 	},
