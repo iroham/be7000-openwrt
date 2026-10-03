@@ -141,10 +141,24 @@ fw_has_device() {
 	uci -q get "firewall.$ref.device" | tr ' ' '\n' | grep -qx docker0
 }
 
+# Hybrid Failover answers the router's DNS with fake addresses (198.18.x.x) and
+# only steers traffic that comes from its own LAN interfaces. A container that
+# asks the router for a name gets such an address and cannot reach it. So when
+# Hybrid Failover is installed the containers get plain public resolvers; their
+# traffic then goes out directly, as it does without Hybrid Failover.
+hf_present() {
+	[ -x /usr/sbin/hybrid-failover ]
+}
+
+dns_ok() {
+	hf_present || return 0
+	[ -n "$(uci -q get dockerd.globals.dns)" ]
+}
+
 fw_ok() {
 	local wan
 	wan="$(fw_wan_zone)" || return 1
-	fw_docker_zone_exists && fw_has_device && fw_has_forwarding docker "$wan" && fw_has_forwarding lan docker
+	dns_ok && fw_docker_zone_exists && fw_has_device && fw_has_forwarding docker "$wan" && fw_has_forwarding lan docker
 }
 
 cmd_firewall() {
@@ -159,9 +173,19 @@ cmd_firewall() {
 
 	# the zone and the docker network come from dockerd's own init script,
 	# which only does it at boot and only with the daemon stopped
+	# dockerd reads its DNS setting only at start
+	if ! dns_ok; then
+		if [ -x /etc/init.d/dockerd ] && [ "$restart" = 0 ]; then
+			/etc/init.d/dockerd running >/dev/null 2>&1 && { /etc/init.d/dockerd stop; restart=1; trap "/etc/init.d/dockerd start >/dev/null 2>&1" EXIT; }
+		fi
+		uci -q add_list dockerd.globals.dns=77.88.8.8
+		uci -q add_list dockerd.globals.dns=8.8.8.8
+		uci -q commit dockerd
+	fi
+
 	if ! fw_docker_zone_exists; then
 		if [ -x /etc/init.d/dockerd ]; then
-			/etc/init.d/dockerd running >/dev/null 2>&1 && { /etc/init.d/dockerd stop; restart=1; trap "/etc/init.d/dockerd start >/dev/null 2>&1" EXIT; }
+			[ "$restart" = 0 ] && /etc/init.d/dockerd running >/dev/null 2>&1 && { /etc/init.d/dockerd stop; restart=1; trap "/etc/init.d/dockerd start >/dev/null 2>&1" EXIT; }
 			/etc/init.d/dockerd uciadd >/dev/null 2>&1 || true
 		fi
 		fw_docker_zone_exists || die "$(t "Не получилось создать зону docker. Установите Docker: be7000-docker setup" "Could not create the docker zone. Install Docker first: be7000-docker setup" "无法创建 docker 区域。请先安装 Docker: be7000-docker setup")"

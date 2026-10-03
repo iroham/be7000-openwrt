@@ -843,3 +843,6 @@ msgstr "Finish install"
 
 msgid "Пакет Zapret Manager стоит, но сама панель не создалась. Обычно так бывает, когда во время установки не было интернета. Нажмите кнопку, чтобы завершить установку, роутеру понадобится доступ в интернет."
 msgstr "The Zapret Manager package is installed, but the panel itself was not created. This usually happens when there was no internet during the install. Press the button to finish it, the router needs internet access for this."
+
+msgid "Если на роутере стоит Hybrid Failover, контейнеры получают публичные DNS-серверы вместо роутера. Иначе роутер отвечал бы им служебными адресами Hybrid Failover, до которых из контейнера не достучаться. Трафик контейнеров идёт напрямую, как и без Hybrid Failover. Если Hybrid Failover поставлен позже Docker, нажмите ту же кнопку или выполните be7000-docker firewall."
+msgstr "If Hybrid Failover is installed on the router, the containers get public DNS servers instead of the router. Otherwise the router would answer them with the service addresses of Hybrid Failover, which a container cannot reach. Container traffic goes out directly, as it does without Hybrid Failover. If Hybrid Failover was installed after Docker, press the same button or run be7000-docker firewall."
