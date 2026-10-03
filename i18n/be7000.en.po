@@ -729,3 +729,96 @@ msgstr "Allow"
 
 msgid "Настраиваю файрвол"
 msgstr "Setting up the firewall"
+
+msgid "Установлен"
+msgstr "Installed"
+
+msgid "Пока недоступен"
+msgstr "Not available yet"
+
+msgid "Панель для установки и настройки Zapret, Zapret2, ByeDPI, ByeTube, NetShift, AmneziaWG и других средств маршрутизации и обхода блокировок."
+msgstr "A panel for installing and configuring Zapret, Zapret2, ByeDPI, ByeTube, NetShift, AmneziaWG and other routing and blocking circumvention tools."
+
+msgid "Версия для Beam WRT"
+msgstr "Beam WRT version"
+
+msgid "Менеджер адаптирован под архитектуру aarch64_cortex-a73 и пакетный менеджер apk. Zapret, Zapret2, ByeDPI, NetShift, sing-box, hev-socks5-tunnel и интерфейс AmneziaWG ставятся из подписанного фида Beam WRT."
+msgstr "The manager is adapted to the aarch64_cortex-a73 architecture and the apk package manager. Zapret, Zapret2, ByeDPI, NetShift, sing-box, hev-socks5-tunnel and the AmneziaWG interface install from the signed Beam WRT feed."
+
+msgid "Поставится только панель Zapret Manager и её служебные зависимости. Zapret и другие способы обхода не включаются автоматически."
+msgstr "Only the Zapret Manager panel and its service dependencies are installed. Zapret and the other circumvention methods are not turned on automatically."
+
+msgid "После установки откройте панель и выберите нужный способ. Его пакеты будут установлены из фида Beam WRT с проверкой подписи."
+msgstr "After the install, open the panel and choose the method you need. Its packages are installed from the Beam WRT feed with a signature check."
+
+msgid "Внешние модули AmneziaWG не используются. Менеджер оставляет встроенный модуль, который собран вместе с ядром этой прошивки."
+msgstr "External AmneziaWG modules are not used. The manager keeps the built-in module that is built together with the kernel of this firmware."
+
+msgid "Открыть Zapret Manager"
+msgstr "Open Zapret Manager"
+
+msgid "Пакет пока не найден в фиде. Сначала нужно опубликовать новую сборку фида."
+msgstr "The package is not in the feed yet. A new feed build has to be published first."
+
+msgid "Исходный проект"
+msgstr "Source project"
+
+msgid "Что такое Docker и зачем он на роутере"
+msgstr "What Docker is and why it is on a router"
+
+msgid "Docker запускает программы в изолированных контейнерах. В контейнере уже лежит всё нужное для программы, поэтому её не нужно собирать под роутер, и она не мешает системе. Так на роутере работают, например, AdGuard Home, Home Assistant, торрент-клиент, менеджер паролей и многое другое."
+msgstr "Docker runs programs in isolated containers. A container already holds everything the program needs, so it does not have to be built for the router and it does not get in the way of the system. This is how AdGuard Home, Home Assistant, a torrent client, a password manager and much more run on a router."
+
+msgid "Контейнеры ставятся из готовых образов. Набор контейнеров, который запускается вместе, описывается одним файлом docker-compose.yml. Такой набор здесь называется стеком."
+msgstr "Containers are installed from ready-made images. A set of containers that start together is described by one docker-compose.yml file. Such a set is called a stack here."
+
+msgid "USB-диск или SSD с файловой системой ext4 и хотя бы гигабайтом свободного места. Образы занимают сотни мегабайт, а во внутренней памяти роутера около 19 МБ, поэтому первый же образ её забьёт."
+msgstr "A USB disk or SSD with the ext4 file system and at least a gigabyte of free space. Images take hundreds of megabytes, and the router internal memory is about 19 MB, so the first image fills it."
+
+msgid "Оперативная память общая с роутером. У BE7000 её 1 ГБ, поэтому несколько тяжёлых программ вместе лучше не запускать."
+msgstr "The memory is shared with the router. The BE7000 has 1 GB, so it is better not to run several heavy programs together."
+
+msgid "Как установить"
+msgstr "How to install"
+
+msgid "Подключите и смонтируйте диск, потом выполните команду ниже. Она найдёт диск, поставит Docker и Dockerman, перенесёт данные Docker на диск и настроит файрвол."
+msgstr "Plug in and mount the disk, then run the command below. It finds the disk, installs Docker and Dockerman, moves the Docker data to the disk and sets up the firewall."
+
+msgid "Где что лежит"
+msgstr "Where things are"
+
+msgid "Образы, тома и слои лежат в каталоге data-root на вашем диске. Сколько места занято, показывает кнопка в разделе обслуживания внизу страницы."
+msgstr "Images, volumes and layers live in the data-root directory on your disk. The button in the maintenance part at the bottom of the page shows how much space is used."
+
+msgid "Файлы стеков лежат в /etc/be7000-docker/stacks, у каждого стека своя папка с файлом docker-compose.yml. Их можно править прямо на этой странице."
+msgstr "Stack files are in /etc/be7000-docker/stacks, each stack has its own folder with a docker-compose.yml file. You can edit them right on this page."
+
+msgid "Каждый стек можно запустить, остановить, обновить его образы и посмотреть журнал кнопками в таблице."
+msgstr "Every stack can be started, stopped, have its images updated and its log read with the buttons in the table."
+
+msgid "Сеть и файрвол"
+msgstr "Network and firewall"
+
+msgid "Контейнеры живут в отдельной зоне docker. Файрвол разрешает им выходить в интернет, а локальной сети разрешает открывать порты, которые контейнеры публикуют. Из интернета к контейнерам по умолчанию никто не попадёт."
+msgstr "Containers live in a separate docker zone. The firewall lets them out to the internet and lets the local network open the ports the containers publish. By default nobody from the internet can reach the containers."
+
+msgid "Если контейнеры не выходят в интернет, вверху страницы появится кнопка с предложением это разрешить. То же делает команда be7000-docker firewall."
+msgstr "If containers cannot reach the internet, a button offering to allow it shows up at the top of the page. The be7000-docker firewall command does the same."
+
+msgid "Осторожно"
+msgstr "Be careful"
+
+msgid "Контейнеры с доступом к /var/run/docker.sock, например Portainer и Watchtower, получают полный контроль над Docker, а значит и над роутером. Ставьте их, только если понимаете, зачем они вам."
+msgstr "Containers with access to /var/run/docker.sock, Portainer and Watchtower for example, get full control of Docker, and so of the router. Install them only if you understand why you need them."
+
+msgid "Не открывайте порты управления контейнерами из интернета."
+msgstr "Do not open the management ports of containers to the internet."
+
+msgid "Если что-то не работает"
+msgstr "If something does not work"
+
+msgid "Docker не отвечает. Посмотрите состояние командой /etc/init.d/dockerd status и системный журнал."
+msgstr "Docker does not answer. Check the state with the /etc/init.d/dockerd status command and the system log."
+
+msgid "Не хватает места. Кнопки очистки внизу страницы убирают лишние образы и неподключённые тома."
+msgstr "Out of space. The cleanup buttons at the bottom of the page remove unused images and unattached volumes."
