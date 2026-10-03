@@ -76,6 +76,8 @@ Without parameters the command looks for a mounted disk with at least a gigabyte
 
 Containers, images, networks and volumes are on Services, Dockerman. docker-compose stacks, ready-made sets in one click and cleanup are on Services, "Docker: stacks". Ready-made sets exist for Portainer, AdGuard Home, Uptime Kuma, Vaultwarden, qBittorrent, Nginx Proxy Manager, Home Assistant and Watchtower.
 
+If containers cannot reach the internet or their web interface does not open from the local network, the firewall has to allow forwarding from the docker zone. The be7000-docker setup command does it by itself, and for a Docker installed earlier there is the be7000-docker firewall command and a button on Services, "Docker: stacks". Details are in the "Containers without internet" section of docs/cookbook.en.md.
+
 
 What else is there
 

@@ -76,6 +76,8 @@ be7000-docker setup --data-root /mnt/usb/docker --yes
 
 容器、镜像、网络和卷在 服务, Dockerman 里管理。docker-compose 堆栈、一键安装的现成组合以及清理功能在 服务, "Docker 堆栈" 里。现成组合有 Portainer、AdGuard Home、Uptime Kuma、Vaultwarden、qBittorrent、Nginx Proxy Manager、Home Assistant 和 Watchtower。
 
+如果容器无法访问互联网，或者容器的网页界面无法从局域网打开，需要让防火墙允许从 docker 区域转发。be7000-docker setup 命令会自动做到这一点。对于之前已经装好的 Docker，可以运行 be7000-docker firewall 命令，或者点击 "服务, Docker 堆栈" 页面上的按钮。详细说明见 docs/cookbook.zh.md 的 "容器无法上网" 一节。
+
 
 其他功能
 

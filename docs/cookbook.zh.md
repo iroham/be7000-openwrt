@@ -59,6 +59,37 @@ be7000-docker setup
 
 脚本会找到一个已挂载且有空闲空间的硬盘，把 Docker 数据移过去。它还会安装 Dockerman，也就是管理容器、镜像和网络的页面。现成的容器组合在 "服务, Docker 堆栈" 里启动。
 
+### 容器无法上网
+
+如果 qBittorrent 什么也下载不了，其他容器连不上网，或者容器的网页界面无法从局域网打开，原因在防火墙。Docker 会为自己的容器建立单独的 docker 区域，而路由器的防火墙默认不会在区域之间转发任何流量。需要两条转发规则，从 docker 到 wan 让容器访问互联网，从 lan 到 docker 让局域网访问已发布的端口。
+
+用 be7000-docker setup 安装时会自动设置好。如果 Docker 是之前装的，请运行下面的命令，或者在 "服务, Docker 堆栈" 页面点击 "允许" 按钮。
+
+```
+be7000-docker firewall
+```
+
+手动设置的方法如下，在任何版本上都可以使用。
+
+```
+uci set firewall.docker_wan=forwarding
+uci set firewall.docker_wan.src='docker'
+uci set firewall.docker_wan.dest='wan'
+uci set firewall.docker_lan=forwarding
+uci set firewall.docker_lan.src='lan'
+uci set firewall.docker_lan.dest='docker'
+uci commit firewall
+/etc/init.d/firewall restart
+```
+
+如果转发规则已经有了，但 `uci show firewall` 里看不到 docker 区域，请停止 Docker，然后用标准命令创建它。
+
+```
+/etc/init.d/dockerd stop
+/etc/init.d/dockerd uciadd
+/etc/init.d/dockerd start
+```
+
 ## 5 GHz 模式
 
 模式在 "网络, 无线" 页面顶部的 "5 GHz 模式" 区域选择。切换模式时路由器不会重启，5 GHz Wi-Fi 会断开大约半分钟。

@@ -59,6 +59,37 @@ be7000-docker setup
 
 The script finds a mounted disk with free space and moves the Docker data there. It also installs Dockerman, the page for containers, images and networks. Ready container sets run from Services, "Docker: stacks".
 
+### Containers without internet
+
+If qBittorrent downloads nothing, another container cannot get online, or a container web interface does not open from the local network, the cause is the firewall. Docker creates a separate docker zone for its containers, but the router firewall forwards nothing between zones by default. Two forwardings are needed, docker to wan for the way out to the internet and lan to docker for access to published ports.
+
+Installing with be7000-docker setup does this by itself. If Docker was installed earlier, run the command below or press the "Allow" button on Services, "Docker: stacks".
+
+```
+be7000-docker firewall
+```
+
+By hand the same is done like this, it works on any version.
+
+```
+uci set firewall.docker_wan=forwarding
+uci set firewall.docker_wan.src='docker'
+uci set firewall.docker_wan.dest='wan'
+uci set firewall.docker_lan=forwarding
+uci set firewall.docker_lan.src='lan'
+uci set firewall.docker_lan.dest='docker'
+uci commit firewall
+/etc/init.d/firewall restart
+```
+
+If the forwardings are in place but `uci show firewall` shows no docker zone, stop Docker and create it with the standard command.
+
+```
+/etc/init.d/dockerd stop
+/etc/init.d/dockerd uciadd
+/etc/init.d/dockerd start
+```
+
 ## 5 GHz modes
 
 The mode is chosen in the "5 GHz mode" block at the top of Network, Wireless. The router does not reboot on a mode change, 5 GHz Wi-Fi is down for about half a minute.
