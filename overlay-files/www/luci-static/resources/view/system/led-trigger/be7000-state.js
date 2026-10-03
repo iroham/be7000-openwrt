@@ -13,7 +13,17 @@ return baseclass.extend({
 	kernel: false,
 
 	addFormOptions: function(s) {
-		var o;
+		var o, iv = s.getOption('interval'), tr = s.getOption('trigger');
+
+		// the stock page shows its Interval field for every trigger, it does
+		// nothing for this one: show it for all the others only
+		if (iv && tr && !iv.__be7000) {
+			iv.__be7000 = true;
+			(tr.keylist || []).forEach(function(k) {
+				if (k !== 'be7000-state')
+					iv.depends('trigger', k);
+			});
+		}
 
 		o = s.option(form.ListValue, 'be7000_source', _('Что проверять'));
 		o.modalonly = true;
