@@ -152,7 +152,9 @@ hf_present() {
 }
 
 hf_steers_docker() {
-	grep -q source_docker /usr/sbin/hybrid-failover 2>/dev/null &&
+	# the hotplug file comes with the versions that know about Docker (1.7.54
+	# and later); the binary itself is packed, there is nothing to grep in it
+	[ -x /etc/hotplug.d/net/30-hybrid-failover-docker ] &&
 		[ "$(uci -q get hybrid-failover.settings.source_docker)" != 0 ]
 }
 
