@@ -34,8 +34,21 @@ In two-radio and MLO mode the radio firmware splits the four chains of the QCN92
 
 Memory is 881,336 kB in total, 509,712 kB of it available.
 
+## Hardware offload on a wired connection
+
+The measurement was made by zh8416 on build 1.4.4. The topology is a main router, the BE7000 behind it on its WAN port, and a computer on a LAN cable, with 2.5 Gbit/s ports throughout. iperf3 runs as a server on the WAN side, the client runs `iperf3 -c <address> -P 4 -t 15` and the same with `-R`. Offload was switched off and on under Network, Hardware offload. CPU load is 100 % minus idle over ten samples of `top -b -n 10 -d 1`, averaged, over all cores together.
+
+| | Up, speed | Down, speed | CPU up | CPU down |
+|---|---|---|---|---|
+| Offload off | 2.26 Gbit/s | 2.24 Gbit/s | 42.7 % | 60.1 % |
+| Offload on | 2.28 Gbit/s | 2.25 Gbit/s | 36.5 % | 41.5 % |
+
+With offload on, `/proc/net/nf_conntrack` held 15 to 27 entries marked `HW_OFFLOAD`, with it off none. The speed did not change because a 2.5 Gbit/s port is already at the practical TCP limit of about 2.3 Gbit/s without offload. The gain shows only in CPU load, and more in the down direction.
+
+Two caveats. Almost all the load that remains with offload is softirq, 35 to 39 %, and it would be much lower if the PPE forwarded the whole flow. What exactly stays on the CPU is not clear yet. There were also more retransmissions in the down direction with offload, 8465 and 10646 against 6642 and 6068 without it, about three in a thousand packets, and the speed was not affected. It is one measurement on one router.
+
 ## Not measured yet
 
 - Routing and NAT on a wired connection. There is no way to run such a measurement yet.
 - A client that joins MLO on two links at once.
-- Numbers with hardware NAT offload. Offload is there now (Network, Hardware offload), and the visible gain is expected for wired clients. There is no way to run such a measurement yet. If you can, send a measurement with the method above, with offload and without.
+- An explanation for the softirq load that remains with offload on, and a second measurement on another router. If you can, send a measurement with the method above, with offload and without.
