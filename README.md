@@ -55,12 +55,14 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 | File | Purpose |
 |---|---|
 | `/usr/share/ucode/miwrt/hub.uc` | state collection, device list, alerts, pausing, access keys |
-| `/usr/share/ucode/miwrt/extras.uc` | Wi-Fi settings, guest Wi-Fi, firmware check, blocked threats, connection test, speed test, Wi-Fi check, summaries |
+| `/usr/share/ucode/miwrt/extras.uc` | Wi-Fi settings and schedule, guest Wi-Fi, firmware check and install, blocked threats, connection test, speed test, Wi-Fi check, speed shaping, IoT watch, summaries |
 | `/www/cgi-bin/miwrt` | the HTTPS API |
-| `/usr/sbin/miwrt-hubd`, `/etc/init.d/miwrt` | one pass every 30 s, the network announcement, the discovery relay |
-| `/usr/sbin/miwrt-ctl` | `token <name>`, `tokens`, `revoke-all` |
+| `/usr/sbin/miwrt-hubd`, `/etc/init.d/miwrt` | one pass every 30 s, the network announcement, the two relays |
+| `/usr/sbin/miwrt-ctl` | `token <name>`, `tokens`, `revoke <name>`, `revoke-all` |
 | `/usr/sbin/miwrt-push` | hands alerts to a notification relay, if one is set |
 | `/usr/sbin/miwrt-discovery-relay` | repeats smart-home discovery broadcasts from an IoT network to the main one |
+| `/usr/sbin/miwrt-mdns-reflector` | repeats mDNS (AirPlay, Chromecast, printers) between the main and the IoT network |
+| `/usr/sbin/miwrt-upload` | the upload half of the speed test |
 | `/usr/sbin/miwrt-wol` | Wake-on-LAN |
 | `/usr/share/miwrt/oui.txt` | maker per MAC prefix |
 | `/etc/miwrt/` | settings and state, kept across sysupgrade |
@@ -84,15 +86,18 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 | Approve new devices | optional, off by default: a device the router has never seen gets no internet until it is allowed |
 | People and rooms | groups of devices; pause a group; a person counts as home when one of their phones is on Wi-Fi |
 | Schedules | internet off for chosen devices or groups at set times and days, including overnight |
-| Wi-Fi | view networks, change name or password, switch a network off, hand out the details for a QR code |
+| Wi-Fi | view networks, change name or password, switch a network off, hand out the details for a QR code; optional schedule that switches a network off at set times and days |
 | Guest Wi-Fi | created on first use: own bridge, subnet and firewall zone, client isolation, optional auto-off |
 | Alerts | radio crashed or recovered, internet down or back, DNS failing, new device, a device failing to join repeatedly, radar on 5 GHz, kernel errors, phone paired or unpaired |
 | Notifications | alerts are handed to a relay that passes them to Apple; off by default, per alert type |
 | Wi-Fi recovery | if a Wi-Fi core crashes and stays down for about 90 s, the router restarts itself: not in the first 10 minutes after boot, at most three times a day |
-| Ad blocker link | links an AdGuard Home on the network: on, off, pause, statistics, recent activity, allow or block a site, block lists |
-| Checks | connection test, speed test from the router, Wi-Fi channel check, blocked threats (banIP), protection overview, weekly summary, 48 hours of health samples |
-| Maintenance | settings backup download, lights on, off or off at night, restart, firmware version and update check |
+| Ad blocker link | links an AdGuard Home on the network: on, off, pause, statistics, recent activity, allow or block a site, block lists, ad blocking off for a single device |
+| IoT watch | with an ad blocker linked: the sites each device on a separate network (IoT, guest) looks up, grouped by main name. After a device's first day, a site it never used before raises an alert |
+| Speed shaping | switch SQM (cake) on or off and set the download and upload limits |
+| Checks | connection test, speed test from the router (download and upload), Wi-Fi channel check, blocked threats (banIP), protection overview, weekly summary, 48 hours of health samples |
+| Maintenance | settings backup download, lights on, off or off at night, restart, firmware version, update check and install (through `be7000-update`, into the second slot) |
 | Discovery relay | where an IoT network exists (`br-iot`), smart-home announcements (UDP 6666 and 6667) are repeated onto the main network so phone apps still find their devices |
+| Casting across networks | where an IoT network exists, mDNS is repeated both ways so phones on the main network find AirPlay and Chromecast devices, printers and speakers on the IoT side. Discovery only: the firewall still decides what may connect. The IoT zone needs an input rule for UDP 5353 |
 
 ### API
 
@@ -101,14 +106,15 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no k
 | Method and path | Purpose |
 |---|---|
 | `GET /v1/status`, `/v1/devices`, `/v1/alerts`, `/v1/meta` | the main screens |
-| `POST /v1/devices/<mac>` | `name`, `category`, `icon`, `blocked`, `pause_minutes`, `approve`, `fixed_ip` |
+| `POST /v1/devices/<mac>` | `name`, `category`, `icon`, `blocked`, `pause_minutes`, `approve`, `fixed_ip`, `filtering` (`on` or `off`) |
 | `POST /v1/devices/<mac>/wake` | Wake-on-LAN |
 | `GET`/`POST /v1/groups`, `/v1/schedules` | people and rooms, schedules |
 | `POST /v1/settings` | `approve_new`, `watchdog`, `night`, `push` |
-| `GET /v1/wifi`, `/v1/wifi/secret?id=`, `/v1/wifi/check`; `POST /v1/wifi/<id>` | Wi-Fi |
+| `GET /v1/wifi`, `/v1/wifi/secret?id=`, `/v1/wifi/check`; `POST /v1/wifi/<id>` | Wi-Fi: `ssid`, `key`, `enabled`, `schedule` (`enabled`, `from`, `to`, `days`) |
 | `GET`/`POST /v1/guest` | guest Wi-Fi |
 | `GET /v1/protection`, `/v1/protection/lists`, `/v1/protection/log`, `/v1/protection/check`; `POST /v1/protection/connect`, `disconnect`, `pause`, `lists`, `rules` | ad blocker link |
-| `GET /v1/usage`, `/v1/week`, `/v1/history`, `/v1/threats`, `/v1/overview`, `/v1/diagnose`, `/v1/firmware`, `/v1/speedtests`; `POST /v1/speedtest` | insight |
+| `GET /v1/usage`, `/v1/week`, `/v1/history`, `/v1/threats`, `/v1/overview`, `/v1/diagnose`, `/v1/firmware`, `/v1/speedtests`, `/v1/iotwatch`; `POST /v1/speedtest`, `/v1/firmware/install` | insight, firmware |
+| `GET`/`POST /v1/shaping` | speed shaping: `enabled`, `down_kbit`, `up_kbit` |
 | `GET /v1/phones`; `POST /v1/phones/revoke` | paired phones |
 | `GET /v1/push`; `POST /v1/push/register`, `/v1/push/test` | notifications |
 | `GET /v1/router/backup`; `POST /v1/router/leds`, `/v1/router/watchdog`, `/v1/router/reboot` | maintenance |
@@ -123,7 +129,7 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no k
 
 ## The phone app
 
-A native iPhone app (SwiftUI) for this service exists and is in testing; it is not in this repository yet. It finds the router, pairs with the administrator password, and covers everything in the table above.
+A native iPhone app (SwiftUI) for this service exists and is in testing; it is not in this repository yet. It finds the router by itself, pairs with the administrator password, and covers everything in the table above. Before the password is sent, the app checks that the address it found is the router the phone is actually connected through, and warns if it is not. It also has a home-screen and lock-screen widget (internet and Wi-Fi state, devices online, current rates) and Siri shortcuts.
 
 ## Installing, updating, going back
 

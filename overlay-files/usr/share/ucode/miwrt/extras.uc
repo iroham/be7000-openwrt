@@ -27,7 +27,7 @@ function sid_ok(c, sid) {
 
 export function wifi_list() {
 	let c = cursor(), conn = connect(), radios = [], nets = [];
-	let live = {};
+	let live = {}, sched = hub.load(ETC + '/settings.json', {}).wifi_schedule ?? {}, off = hub.load(ETC + '/wifi-off.json', []);
 	for (let rname, r in (conn.call('network.wireless', 'status') ?? {}))
 		for (let i in (r.interfaces ?? []))
 			if (i.section) live[i.section] = { ifname: i.ifname, up: !!r.up };
@@ -42,7 +42,7 @@ export function wifi_list() {
 		push(nets, { id: w['.name'], ssid: w.ssid, band: radio.band, network: NET_LABEL[w.network] ?? w.network, guest: w.network == 'guest',
 			enabled: w.disabled != '1' && radio.enabled !== false, hidden: w.hidden == '1',
 			security: w.encryption == 'none' ? 'Open' : (match(w.encryption ?? '', /sae/) ? (match(w.encryption, /mixed/) ? 'WPA2 / WPA3' : 'WPA3') : 'WPA2'),
-			clients });
+			clients, schedule: sched[w['.name']] ?? null, off_by_schedule: (w['.name'] in off) });
 	});
 	return { networks: nets, radios };
 };
@@ -77,6 +77,17 @@ export function wifi_update(sid, b) {
 		if ('enabled' in b) {
 			let want = b.enabled ? '0' : '1';
 			if (want != (c.get('wireless', sid, 'disabled') ?? '0')) { c.set('wireless', sid, 'disabled', want); changed = true; }
+		}
+		if (type(b.schedule) == 'object') {
+			let sc = b.schedule, days = sort(filter(type(sc.days) == 'array' ? sc.days : [], d => type(d) == 'int' && d >= 1 && d <= 7));
+			let tm = t => type(t) == 'string' && match(t, /^([01][0-9]|2[0-3]):[0-5][0-9]$/) != null;
+			if (sc.enabled && (!tm(sc.from) || !tm(sc.to) || sc.from == sc.to)) return 'Choose a start and an end time that differ.';
+			if (sc.enabled && !length(days)) return 'Choose at least one day.';
+			let st = hub.load(ETC + '/settings.json', {});
+			st.wifi_schedule = st.wifi_schedule ?? {};
+			if (sc.enabled) st.wifi_schedule[sid] = { enabled: true, from: sc.from, to: sc.to, days };
+			else delete st.wifi_schedule[sid];
+			hub.save(ETC + '/settings.json', st);
 		}
 		if (!changed) return null;
 		writefile(ETC + '/wireless.prev', readfile('/etc/config/wireless') ?? '');   // one step back, by hand: cp /etc/miwrt/wireless.prev /etc/config/wireless; wifi reload
@@ -348,7 +359,11 @@ export function speedtest() {
 	if (ok == 0 || ms <= 0) return { error: 'The test server did not answer. Is the internet up?' };
 	let t0 = uptime_ms();
 	let ping = match(hub.run('ping -4 -c 3 -W 2 1.1.1.1 2>/dev/null'), /min\/avg\/max = [0-9.]+\/([0-9.]+)\//);
-	let r = { ts: time(), down_bps: int(ok * bytes * 8 * 1000 / ms), ping_ms: ping ? +ping[1] : null, partial: ok < n };
+	let ub = 40000000, ua = uptime_ms();
+	let uout = hub.run(`for i in 1 2 3 4; do lua /usr/sbin/miwrt-upload ${ub} & done; wait`);
+	let ums = uptime_ms() - ua, uok = length(filter(split(uout, '\n'), l => l == 'ok'));
+	let r = { ts: time(), down_bps: int(ok * bytes * 8 * 1000 / ms), up_bps: (uok > 0 && ums > 0) ? int(uok * ub * 8 * 1000 / ums) : null,
+		ping_ms: ping ? +ping[1] : null, partial: ok < n || uok < 4 };
 	hub.locked(() => {
 		let h = hub.load(SPEEDTESTS, []);
 		push(h, r);
@@ -408,4 +423,139 @@ export function wifi_check() {
 export function wake(mac) {
 	if (!hub.is_mac(mac)) return 'unknown device';
 	return system([ '/usr/sbin/miwrt-wol', mac ]) == 0 ? null : 'Could not send the wake-up signal.';
+};
+
+// ---------- Wi-Fi off on a schedule ----------
+
+/* Called on every pass. Switches a scheduled network off at its start time and back on at its end.
+   Only networks this function switched off are switched back on. */
+export function wifi_schedule_tick() {
+	let sched = hub.load(ETC + '/settings.json', {}).wifi_schedule ?? {};
+	let off = hub.load(ETC + '/wifi-off.json', []);
+	if (!length(keys(sched)) && !length(off)) return;
+	return hub.locked(() => {
+		let c = cursor(), lt = localtime(), changed = [];
+		for (let sid, sc in sched) {
+			if (!sid_ok(c, sid)) continue;
+			let want_off = hub.schedule_active(sc, lt), is_off = c.get('wireless', sid, 'disabled') == '1';
+			if (want_off && !is_off) { c.set('wireless', sid, 'disabled', '1'); push(off, sid); push(changed, `${c.get('wireless', sid, 'ssid')} off`); }
+		}
+		for (let sid in [ ...off ]) {
+			let sc = sched[sid];
+			if (sc && hub.schedule_active(sc, lt)) continue;
+			if (sid_ok(c, sid) && c.get('wireless', sid, 'disabled') == '1') { c.set('wireless', sid, 'disabled', '0'); push(changed, `${c.get('wireless', sid, 'ssid')} on`); }
+			off = filter(off, x => x != sid);
+		}
+		hub.save(ETC + '/wifi-off.json', off);
+		if (!length(changed)) return;
+		c.commit('wireless');
+		hub.add_alert('router', 'Wi-Fi schedule', join(', ', changed) + '.', 'info');
+		system('(sleep 1; wifi reload) >/dev/null 2>&1 &');
+	});
+};
+
+// ---------- speed shaping (SQM) ----------
+
+function shaping_queues(c) {
+	let wan = c.get('network', 'wan', 'device'), q = [];
+	c.foreach('sqm', 'queue', s => { push(q, { id: s['.name'], iface: s.interface, enabled: s.enabled == '1', down: +(s.download ?? 0), up: +(s.upload ?? 0), wan: s.interface == wan }); });
+	return q;
+}
+
+/* One download and one upload limit, whatever the layout: a queue on the internet port carries the
+   upload limit (and the download limit in the classic layout); a queue on the home side carries the
+   download limit in its outgoing direction. */
+export function shaping_get() {
+	let c = cursor(), q = shaping_queues(c);
+	if (!length(q)) return { available: false };
+	let down = 0, up = 0;
+	for (let x in q) {
+		if (x.wan) { if (x.up > 0) up = x.up; if (x.down > 0) down = x.down; }
+		else if (x.up > 0) down = x.up;
+	}
+	return { available: true, enabled: length(filter(q, x => x.enabled)) > 0, down_kbit: down, up_kbit: up };
+};
+
+export function shaping_set(b) {
+	return hub.locked(() => {
+		let c = cursor(), q = shaping_queues(c);
+		if (!length(q)) return 'Traffic shaping is not set up on this router.';
+		let ok = v => type(v) == 'int' && v >= 1000 && v <= 10000000;
+		if (('down_kbit' in b) && !ok(b.down_kbit)) return 'Download limit: between 1 and 10,000 Mbit/s.';
+		if (('up_kbit' in b) && !ok(b.up_kbit)) return 'Upload limit: between 1 and 10,000 Mbit/s.';
+		for (let x in q) {
+			if ('enabled' in b) c.set('sqm', x.id, 'enabled', b.enabled ? '1' : '0');
+			if (x.wan) {
+				if ('up_kbit' in b) c.set('sqm', x.id, 'upload', '' + b.up_kbit);
+				if (('down_kbit' in b) && x.down > 0) c.set('sqm', x.id, 'download', '' + b.down_kbit);
+			} else if ('down_kbit' in b) c.set('sqm', x.id, 'upload', '' + b.down_kbit);
+		}
+		c.commit('sqm');
+		system('(sleep 1; /etc/init.d/sqm restart) >/dev/null 2>&1 &');
+		hub.add_alert('router', 'Speed shaping changed', 'From the app.', 'info');
+		return null;
+	});
+};
+
+// ---------- firmware install ----------
+
+export function firmware_install() {
+	let f = firmware(true);
+	if (!f.update_available) return 'The router already runs the latest version.';
+	hub.add_alert('router', 'Firmware update started', `Installing ${f.latest_name ?? f.latest}. The router restarts when it is done; the old version stays in the second slot.`, 'warning');
+	system('(sleep 3; be7000-update apply --yes) >/tmp/miwrt/update.log 2>&1 &');
+	return null;
+};
+
+// ---------- IoT watch: what each device on a separate network talks to ----------
+
+const IOT_WATCH = ETC + '/iot-watch.json';
+
+function base_domain(d) {
+	let p = split(lc(d ?? ''), '.');
+	if (length(p) < 2) return null;
+	let n = (length(p) >= 3 && length(p[-1]) == 2 && (p[-2] in [ 'co', 'com', 'org', 'net', 'ac', 'gov', 'edu' ])) ? 3 : 2;
+	return join('.', slice(p, -n));
+}
+
+/* Every 15 minutes: read each non-main device's recent lookups from the linked ad blocker and remember
+   which sites it uses. A site never seen before raises an alert (after a device's first day). */
+export function iot_watch_tick() {
+	let st = stat(RUN + '/iot-watch.stamp');
+	if (st && time() - st.mtime < 900) return;
+	writefile(RUN + '/iot-watch.stamp', '');
+	if (!hub.protection().configured) return;
+	let devs = filter(hub.load(RUN + '/devices.json', {}).devices ?? [], d => d.ip && d.network != 'Main' && d.network != 'Not connected' && d.network != 'Other');
+	if (!length(devs)) return;
+	let db = hub.load(IOT_WATCH, {}), now = time(), dirty = false;
+	for (let d in devs) {
+		let log = hub.protection_log('all', d.ip);
+		if (!log.entries) continue;
+		let rec = db[d.mac];
+		if (!rec) { rec = db[d.mac] = { since: now, sites: {} }; dirty = true; }
+		for (let e in log.entries) {
+			if (e.ip != d.ip) continue;
+			let b = base_domain(e.domain);
+			if (!b || (b in rec.sites)) continue;
+			rec.sites[b] = now;
+			dirty = true;
+			if (now - rec.since > 86400)
+				hub.add_alert('device', 'An IoT device contacted something new', `${d.name} looked up ${b} for the first time.`, 'warning', `iot-${d.mac}-${b}`, 86400 * 30);
+		}
+	}
+	if (dirty) hub.save(IOT_WATCH, db);
+};
+
+export function iot_watch() {
+	if (!hub.protection().configured) return { available: false };
+	let db = hub.load(IOT_WATCH, {}), out = [], now = time();
+	for (let d in (hub.load(RUN + '/devices.json', {}).devices ?? [])) {
+		let rec = db[d.mac];
+		if (!rec) continue;
+		let sites = sort(map(keys(rec.sites), k => ({ site: k, first_seen: rec.sites[k], is_new: now - rec.sites[k] < 7 * 86400 && rec.sites[k] - rec.since > 86400 })),
+			(a, b) => b.first_seen - a.first_seen);
+		push(out, { mac: d.mac, name: d.name, icon: d.icon, category: d.category, network: d.network, learning: now - rec.since < 86400,
+			sites, new_count: length(filter(sites, x => x.is_new)) });
+	}
+	return { available: true, devices: sort(out, (a, b) => (b.new_count - a.new_count) || (length(b.sites) - length(a.sites))) };
 };

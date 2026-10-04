@@ -1,0 +1,22 @@
+#!/usr/bin/lua
+-- Upload half of the speed test: sends <bytes> of zeros to Cloudflare's speed endpoint over
+-- plain HTTP and prints "ok" when the server has taken them all.
+local nixio = require "nixio"
+require "nixio.util"
+local n = tonumber(arg[1]) or 8000000
+if n < 1000 or n > 100000000 then os.exit(1) end
+local s = nixio.connect("speed.cloudflare.com", 80)
+if not s then os.exit(1) end
+s:setsockopt("socket", "sndtimeo", 15)
+s:setsockopt("socket", "rcvtimeo", 15)
+s:writeall("POST /__up HTTP/1.1\r\nHost: speed.cloudflare.com\r\nContent-Type: application/octet-stream\r\nContent-Length: " .. n .. "\r\nConnection: close\r\n\r\n")
+local chunk = string.rep("\0", 65536)
+local left = n
+while left > 0 do
+	local c = left < 65536 and chunk:sub(1, left) or chunk
+	if not s:writeall(c) then os.exit(1) end
+	left = left - #c
+end
+local r = s:recv(64) or ""
+s:close()
+if r:match("^HTTP/1.1 2%d%d") then print("ok") else os.exit(1) end

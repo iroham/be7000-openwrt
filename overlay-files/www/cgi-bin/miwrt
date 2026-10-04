@@ -61,6 +61,8 @@ function main() {
 		if (path == '/v1/threats') reply(200, extras.threats());
 		if (path == '/v1/diagnose') reply(200, extras.diagnose());
 		if (path == '/v1/overview') reply(200, extras.overview());
+		if (path == '/v1/shaping') reply(200, extras.shaping_get());
+		if (path == '/v1/iotwatch') reply(200, extras.iot_watch());
 		if (path == '/v1/history') reply(200, { samples: hub.history() });
 		if (path == '/v1/speedtests') reply(200, { tests: extras.speedtests() });
 		if (path == '/v1/wifi/check') reply(200, extras.wifi_check());
@@ -91,6 +93,8 @@ function main() {
 		if (path == '/v1/protection/lists') done(hub.protection_list_action(body()));
 		if (path == '/v1/protection/rules') done(hub.protection_rule_action(body()));
 		if (path == '/v1/speedtest') reply(200, extras.speedtest());
+		if (path == '/v1/shaping') done(extras.shaping_set(body()));
+		if (path == '/v1/firmware/install') done(extras.firmware_install());
 		if (path == '/v1/push/register') done(hub.push_register(substr(auth, 7), body()));
 		if (path == '/v1/push/test') { hub.add_alert('router', 'Test notification', 'Notifications from your MiWRT router work.', 'warning'); done(null); }
 		m = match(path, /^\/v1\/devices\/([0-9a-f:]{17})\/wake$/);

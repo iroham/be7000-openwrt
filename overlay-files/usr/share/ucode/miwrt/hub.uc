@@ -8,7 +8,7 @@ import { connect } from 'ubus';
 import { cursor } from 'uci';
 import * as digest from 'digest';
 
-export const VERSION = '0.6';
+export const VERSION = '0.7';
 const ETC = '/etc/miwrt';
 const RUN = '/tmp/miwrt';
 const DEVICES = ETC + '/devices.json';
@@ -264,6 +264,44 @@ function collect(conn) {
 	return s;
 }
 
+// ---------- talking to a linked ad blocker (used by the device list and the protection screens) ----------
+
+function ag_call(cfg, path, payload) {
+	if (!cfg || !match(cfg.url ?? '', /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/)) return { code: 0, error: 'No ad blocker is linked.' };
+	let id = hexenc(open('/dev/urandom', 'r').read(6));
+	let errf = `${RUN}/ag-${id}.err`, bodyf = null;
+	let cmd = `uclient-fetch -T 8 -O - --no-check-certificate --header='Authorization: Basic ${b64enc(cfg.username + ':' + cfg.password)}'`;
+	if (payload != null) {
+		bodyf = `${RUN}/ag-${id}.json`;
+		writefile(bodyf, sprintf('%J', payload));
+		cmd += ` --header='Content-Type: application/json' --post-file=${bodyf}`;
+	}
+	let out = run(`${cmd} '${cfg.url}${path}' 2>${errf}`);
+	let err = readfile(errf) ?? '';
+	unlink(errf);
+	if (bodyf) unlink(bodyf);
+	let m = match(err, /HTTP error ([0-9]{3})/);
+	if (m) return { code: +m[1], error: (m[1] == '401' || m[1] == '403') ? 'The ad blocker rejected the user name or password.' : `The ad blocker answered with error ${m[1]}.` };
+	if (!match(err, /Download completed/)) return { code: 0, error: 'Cannot reach the ad blocker at that address.' };
+	let data = null;
+	if (match(out, /^\s*[\[{]/)) { try { data = json(out); } catch (e) {} }
+	return { code: 200, data, text: out };
+}
+
+/* One device's exemption from ad blocking: a client entry in AdGuard Home, keyed by its address. */
+function adblock_client(mac, ip, label) {
+	let cfg = load(ETC + '/adblock.json', null);
+	if (!cfg) return 'Link an ad blocker first.';
+	let name = 'MiWRT ' + mac;
+	ag_call(cfg, '/control/clients/delete', { name });   // fine if it did not exist
+	if (!ip) return null;
+	if (!match(ip, /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/)) return 'This device has no usable address.';
+	let r = ag_call(cfg, '/control/clients/add', { name, ids: [ ip ], use_global_settings: false, filtering_enabled: false,
+		parental_enabled: false, safebrowsing_enabled: false, safesearch_enabled: false, use_global_blocked_services: true,
+		blocked_services: [], upstreams: [], tags: [] });
+	return r.code == 200 ? null : (r.error ?? 'The ad blocker refused that.');
+}
+
 // ---------- pausing: manual, waiting for approval, timers, groups, schedules ----------
 
 export function settings() {
@@ -371,7 +409,10 @@ function merge_devices(s, db, rt) {
 		}
 		let host = leases[mac]?.hostname ?? hints[mac]?.name;
 		if (host && host != d.name) { d.name = host; dirty = true; }
-		if (ip && ip != d.ip) { d.ip = ip; dirty = true; }
+		if (ip && ip != d.ip) {
+			d.ip = ip; dirty = true;
+			if (d.unfiltered && d.unfiltered != ip && !adblock_client(mac, ip, null)) d.unfiltered = ip;
+		}
 		if (online && now - (d.last_seen ?? 0) > 21600) { d.last_seen = now; dirty = true; }   // coarse on flash
 		live[mac] = { online, link: assoc[mac] ?? ((mac in s.wired) ? { band: 'Cable', port: s.wired[mac] } : null), seen: online ? now : null };
 	}
@@ -383,7 +424,7 @@ function merge_devices(s, db, rt) {
 	// forget devices nobody named that have not been seen for 90 days (rotating private addresses, guests)
 	for (let mac in keys(db)) {
 		let d = db[mac];
-		if (!(mac in live) && !d.custom_name && !d.category && !d.icon && !d.blocked && !d.pending && !d.fixed_ip && now - (d.last_seen ?? d.first_seen ?? now) > 90 * 86400) {
+		if (!(mac in live) && !d.custom_name && !d.category && !d.icon && !d.blocked && !d.pending && !d.fixed_ip && !d.unfiltered && now - (d.last_seen ?? d.first_seen ?? now) > 90 * 86400) {
 			delete db[mac];
 			dirty = true;
 		}
@@ -431,7 +472,7 @@ function merge_devices(s, db, rt) {
 			category: cat, icon: d.icon ?? CATEGORIES[cat] ?? 'questionmark.circle',
 			custom: !!(d.custom_name || d.category || d.icon),
 			blocked: (mac in reasons), block_reason: reasons[mac], pending: !!d.pending, pause_until: d.pause_until,
-			fixed_ip: !!d.fixed_ip, groups: map(filter(groups, g => (mac in g.macs)), g => g.id),
+			fixed_ip: !!d.fixed_ip, unfiltered: !!d.unfiltered, groups: map(filter(groups, g => (mac in g.macs)), g => g.id),
 			rate: rates[mac], today: (() => {
 				let u = s.usage[mac], b = (rt.day_base ?? {})[mac];
 				if (!u) return null;
@@ -639,6 +680,7 @@ function apply_hosts(db) {
 	system([ '/etc/init.d/dnsmasq', 'reload' ]);
 }
 
+
 function update_device_unlocked(mac, b) {
 	let db = load(DEVICES, {}), d = db[mac];
 	if (!d) return 'unknown device';
@@ -672,6 +714,15 @@ function update_device_unlocked(mac, b) {
 		delete d.pending;
 		if (!b.approve) d.blocked = true;
 		add_alert('device', b.approve ? 'Device allowed' : 'Device blocked', label, 'info');
+	}
+	if ('filtering' in b) {
+		// "off": this device bypasses ad blocking (a named client in the linked ad blocker); "on": back to normal
+		let off = b.filtering == 'off';
+		if (off && !d.ip) return 'This device has no address yet.';
+		let err = adblock_client(mac, off ? d.ip : null, label);
+		if (err) return err;
+		if (off) d.unfiltered = d.ip; else delete d.unfiltered;
+		add_alert('device', off ? 'Ad blocking turned off for a device' : 'Ad blocking back on for a device', label, 'info');
 	}
 	if ('fixed_ip' in b) {
 		if (b.fixed_ip && !d.ip) return 'This device has no address yet.';
@@ -866,27 +917,6 @@ function is_domain(d) {
 	return type(d) == 'string' && length(d) <= 253 && match(d, /^[A-Za-z0-9]([A-Za-z0-9_-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9_-]*[A-Za-z0-9])?)+$/) != null;
 }
 
-function ag_call(cfg, path, payload) {
-	if (!cfg || !match(cfg.url ?? '', /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/)) return { code: 0, error: 'No ad blocker is linked.' };
-	let id = hexenc(open('/dev/urandom', 'r').read(6));
-	let errf = `${RUN}/ag-${id}.err`, bodyf = null;
-	let cmd = `uclient-fetch -T 8 -O - --no-check-certificate --header='Authorization: Basic ${b64enc(cfg.username + ':' + cfg.password)}'`;
-	if (payload != null) {
-		bodyf = `${RUN}/ag-${id}.json`;
-		writefile(bodyf, sprintf('%J', payload));
-		cmd += ` --header='Content-Type: application/json' --post-file=${bodyf}`;
-	}
-	let out = run(`${cmd} '${cfg.url}${path}' 2>${errf}`);
-	let err = readfile(errf) ?? '';
-	unlink(errf);
-	if (bodyf) unlink(bodyf);
-	let m = match(err, /HTTP error ([0-9]{3})/);
-	if (m) return { code: +m[1], error: (m[1] == '401' || m[1] == '403') ? 'The ad blocker rejected the user name or password.' : `The ad blocker answered with error ${m[1]}.` };
-	if (!match(err, /Download completed/)) return { code: 0, error: 'Cannot reach the ad blocker at that address.' };
-	let data = null;
-	if (match(out, /^\s*[\[{]/)) { try { data = json(out); } catch (e) {} }
-	return { code: 200, data, text: out };
-}
 
 function ag() {
 	return load(ADBLOCK, null);

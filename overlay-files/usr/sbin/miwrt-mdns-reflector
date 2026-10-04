@@ -1,0 +1,45 @@
+#!/usr/bin/lua
+-- Repeats mDNS (Bonjour) between two LAN-side networks, so phones on the main network can find
+-- AirPlay, Chromecast, printers and similar devices on the IoT network, and the other way round.
+-- Discovery only: what may actually connect to what is still decided by the firewall.
+local nixio = require "nixio"
+local A, B = arg[1] or "br-lan", arg[2] or "br-iot"
+local GROUP, PORT = "224.0.0.251", 5353
+
+local function ipv4(dev)
+	for _, a in ipairs(nixio.getifaddrs()) do
+		if a.name == dev and a.family == "inet" then return a.addr end
+	end
+end
+
+local own = {}
+local function open(dev)
+	local ip = assert(ipv4(dev), "no IPv4 address on " .. dev)
+	own[ip] = true
+	local s = nixio.socket("inet", "dgram")
+	s:setsockopt("socket", "reuseaddr", 1)
+	s:setsockopt("socket", "bindtodevice", dev)
+	assert(s:bind("0.0.0.0", PORT), "cannot listen on " .. dev)
+	s:setsockopt("ip", "add_membership", GROUP, ip)
+	s:setsockopt("ip", "multicast_if", ip)
+	s:setsockopt("ip", "multicast_loop", 0)
+	s:setsockopt("ip", "multicast_ttl", 255)
+	return s
+end
+
+local a, b = open(A), open(B)
+local fds = { { fd = a, events = nixio.poll_flags("in"), other = b }, { fd = b, events = nixio.poll_flags("in"), other = a } }
+local IN = nixio.poll_flags("in")
+
+while true do
+	local n = nixio.poll(fds, 10000)
+	if n and n > 0 then
+		for _, f in ipairs(fds) do
+			if f.revents and nixio.bit.band(f.revents, IN) ~= 0 then
+				local data, ip = f.fd:recvfrom(9000)
+				-- never repeat what the router itself sent (that is how a loop would start)
+				if data and #data > 0 and ip and not own[ip] then f.other:sendto(data, GROUP, PORT) end
+			end
+		end
+	end
+end
