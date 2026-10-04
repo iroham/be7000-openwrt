@@ -5,6 +5,7 @@
 case "$1" in
 token) n=$(printf '%s' "${2:-manual}" | tr -cd 'A-Za-z0-9 _-'); ucode -e "import * as hub from 'miwrt.hub'; print(hub.mint_token('$n', 'local'), '\n');" ;;
 tokens) ucode -e "import * as hub from 'miwrt.hub'; for (let k, v in hub.load('/etc/miwrt/tokens.json', {})) print(v.name, '  ', v.ip, '  ', v.created, '\n');" ;;
+revoke) n=$(printf '%s' "$2" | tr -cd 'A-Za-z0-9 _-'); [ -n "$n" ] && ucode -e "import * as hub from 'miwrt.hub'; let all = hub.load('/etc/miwrt/tokens.json', {}), k = 0; for (let h in keys(all)) if (all[h].name == '$n') { delete all[h]; k++; } hub.save_private('/etc/miwrt/tokens.json', all); print(k, ' removed\n');" ;;
 revoke-all) rm -f /etc/miwrt/tokens.json ;;
-*) sed -n '2,4p' "$0" ;;
+*) sed -n '2,5p' "$0" ;;
 esac
