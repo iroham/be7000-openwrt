@@ -1,0 +1,33 @@
+#!/usr/bin/lua
+-- Repeats smart-home discovery announcements (Tuya/Moes/Smart Life, UDP 6666 and 6667) from the
+-- IoT network onto the main network, so phone apps still find their devices and control them
+-- locally. One direction only; nothing from the main network is sent to IoT.
+local nixio = require "nixio"
+local FROM, TO = arg[1] or "br-iot", arg[2] or "br-lan"
+local PORTS = { 6666, 6667 }
+
+local out = nixio.socket("inet", "dgram")
+out:setsockopt("socket", "broadcast", 1)
+out:setsockopt("socket", "bindtodevice", TO)
+
+local fds = {}
+for _, port in ipairs(PORTS) do
+	local s = nixio.socket("inet", "dgram")
+	s:setsockopt("socket", "reuseaddr", 1)
+	s:setsockopt("socket", "broadcast", 1)
+	s:setsockopt("socket", "bindtodevice", FROM)
+	assert(s:bind("0.0.0.0", port), "cannot listen on port " .. port)
+	fds[#fds + 1] = { fd = s, events = nixio.poll_flags("in"), port = port }
+end
+
+while true do
+	local n = nixio.poll(fds, 10000)
+	if n and n > 0 then
+		for _, f in ipairs(fds) do
+			if f.revents and nixio.bit.band(f.revents, nixio.poll_flags("in")) ~= 0 then
+				local data = f.fd:recvfrom(2048)
+				if data and #data > 0 then out:sendto(data, "255.255.255.255", f.port) end
+			end
+		end
+	end
+end
