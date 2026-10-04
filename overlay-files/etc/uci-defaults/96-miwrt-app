@@ -1,0 +1,13 @@
+#!/bin/sh
+# MiWRT app service: the firewall hook for paused devices, and start at boot.
+if [ "$(uci -q get firewall.miwrt_block)" != "include" ]; then
+	uci set firewall.miwrt_block=include
+	uci set firewall.miwrt_block.type='nftables'
+	uci set firewall.miwrt_block.path='/etc/miwrt/blocked.nft'
+	uci set firewall.miwrt_block.position='chain-prepend'
+	uci set firewall.miwrt_block.chain='forward'
+	uci commit firewall
+fi
+[ -f /etc/miwrt/blocked.nft ] || { mkdir -p /etc/miwrt; : > /etc/miwrt/blocked.nft; }
+/etc/init.d/miwrt enable
+exit 0

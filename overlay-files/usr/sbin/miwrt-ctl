@@ -1,0 +1,10 @@
+#!/bin/sh
+# miwrt-ctl token <name>   create an access key for the MiWRT app without pairing (prints it once)
+# miwrt-ctl tokens         list paired phones
+# miwrt-ctl revoke-all     remove every access key
+case "$1" in
+token) n=$(printf '%s' "${2:-manual}" | tr -cd 'A-Za-z0-9 _-'); ucode -e "import * as hub from 'miwrt.hub'; print(hub.mint_token('$n', 'local'), '\n');" ;;
+tokens) ucode -e "import * as hub from 'miwrt.hub'; for (let k, v in hub.load('/etc/miwrt/tokens.json', {})) print(v.name, '  ', v.ip, '  ', v.created, '\n');" ;;
+revoke-all) rm -f /etc/miwrt/tokens.json ;;
+*) sed -n '2,4p' "$0" ;;
+esac

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Keeps the MiWRT app's view of the router fresh: one pass every 30 seconds.
+ucode -e "import * as hub from 'miwrt.hub'; hub.boot();"
+while :; do
+	ucode -e "import * as hub from 'miwrt.hub'; import * as extras from 'miwrt.extras'; hub.tick(); extras.guest_expire();" 2>&1 | logger -t miwrt-hubd
+	sleep 30
+done
