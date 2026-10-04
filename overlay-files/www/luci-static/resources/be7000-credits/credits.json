@@ -95,6 +95,24 @@
 			]
 		},
 		{
+			"id": "measure",
+			"title": {
+				"ru": "Провели замеры",
+				"en": "Ran measurements",
+				"zh": "做了测速"
+			},
+			"people": [
+				{
+					"name": "zh8416",
+					"site": "GitHub",
+					"url": "https://github.com/zh8416",
+					"ru": "Проверил аппаратную разгрузку на проводном подключении 2,5 Гбит/с, с iperf3, conntrack и загрузкой процессора.",
+					"en": "Tested hardware offload on a wired 2.5 Gbit/s connection, with iperf3, conntrack and CPU load.",
+					"zh": "在 2.5 Gbit/s 有线连接上测试了硬件加速，提供了 iperf3、conntrack 和 CPU 负载数据。"
+				}
+			]
+		},
+		{
 			"id": "base",
 			"title": {
 				"ru": "На чьей работе стоит сборка",

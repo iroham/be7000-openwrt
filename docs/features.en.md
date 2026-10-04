@@ -58,7 +58,7 @@ The IPQ9554 has a separate network block, the PPE. It can route and do NAT by it
 
 ![Where download packets go with offload on](img/ppe-packet-path-en.svg)
 
-The feature is tested and works, and it is off by default. It is turned on at Network, Hardware offload, which also describes what is offloaded and what it does not mix with.
+The feature is tested and works, and it is off by default. It is turned on at Network, Hardware offload, which also describes what is offloaded and what it does not mix with. On a wired 2.5 Gbit/s connection a measurement by zh8416 showed that the speed does not change, because the port is at the TCP limit without offload anyway, while CPU load drops from 60 to 41 % down and from 43 to 37 % up. Details and caveats are in [benchmarks.en.md](benchmarks.en.md).
 
 ### Fixes
 
@@ -83,9 +83,8 @@ The full list of changes is in [CHANGELOG.en.md](../CHANGELOG.en.md).
 
 ## What is not tested yet
 
-Two things need testing on live routers, and there is no way to run such tests yet.
+One thing needs testing on live routers, and there is no way to run such a test yet.
 
 - **Settings import from the factory firmware** was tested on test data but has not run on a real factory firmware yet. You can safely see what the firmware finds with `be7000-stock-import preview`, it changes nothing.
-- **Measuring the gain from hardware offload on a wired connection.** The offload itself is tested and works. For Wi-Fi the gain is small, because packets still pass through the CPU. There are no measurements on a wired connection yet.
 
 If you can help, post the results in the 4PDA topic or in issues. How to measure is described in [benchmarks.en.md](benchmarks.en.md).
