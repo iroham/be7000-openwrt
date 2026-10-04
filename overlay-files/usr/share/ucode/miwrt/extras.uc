@@ -330,3 +330,82 @@ export function week() {
 		alerts: length(alerts), router_uptime: st.router?.uptime, devices_known: length(devs)
 	};
 };
+
+// ---------- speed test (from the router itself) ----------
+
+const SPEEDTESTS = ETC + '/speedtests.json';
+
+function uptime_ms() {
+	return int(+split(readfile('/proc/uptime') ?? '0', ' ')[0] * 1000);
+}
+
+/* Four parallel 60 MB downloads from Cloudflare. Measures the line from the router, so Wi-Fi does not
+   affect it. Very fast lines read a little low because the router's own processor becomes the limit. */
+export function speedtest() {
+	let n = 4, bytes = 60000000, a = uptime_ms();
+	let out = hub.run(`for i in 1 2 3 4; do (uclient-fetch -q -T 20 -O /dev/null 'https://speed.cloudflare.com/__down?bytes=${bytes}' && echo ok) & done; wait`);
+	let ms = uptime_ms() - a, ok = length(filter(split(out, '\n'), l => l == 'ok'));
+	if (ok == 0 || ms <= 0) return { error: 'The test server did not answer. Is the internet up?' };
+	let t0 = uptime_ms();
+	let ping = match(hub.run('ping -4 -c 3 -W 2 1.1.1.1 2>/dev/null'), /min\/avg\/max = [0-9.]+\/([0-9.]+)\//);
+	let r = { ts: time(), down_bps: int(ok * bytes * 8 * 1000 / ms), ping_ms: ping ? +ping[1] : null, partial: ok < n };
+	hub.locked(() => {
+		let h = hub.load(SPEEDTESTS, []);
+		push(h, r);
+		hub.save(SPEEDTESTS, slice(h, max(0, length(h) - 60)));
+	});
+	return r;
+};
+
+export function speedtests() {
+	return hub.load(SPEEDTESTS, []);
+};
+
+// ---------- Wi-Fi check: neighbours per channel, and devices with a weak link ----------
+
+export function wifi_check() {
+	let conn = connect(), radios = [];
+	for (let rname, r in (conn.call('network.wireless', 'status') ?? {})) {
+		let ifname = null;
+		for (let i in (r.interfaces ?? [])) if (i.ifname && !ifname) ifname = i.ifname;
+		if (!ifname) continue;
+		let info = conn.call('iwinfo', 'info', { device: ifname }) ?? {};
+		let scan = conn.call('iwinfo', 'scan', { device: ifname })?.results ?? [];
+		let per = {};
+		for (let n in scan) {
+			if (!n.channel) continue;
+			let k = '' + n.channel;
+			per[k] = per[k] ?? { channel: n.channel, networks: 0, strongest: -100 };
+			per[k].networks++;
+			if ((n.signal ?? -100) > per[k].strongest) per[k].strongest = n.signal;
+		}
+		let band24 = (info.frequency ?? 0) < 4000, advice = null, best = null;
+		if (band24) {
+			// only 1, 6 and 11 do not overlap; a neighbour within 4 channels still interferes
+			let crowd = c => { let t = 0; for (let k, v in per) if ((v.channel > c ? v.channel - c : c - v.channel) <= 4) t += v.networks * (v.strongest > -70 ? 2 : 1); return t; };
+			let cand = sort(map([ 1, 6, 11 ], c => ({ channel: c, load: crowd(c) })), (a, b) => a.load - b.load);
+			best = cand[0].channel;
+			let cur = crowd(info.channel);
+			advice = (best == info.channel || cur <= cand[0].load + 1)
+				? `Channel ${info.channel} is a good choice here.`
+				: `Channel ${best} has less interference than channel ${info.channel}. Zigbee smart-home networks on channel 25 sit next to Wi-Fi channel 11, so prefer 1 or 6 if you have one.`;
+		} else {
+			advice = `${length(scan)} neighbouring network${length(scan) == 1 ? '' : 's'} seen on 5 GHz. With a wide ${info.htmode ?? ''} channel there is little to gain from moving.`;
+		}
+		push(radios, { band: band24 ? '2.4 GHz' : '5 GHz', channel: info.channel, width: info.htmode, neighbours: length(scan), suggested: best, advice,
+			channels: sort(values(per), (a, b) => a.channel - b.channel) });
+	}
+	let weak = [];
+	for (let d in (hub.load(RUN + '/devices.json', {}).devices ?? []))
+		if (d.online && d.link?.signal != null && d.link.signal < -72)
+			push(weak, { name: d.name, mac: d.mac, signal: d.link.signal, band: d.link.band,
+				advice: d.link.band == '5 GHz' ? 'Far from the router for 5 GHz. Move it closer, or let it use 2.4 GHz.' : 'Weak signal. Move it closer to the router or away from metal and walls.' });
+	return { radios, weak: sort(weak, (a, b) => a.signal - b.signal) };
+};
+
+// ---------- wake a sleeping device ----------
+
+export function wake(mac) {
+	if (!hub.is_mac(mac)) return 'unknown device';
+	return system([ '/usr/sbin/miwrt-wol', mac ]) == 0 ? null : 'Could not send the wake-up signal.';
+};

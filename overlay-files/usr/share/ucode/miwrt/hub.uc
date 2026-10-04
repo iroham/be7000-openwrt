@@ -8,7 +8,7 @@ import { connect } from 'ubus';
 import { cursor } from 'uci';
 import * as digest from 'digest';
 
-export const VERSION = '0.5';
+export const VERSION = '0.6';
 const ETC = '/etc/miwrt';
 const RUN = '/tmp/miwrt';
 const DEVICES = ETC + '/devices.json';
@@ -21,6 +21,9 @@ const GROUPS = ETC + '/groups.json';
 const SCHEDULES = ETC + '/schedules.json';
 const USAGE = ETC + '/usage.json';
 const BLOCKED_LIST = ETC + '/blocked.list';
+const PUSH_QUEUE = RUN + '/push-queue.jsonl';
+const HISTORY = RUN + '/history.json';
+export const PUSH_KINDS = [ 'radio', 'internet', 'dns', 'device', 'router' ];
 const OUI = '/usr/share/miwrt/oui.txt';
 
 // category -> default SF Symbol shown by the app
@@ -163,6 +166,13 @@ export function add_alert(kind, title, body, severity, key, quiet) {
 	let t = tmpname(ALERTS);
 	writefile(t, join('\n', map(keep, x => sprintf('%J', x))) + '\n');
 	rename(t, ALERTS);
+	// notifications: queue it and let the sender run in the background
+	let p = load(SETTINGS, {}).push;
+	if (p?.enabled && p?.relay) {
+		let f = open(PUSH_QUEUE, 'a');
+		if (f) { f.write(sprintf('%J', a) + '\n'); f.close(); }
+		system('/usr/sbin/miwrt-push >/dev/null 2>&1 &');
+	}
 };
 
 // ---------- collecting the router's state ----------
@@ -258,7 +268,11 @@ function collect(conn) {
 
 export function settings() {
 	let c = load(SETTINGS, {});
-	return { watchdog: c.watchdog !== false, approve_new: !!c.approve_new, guest_until: c.guest_until ?? 0 };
+	let kinds = {};
+	for (let k in PUSH_KINDS) kinds[k] = (c.push?.kinds ?? {})[k] !== false;
+	return { watchdog: c.watchdog !== false, approve_new: !!c.approve_new, guest_until: c.guest_until ?? 0,
+		push: { enabled: !!c.push?.enabled, relay: c.push?.relay ?? null, kinds },
+		night: { enabled: !!c.night?.enabled, from: c.night?.from ?? '23:00', to: c.night?.to ?? '07:00' } };
 };
 
 function minutes_of(hhmm) {
@@ -562,7 +576,21 @@ function tick_unlocked() {
 		rt.dns_ok = ok; rt.dns_ts = s.ts;
 	}
 
+	// lights off at night, back on in the morning (only if they were on)
+	let st = settings(), lt_now = localtime(s.ts);
+	let in_night = st.night.enabled && schedule_active({ enabled: true, from: st.night.from, to: st.night.to, days: [ 1, 2, 3, 4, 5, 6, 7 ] }, lt_now);
+	if (in_night && !rt.night_on && !stat(ETC + '/leds-off')) { set_leds(false); rt.night_on = true; }
+	else if (!in_night && rt.night_on) { set_leds(true); rt.night_on = false; }
+
 	let devices = merge_devices(s, db, rt);
+	// one sample every five minutes for the health charts (memory only, 48 hours)
+	if (s.ts - (rt.hist_ts ?? 0) >= 300) {
+		let mem = s.info.memory ?? {}, h = load(HISTORY, []);
+		push(h, { ts: s.ts, temp: int(s.temp), mem: mem.total ? int(100 - 100 * (mem.available ?? 0) / mem.total) : null,
+			down: rt.rates?.down ?? 0, up: rt.rates?.up ?? 0, clients: length(filter(devices, d => d.online)), wan: !!s.wan.up });
+		save(HISTORY, slice(h, max(0, length(h) - 576)));
+		rt.hist_ts = s.ts;
+	}
 	save(RUN + '/devices.json', { devices });
 	save(RUN + '/status.json', build_status(s, rt, devices));
 	save(RUN + '/runtime.json', rt);
@@ -756,14 +784,38 @@ export function schedules_action(b) {
 };
 
 export function set_setting(b) {
-	locked(() => {
+	return locked(() => {
 		let c = load(SETTINGS, {});
 		if ('approve_new' in b) c.approve_new = !!b.approve_new;
 		if ('watchdog' in b) c.watchdog = !!b.watchdog;
+		if (type(b.push) == 'object') {
+			let p = c.push ?? {};
+			if ('enabled' in b.push) p.enabled = !!b.push.enabled;
+			if ('relay' in b.push) {
+				let r = replace(trim(b.push.relay ?? ''), /\/+$/, '');
+				if (length(r) && !match(r, /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/)) return 'The relay address does not look right.';
+				p.relay = length(r) ? r : null;
+			}
+			if (type(b.push.kinds) == 'object') {
+				p.kinds = p.kinds ?? {};
+				for (let k in PUSH_KINDS) if (k in b.push.kinds) p.kinds[k] = !!b.push.kinds[k];
+			}
+			c.push = p;
+		}
+		if (type(b.night) == 'object') {
+			let n = c.night ?? {};
+			if ('enabled' in b.night) n.enabled = !!b.night.enabled;
+			for (let k in [ 'from', 'to' ]) if (k in b.night) {
+				if (minutes_of(b.night[k]) == null) return 'Times look like 23:00.';
+				n[k] = b.night[k];
+			}
+			if (n.from == n.to && n.enabled) return 'Choose a start and an end time that differ.';
+			c.night = n;
+		}
 		save(SETTINGS, c);
 		tick_unlocked();
+		return null;
 	});
-	return null;
 };
 
 export function usage_history() {
@@ -1025,8 +1077,38 @@ export function mint_token(name, ip) {
 export function phones(current) {
 	let out = [], cur = current ? digest.sha256(current) : null;
 	for (let h, v in load(TOKENS, {}))
-		push(out, { id: substr(h, 0, 12), name: v.name, created: v.created, ip: v.ip, current: h == cur });
+		push(out, { id: substr(h, 0, 12), name: v.name, created: v.created, ip: v.ip, current: h == cur, notifications: !!v.apns?.token });
 	return sort(out, (a, b) => b.created - a.created);
+};
+
+/* Remember where Apple delivers notifications for the phone that holds this access key. */
+export function push_register(tok, b) {
+	if (type(b.token) != 'string' || !match(b.token, /^[0-9a-f]{64,200}$/)) return 'That is not a notification address.';
+	return locked(() => {
+		let all = load(TOKENS, {}), h = digest.sha256(tok);
+		if (!(h in all)) return 'unknown phone';
+		all[h].apns = { token: b.token, env: b.env == 'production' ? 'production' : 'sandbox' };
+		save_private(TOKENS, all);
+		return null;
+	});
+};
+
+export function push_targets() {
+	let out = [];
+	for (let h, v in load(TOKENS, {})) if (v.apns?.token) push(out, v.apns);
+	return out;
+};
+
+export function push_forget(gone) {
+	locked(() => {
+		let all = load(TOKENS, {}), changed = false;
+		for (let h, v in all) if (v.apns?.token && (v.apns.token in gone)) { delete v.apns; changed = true; }
+		if (changed) save_private(TOKENS, all);
+	});
+};
+
+export function history() {
+	return load(HISTORY, []);
 };
 
 export function revoke_phone(id) {

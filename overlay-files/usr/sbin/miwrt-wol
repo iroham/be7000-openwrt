@@ -1,0 +1,18 @@
+#!/usr/bin/lua
+-- Sends a Wake-on-LAN magic packet for one hardware address on every LAN-side bridge.
+local nixio = require "nixio"
+local mac = arg[1] or ""
+if not mac:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then os.exit(1) end
+local raw = mac:gsub(":", ""):gsub("%x%x", function(h) return string.char(tonumber(h, 16)) end)
+local packet = string.rep(string.char(255), 6) .. string.rep(raw, 16)
+local sent = false
+for dev in nixio.fs.dir("/sys/class/net") do
+	if dev:match("^br%-") then
+		local s = nixio.socket("inet", "dgram")
+		s:setsockopt("socket", "broadcast", 1)
+		s:setsockopt("socket", "bindtodevice", dev)
+		if s:sendto(packet, "255.255.255.255", 9) then sent = true end
+		s:close()
+	end
+end
+os.exit(sent and 0 or 1)

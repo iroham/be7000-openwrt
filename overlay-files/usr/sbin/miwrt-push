@@ -1,0 +1,32 @@
+#!/usr/bin/env ucode
+// Sends queued alerts to the notification relay, which passes them to Apple.
+// What leaves the router: the alert's title and text, and the phones' notification addresses.
+'use strict';
+import { readfile, writefile, rename, unlink, popen, open } from 'fs';
+import * as hub from 'miwrt.hub';
+
+const RUN = '/tmp/miwrt';
+const QUEUE = RUN + '/push-queue.jsonl';
+
+let st = hub.settings();
+let work = `${RUN}/push-${hexenc(hub.random_bytes(4))}.work`;
+if (!rename(QUEUE, work)) exit(0);
+let lines = filter(split(readfile(work) ?? '', '\n'), l => length(l) > 0);
+unlink(work);
+if (!st.push.enabled || !st.push.relay || !match(st.push.relay, /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/)) exit(0);
+let targets = hub.push_targets();
+if (!length(targets)) exit(0);
+
+for (let line in lines) {
+	let a;
+	try { a = json(line); } catch (e) { continue; }
+	if (a.severity == 'info' || st.push.kinds[a.kind] === false) continue;
+	let bodyf = `${RUN}/push-${hexenc(hub.random_bytes(4))}.json`;
+	writefile(bodyf, sprintf('%J', { app: 'cloud.iroham.miwrt', tokens: targets, title: a.title, body: a.body, kind: a.kind, severity: a.severity, id: a.id }));
+	let out = hub.run(`uclient-fetch -q -T 10 -O - --no-check-certificate --header='Content-Type: application/json' --post-file=${bodyf} '${st.push.relay}/v1/push' 2>/dev/null`);
+	unlink(bodyf);
+	try {
+		let r = json(out);
+		if (type(r.gone) == 'array' && length(r.gone)) hub.push_forget(r.gone);
+	} catch (e) {}
+}
