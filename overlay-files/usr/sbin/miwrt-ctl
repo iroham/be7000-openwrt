@@ -1,11 +1,23 @@
 #!/bin/sh
 # miwrt-ctl token <name>   create an access key for the MiWRT app without pairing (prints it once)
 # miwrt-ctl tokens         list paired phones
+# miwrt-ctl revoke <name>  remove the access keys with that name
 # miwrt-ctl revoke-all     remove every access key
+# miwrt-ctl apns <AuthKey.p8> <key id> <team id>   let this router send notifications to Apple itself
+# miwrt-ctl apns-remove    forget the Apple push key
 case "$1" in
 token) n=$(printf '%s' "${2:-manual}" | tr -cd 'A-Za-z0-9 _-'); ucode -e "import * as hub from 'miwrt.hub'; print(hub.mint_token('$n', 'local'), '\n');" ;;
 tokens) ucode -e "import * as hub from 'miwrt.hub'; for (let k, v in hub.load('/etc/miwrt/tokens.json', {})) print(v.name, '  ', v.ip, '  ', v.created, '\n');" ;;
 revoke) n=$(printf '%s' "$2" | tr -cd 'A-Za-z0-9 _-'); [ -n "$n" ] && ucode -e "import * as hub from 'miwrt.hub'; let all = hub.load('/etc/miwrt/tokens.json', {}), k = 0; for (let h in keys(all)) if (all[h].name == '$n') { delete all[h]; k++; } hub.save_private('/etc/miwrt/tokens.json', all); print(k, ' removed\n');" ;;
 revoke-all) rm -f /etc/miwrt/tokens.json ;;
-*) sed -n '2,5p' "$0" ;;
+apns)
+	[ -f "$2" ] && openssl pkey -in "$2" -noout 2>/dev/null || { echo "That is not a private key file."; exit 1; }
+	echo "$3" | grep -qE '^[A-Z0-9]{10}$' && echo "$4" | grep -qE '^[A-Z0-9]{10}$' || { echo "Key ID and team ID are 10 letters and digits each."; exit 1; }
+	[ -x /usr/bin/curl ] || echo "Note: curl is not installed; install it (apk add curl) before notifications can be sent."
+	mkdir -p /etc/miwrt/apns && chmod 700 /etc/miwrt/apns
+	cp "$2" /etc/miwrt/apns/key.p8 && chmod 600 /etc/miwrt/apns/key.p8
+	printf '{"key_id":"%s","team_id":"%s"}\n' "$3" "$4" > /etc/miwrt/apns/config.json && chmod 600 /etc/miwrt/apns/config.json
+	rm -f /tmp/miwrt/apns-jwt; echo "Saved. This router now sends notifications to Apple itself." ;;
+apns-remove) rm -rf /etc/miwrt/apns /tmp/miwrt/apns-jwt ;;
+*) sed -n '2,7p' "$0" ;;
 esac

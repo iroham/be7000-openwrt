@@ -1,32 +1,96 @@
 #!/usr/bin/env ucode
-// Sends queued alerts to the notification relay, which passes them to Apple.
-// What leaves the router: the alert's title and text, and the phones' notification addresses.
+// Sends queued alerts to the phones.
+// Direct: this router holds an Apple push key (installed with `miwrt-ctl apns`) and talks to Apple itself.
+// Relay: the alert's title and text and the phones' notification addresses go to a relay that holds the key.
 'use strict';
-import { readfile, writefile, rename, unlink, popen, open } from 'fs';
+import { readfile, writefile, rename, unlink, chmod, stat } from 'fs';
 import * as hub from 'miwrt.hub';
 
 const RUN = '/tmp/miwrt';
 const QUEUE = RUN + '/push-queue.jsonl';
+const JWT = RUN + '/apns-jwt';
+const APP = 'cloud.iroham.miwrt';
+const HOSTS = { production: 'api.push.apple.com', sandbox: 'api.sandbox.push.apple.com' };
 
-let st = hub.settings();
-let work = `${RUN}/push-${hexenc(hub.random_bytes(4))}.work`;
-if (!rename(QUEUE, work)) exit(0);
-let lines = filter(split(readfile(work) ?? '', '\n'), l => length(l) > 0);
-unlink(work);
-if (!st.push.enabled || !st.push.relay || !match(st.push.relay, /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/)) exit(0);
-let targets = hub.push_targets();
-if (!length(targets)) exit(0);
+function tmp(ext) { return `${RUN}/push-${hexenc(hub.random_bytes(6))}.${ext}`; }
+function b64url(s) { return replace(replace(replace(b64enc(s), /\+/g, '-'), /\//g, '_'), /=+$/, ''); }
 
-for (let line in lines) {
-	let a;
-	try { a = json(line); } catch (e) { continue; }
-	if (a.severity == 'info' || st.push.kinds[a.kind] === false) continue;
-	let bodyf = `${RUN}/push-${hexenc(hub.random_bytes(4))}.json`;
-	writefile(bodyf, sprintf('%J', { app: 'cloud.iroham.miwrt', tokens: targets, title: a.title, body: a.body, kind: a.kind, severity: a.severity, id: a.id }));
-	let out = hub.run(`uclient-fetch -q -T 10 -O - --no-check-certificate --header='Content-Type: application/json' --post-file=${bodyf} '${st.push.relay}/v1/push' 2>/dev/null`);
+/* The signed token that proves to Apple who is sending. Apple wants it reused, not remade per message:
+   it is kept for 50 minutes. */
+function provider_token(conf) {
+	let st = stat(JWT);
+	if (st && time() - st.mtime < 3000) { let t = trim(readfile(JWT) ?? ''); if (length(t) > 100) return t; }
+	let signing = b64url(sprintf('%J', { alg: 'ES256', kid: conf.key_id })) + '.' + b64url(sprintf('%J', { iss: conf.team_id, iat: time() }));
+	let f = tmp('sig');
+	writefile(f, signing);
+	// openssl writes the signature as two numbers in a DER wrapper; a token needs them as 2 x 32 raw bytes
+	let out = hub.run(`openssl dgst -sha256 -sign ${hub.APNS_KEY} -binary ${f} 2>/dev/null | openssl asn1parse -inform DER 2>/dev/null`);
+	unlink(f);
+	let raw = '';
+	for (let line in split(out, '\n')) {
+		let m = match(line, /INTEGER +:([0-9A-Fa-f]+)$/);
+		if (!m) continue;
+		let h = m[1];
+		while (length(h) < 64) h = '0' + h;
+		raw += substr(h, length(h) - 64);
+	}
+	if (length(raw) != 128) return null;
+	let token = signing + '.' + b64url(hexdec(raw));
+	writefile(JWT, token + '\n');
+	chmod(JWT, 0600);
+	return token;
+}
+
+function send_direct(a, targets) {
+	let conf;
+	try { conf = json(readfile(hub.APNS_CONF)); } catch (e) { return; }
+	if (!match(conf.key_id ?? '', /^[A-Z0-9]{10}$/) || !match(conf.team_id ?? '', /^[A-Z0-9]{10}$/)) return;
+	let token = provider_token(conf);
+	if (!token) return;
+	let kind = replace(`${a.kind ?? 'router'}`, /[^A-Za-z0-9_-]/g, '');
+	let headf = tmp('hdr'), bodyf = tmp('json'), gone = [];
+	writefile(headf, join('\n', [ 'authorization: bearer ' + token, 'apns-topic: ' + (conf.bundle_id ?? APP), 'apns-push-type: alert',
+		'apns-priority: ' + (a.severity == 'critical' ? '10' : '5'), 'apns-collapse-id: ' + substr(kind, 0, 32), 'apns-expiration: ' + (time() + 3600) ]) + '\n');
+	chmod(headf, 0600);
+	writefile(bodyf, sprintf('%J', { aps: { alert: { title: substr(a.title ?? '', 0, 120), body: substr(a.body ?? '', 0, 400) }, sound: 'default', 'thread-id': kind },
+		kind: a.kind, alert_id: a.id }));
+	for (let t in slice(targets, 0, 20)) {
+		if (!match(t.token ?? '', /^[0-9a-f]{64,200}$/) || !HOSTS[t.env]) continue;
+		let code = trim(hub.run(`curl -sS --http2 --max-time 10 -o /dev/null -w '%{http_code}' -H @${headf} -d @${bodyf} https://${HOSTS[t.env]}/3/device/${t.token} 2>/dev/null`));
+		if (code == '410') push(gone, t.token);
+		if (code == '403') unlink(JWT);   // Apple refused the token: make a new one next time
+	}
+	unlink(headf); unlink(bodyf);
+	if (length(gone)) hub.push_forget(gone);
+}
+
+function send_relay(a, targets, relay) {
+	let bodyf = tmp('json');
+	writefile(bodyf, sprintf('%J', { app: APP, tokens: targets, title: a.title, body: a.body, kind: a.kind, severity: a.severity, id: a.id }));
+	let out = hub.run(`uclient-fetch -q -T 10 -O - --no-check-certificate --header='Content-Type: application/json' --post-file=${bodyf} '${relay}/v1/push' 2>/dev/null`);
 	unlink(bodyf);
 	try {
 		let r = json(out);
 		if (type(r.gone) == 'array' && length(r.gone)) hub.push_forget(r.gone);
 	} catch (e) {}
+}
+
+let st = hub.settings();
+let work = tmp('work');
+if (!rename(QUEUE, work)) exit(0);
+let lines = filter(split(readfile(work) ?? '', '\n'), l => length(l) > 0);
+unlink(work);
+let mode = hub.push_mode(st.push);
+if (!st.push.enabled || !mode) exit(0);
+if (mode == 'relay' && !match(st.push.relay, /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/)) exit(0);
+let targets = hub.push_targets();
+if (!length(targets)) exit(0);
+
+let sent = 0;
+for (let line in lines) {
+	let a;
+	try { a = json(line); } catch (e) { continue; }
+	if (a.severity == 'info' || st.push.kinds[a.kind] === false) continue;
+	if (++sent > 20) break;   // a burst of alerts must not become a burst of notifications
+	if (mode == 'direct') send_direct(a, targets); else send_relay(a, targets, st.push.relay);
 }

@@ -42,7 +42,7 @@ Returning from the two-radio 5 GHz mode to one radio left the upper radio's chan
 
 ### Shipped in the image
 
-`sqm-scripts` and its LuCI page (cake), `nlbwmon` and its page (per-device traffic accounting), `banip` and its page (IP block lists), `umdns` (mDNS) and `tcpdump-mini`. They survive every sysupgrade without depending on the feed.
+`curl` with HTTP/2 (the notification sender needs it), `sqm-scripts` and its LuCI page (cake), `nlbwmon` and its page (per-device traffic accounting), `banip` and its page (IP block lists), `umdns` (mDNS) and `tcpdump-mini`. They survive every sysupgrade without depending on the feed.
 
 ### Name and look
 
@@ -58,8 +58,8 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 | `/usr/share/ucode/miwrt/extras.uc` | Wi-Fi settings and schedule, guest Wi-Fi, firmware check and install, blocked threats, connection test, speed test, Wi-Fi check, speed shaping, IoT watch, summaries |
 | `/www/cgi-bin/miwrt` | the HTTPS API |
 | `/usr/sbin/miwrt-hubd`, `/etc/init.d/miwrt` | one pass every 30 s, the network announcement, the two relays |
-| `/usr/sbin/miwrt-ctl` | `token <name>`, `tokens`, `revoke <name>`, `revoke-all` |
-| `/usr/sbin/miwrt-push` | hands alerts to a notification relay, if one is set |
+| `/usr/sbin/miwrt-ctl` | `token <name>`, `tokens`, `revoke <name>`, `revoke-all`, `apns <key file> <key id> <team id>`, `apns-remove` |
+| `/usr/sbin/miwrt-push` | sends alerts as notifications: straight to Apple when the router holds a push key, otherwise to a relay, if one is set |
 | `/usr/sbin/miwrt-discovery-relay` | repeats smart-home discovery broadcasts from an IoT network to the main one |
 | `/usr/sbin/miwrt-mdns-reflector` | repeats mDNS (AirPlay, Chromecast, printers) between the main and the IoT network |
 | `/usr/sbin/miwrt-upload` | the upload half of the speed test |
@@ -89,7 +89,7 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 | Wi-Fi | view networks, change name or password, switch a network off, hand out the details for a QR code; optional schedule that switches a network off at set times and days |
 | Guest Wi-Fi | created on first use: own bridge, subnet and firewall zone, client isolation, optional auto-off |
 | Alerts | radio crashed or recovered, internet down or back, DNS failing, new device, a device failing to join repeatedly, radar on 5 GHz, kernel errors, phone paired or unpaired |
-| Notifications | alerts are handed to a relay that passes them to Apple; off by default, per alert type |
+| Notifications | off by default, per alert type. The router signs and sends them to Apple itself (HTTP/2 with curl, token signed with openssl) when a push key is installed; without one it can hand them to a relay |
 | Wi-Fi recovery | if a Wi-Fi core crashes and stays down for about 90 s, the router restarts itself: not in the first 10 minutes after boot, at most three times a day |
 | Ad blocker link | links an AdGuard Home on the network: on, off, pause, statistics, recent activity, allow or block a site, block lists, ad blocking off for a single device |
 | IoT watch | with an ad blocker linked: the sites each device on a separate network (IoT, guest) looks up, grouped by main name. After a device's first day, a site it never used before raises an alert |
@@ -125,7 +125,10 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no k
 - Every value that reaches a shell command is a constant or checked against a strict pattern; request bodies go through files.
 - One writer at a time: the background pass and API requests share a file lock.
 - If the pause-list file is missing or malformed the firewall ignores it and still starts.
-- Notifications: Apple only delivers a push signed with the app publisher's key, which cannot be put into firmware. A router therefore sends the alert's title and text to a relay that holds the key. No relay is configured by default.
+- Notifications: Apple only delivers a push signed with the key of the app's publisher. That key is a secret and is not in this repository or in the images: anything shipped in firmware can be read out by anyone. So there are two ways, and the router picks by itself:
+  - **Direct.** `miwrt-ctl apns AuthKey_XXXXXXXXXX.p8 <key id> <team id>` stores a key under `/etc/miwrt/apns/` (root only, kept across sysupgrade, never served by the API). The router then talks to Apple itself and nothing else is involved. This is for whoever publishes the app build the phone runs: the key must belong to that app.
+  - **Relay.** A router without a key sends the alert's title and text and the phones' notification addresses to a relay that holds the key (`settings.push.relay`). No relay is configured by default.
+- Android: the same split would apply to Firebase Cloud Messaging (a service-account key instead of the Apple key). There is no Android app yet, so the router has no FCM sender yet.
 
 ## The phone app
 

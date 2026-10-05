@@ -3,7 +3,7 @@
 // few changes the app can make (device names, paused devices, lights, restart).
 'use strict';
 
-import { readfile, writefile, popen, stat, lsdir, rename, mkdir, open, unlink } from 'fs';
+import { readfile, writefile, popen, stat, lsdir, rename, mkdir, open, unlink, access } from 'fs';
 import { connect } from 'ubus';
 import { cursor } from 'uci';
 import * as digest from 'digest';
@@ -108,6 +108,16 @@ export function run(cmd) {
 	return out;
 }
 
+/* How notifications leave the router: 'direct' (this router holds an Apple push key and talks to Apple itself),
+   'relay' (a relay holds the key), or null (neither is set up). */
+export const APNS_KEY = '/etc/miwrt/apns/key.p8';
+export const APNS_CONF = '/etc/miwrt/apns/config.json';
+export function push_mode(p) {
+	if (access(APNS_KEY, 'r') && access(APNS_CONF, 'r') && access('/usr/bin/curl', 'x')) return 'direct';
+	return p?.relay ? 'relay' : null;
+};
+
+
 export function is_mac(s) {
 	return type(s) == 'string' && match(s, /^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/) != null;
 };
@@ -168,7 +178,7 @@ export function add_alert(kind, title, body, severity, key, quiet) {
 	rename(t, ALERTS);
 	// notifications: queue it and let the sender run in the background
 	let p = load(SETTINGS, {}).push;
-	if (p?.enabled && p?.relay) {
+	if (p?.enabled && push_mode(p)) {
 		let f = open(PUSH_QUEUE, 'a');
 		if (f) { f.write(sprintf('%J', a) + '\n'); f.close(); }
 		system('/usr/sbin/miwrt-push >/dev/null 2>&1 &');
