@@ -4,15 +4,14 @@ OpenWrt firmware for the Xiaomi BE7000 (board RC06, Qualcomm IPQ9554), tuned to 
 
 MiWRT is built on [Beam WRT](https://github.com/timofey-maykov/be7000-openwrt) by timofey-maykov, which in turn stands on the kravasuper port of OpenWrt to this router. Everything Beam WRT does, MiWRT does: native boot from flash (no kexec), the stock firmware kept in the second slot, two-slot updates with automatic fallback, Wi-Fi 7 on 5 GHz, the 2.5 Gbit/s ports, USB 3, NFC, the split 5 GHz modes and the PPE offload work. The original documentation is kept in [docs/upstream](docs/upstream/README.en.md).
 
-Released version: **1.4.0.2**, based on Beam WRT 1.4.0 (OpenWrt main d958caf, kernel 6.18.52). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`.
-
-The `miwrt` branch is ahead of that release: the app service, the new logo and theme colours described below are in the source and will ship with 1.4.0.3. They are not in the 1.4.0.2 images.
+Released version: **1.4.0.3**, based on Beam WRT 1.4.0 (OpenWrt main d958caf, kernel 6.18.52). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.0.3.md).
 
 ## Contents
 
 - [What MiWRT changes in the firmware](#what-miwrt-changes-in-the-firmware)
-- [The app service (next release)](#the-app-service-next-release)
+- [The app service](#the-app-service)
 - [The phone app](#the-phone-app)
+- [Privacy](PRIVACY.md)
 - [Installing, updating, going back](#installing-updating-going-back)
 - [Building](#building)
 - [Licence and credits](#licence-and-credits)
@@ -46,9 +45,9 @@ Returning from the two-radio 5 GHz mode to one radio left the upper radio's chan
 
 ### Name and look
 
-The system calls itself MiWRT in LuCI, the console banner and `/etc/openwrt_release`; the default hostname is `MiWRT`. From the next release the web interface carries the MiWRT mark (a roof line that turns into a signal) and indigo accent colours. Image file names stay `openwrt-qualcommbe-ipq95xx-xiaomi_be7000-…`, which the installer and the update page look up by name.
+The system calls itself MiWRT in LuCI, the console banner and `/etc/openwrt_release`; the default hostname is `MiWRT`. The web interface carries the MiWRT mark (a roof line that turns into a signal) and indigo accent colours. Image file names stay `openwrt-qualcommbe-ipq95xx-xiaomi_be7000-…`, which the installer and the update page look up by name.
 
-## The app service (next release)
+## The app service
 
 A small service on the router that a phone app talks to. Nothing else is needed on the network, and nothing goes through a cloud. It is written in ucode and shell, lives in `overlay-files`, and uses only what the image already has (uhttpd, rpcd, umdns, nlbwmon, banIP, Lua with nixio).
 
@@ -133,7 +132,7 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no k
 
 ## The phone app
 
-A native iPhone app (SwiftUI) for this service exists and is in testing; it is not in this repository yet. It finds the router by itself, pairs with the administrator password, and covers everything in the table above. Before the password is sent, the app checks that the address it found is the router the phone is actually connected through, and warns if it is not. It also has a home-screen and lock-screen widget (internet and Wi-Fi state, devices online, current rates) and Siri shortcuts.
+A native iPhone app (SwiftUI) for this service exists and is in testing; its source is not in this repository. It finds the router by itself, pairs with the administrator password, and covers everything in the table above. Before the password is sent, the app checks that the address it found is the router the phone is actually connected through, and warns if it is not. It also has a home-screen and lock-screen widget (internet and Wi-Fi state, devices online, current rates) and Siri shortcuts.
 
 ## Installing, updating, going back
 
