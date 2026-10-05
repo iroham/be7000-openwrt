@@ -110,11 +110,13 @@ export function run(cmd) {
 
 /* How notifications leave the router: 'direct' (this router holds an Apple push key and talks to Apple itself),
    'relay' (a relay holds the key), or null (neither is set up). */
+/* The relay a router uses when it has no push key of its own. Empty: none. A relay set in the settings wins. */
+export const DEFAULT_RELAY = '';
 export const APNS_KEY = '/etc/miwrt/apns/key.p8';
 export const APNS_CONF = '/etc/miwrt/apns/config.json';
 export function push_mode(p) {
 	if (access(APNS_KEY, 'r') && access(APNS_CONF, 'r') && access('/usr/bin/curl', 'x')) return 'direct';
-	return p?.relay ? 'relay' : null;
+	return (p?.relay || length(DEFAULT_RELAY)) ? 'relay' : null;
 };
 
 
@@ -319,7 +321,7 @@ export function settings() {
 	let kinds = {};
 	for (let k in PUSH_KINDS) kinds[k] = (c.push?.kinds ?? {})[k] !== false;
 	return { watchdog: c.watchdog !== false, approve_new: !!c.approve_new, guest_until: c.guest_until ?? 0,
-		push: { enabled: !!c.push?.enabled, relay: c.push?.relay ?? null, kinds },
+		push: { enabled: !!c.push?.enabled, relay: c.push?.relay ?? (length(DEFAULT_RELAY) ? DEFAULT_RELAY : null), kinds },
 		night: { enabled: !!c.night?.enabled, from: c.night?.from ?? '23:00', to: c.night?.to ?? '07:00' } };
 };
 
@@ -1128,9 +1130,16 @@ export function push_register(tok, b) {
 		let all = load(TOKENS, {}), h = digest.sha256(tok);
 		if (!(h in all)) return 'unknown phone';
 		all[h].apns = { token: b.token, env: b.env == 'production' ? 'production' : 'sandbox' };
+		// the phone's own key: alert text is encrypted with it, so only that phone can read it
+		if (type(b.key) == 'string' && match(b.key, /^[0-9a-f]{128}$/)) all[h].apns.key = b.key;
 		save_private(TOKENS, all);
 		return null;
 	});
+};
+
+export function push_this_phone(tok) {
+	let v = load(TOKENS, {})[digest.sha256(tok)];
+	return { registered: !!v?.apns?.token, encrypted: !!v?.apns?.key };
 };
 
 export function push_targets() {

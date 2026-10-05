@@ -1,7 +1,9 @@
 #!/usr/bin/env ucode
 // Sends queued alerts to the phones.
 // Direct: this router holds an Apple push key (installed with `miwrt-ctl apns`) and talks to Apple itself.
-// Relay: the alert's title and text and the phones' notification addresses go to a relay that holds the key.
+// Relay: a relay that holds the key passes them on.
+// Either way the alert's title and text are encrypted here with a key only the phone has. What leaves the
+// router readable: the phones' notification addresses, the kind of alert, and a fixed "your router has an alert".
 'use strict';
 import { readfile, writefile, rename, unlink, chmod, stat } from 'fs';
 import * as hub from 'miwrt.hub';
@@ -41,6 +43,20 @@ function provider_token(conf) {
 	return token;
 }
 
+const GENERIC = { title: 'MiWRT', body: 'Your router has an alert. Open MiWRT to read it.' };
+
+/* AES-256-CBC, then HMAC-SHA256 over iv + ciphertext. Result: base64(iv | ciphertext | mac), or null. */
+function encrypt(key, a) {
+	if (!match(key ?? '', /^[0-9a-f]{128}$/)) return null;
+	let ek = substr(key, 0, 64), mk = substr(key, 64), iv = hexenc(hub.random_bytes(16));
+	let base = tmp('e');
+	writefile(base + '.pt', sprintf('%J', { t: substr(a.title ?? '', 0, 120), b: substr(a.body ?? '', 0, 400) }));
+	writefile(base + '.iv', hexdec(iv));
+	let out = trim(hub.run(`openssl enc -aes-256-cbc -K ${ek} -iv ${iv} -in ${base}.pt -out ${base}.ct 2>/dev/null && cat ${base}.iv ${base}.ct | openssl dgst -sha256 -mac HMAC -macopt hexkey:${mk} -binary > ${base}.mac 2>/dev/null && cat ${base}.iv ${base}.ct ${base}.mac | openssl base64 -A 2>/dev/null`));
+	for (let x in [ 'pt', 'iv', 'ct', 'mac' ]) unlink(`${base}.${x}`);
+	return (length(out) <= 3000 && match(out, /^[A-Za-z0-9+\/=]{88,}$/)) ? out : null;
+}
+
 function send_direct(a, targets) {
 	let conf;
 	try { conf = json(readfile(hub.APNS_CONF)); } catch (e) { return; }
@@ -48,26 +64,36 @@ function send_direct(a, targets) {
 	let token = provider_token(conf);
 	if (!token) return;
 	let kind = replace(`${a.kind ?? 'router'}`, /[^A-Za-z0-9_-]/g, '');
-	let headf = tmp('hdr'), bodyf = tmp('json'), gone = [];
+	let headf = tmp('hdr'), gone = [];
 	writefile(headf, join('\n', [ 'authorization: bearer ' + token, 'apns-topic: ' + (conf.bundle_id ?? APP), 'apns-push-type: alert',
 		'apns-priority: ' + (a.severity == 'critical' ? '10' : '5'), 'apns-collapse-id: ' + substr(kind, 0, 32), 'apns-expiration: ' + (time() + 3600) ]) + '\n');
 	chmod(headf, 0600);
-	writefile(bodyf, sprintf('%J', { aps: { alert: { title: substr(a.title ?? '', 0, 120), body: substr(a.body ?? '', 0, 400) }, sound: 'default', 'thread-id': kind },
-		kind: a.kind, alert_id: a.id }));
 	for (let t in slice(targets, 0, 20)) {
 		if (!match(t.token ?? '', /^[0-9a-f]{64,200}$/) || !HOSTS[t.env]) continue;
+		let payload = { aps: { alert: GENERIC, sound: 'default', 'thread-id': kind }, kind: a.kind, alert_id: a.id };
+		let enc = encrypt(t.key, a);
+		if (enc) { payload.aps['mutable-content'] = 1; payload.enc = enc; }
+		let bodyf = tmp('json');
+		writefile(bodyf, sprintf('%J', payload));
 		let code = trim(hub.run(`curl -sS --http2 --max-time 10 -o /dev/null -w '%{http_code}' -H @${headf} -d @${bodyf} https://${HOSTS[t.env]}/3/device/${t.token} 2>/dev/null`));
 		if (code == '410') push(gone, t.token);
 		if (code == '403') unlink(JWT);   // Apple refused the token: make a new one next time
+		unlink(bodyf);
 	}
-	unlink(headf); unlink(bodyf);
+	unlink(headf);
 	if (length(gone)) hub.push_forget(gone);
 }
 
 function send_relay(a, targets, relay) {
 	let bodyf = tmp('json');
-	writefile(bodyf, sprintf('%J', { app: APP, tokens: targets, title: a.title, body: a.body, kind: a.kind, severity: a.severity, id: a.id }));
-	let out = hub.run(`uclient-fetch -q -T 10 -O - --no-check-certificate --header='Content-Type: application/json' --post-file=${bodyf} '${relay}/v1/push' 2>/dev/null`);
+	let messages = [];
+	for (let t in slice(targets, 0, 20)) {
+		let m = { token: t.token, env: t.env }, enc = encrypt(t.key, a);
+		if (enc) m.enc = enc;
+		push(messages, m);
+	}
+	writefile(bodyf, sprintf('%J', { app: APP, messages, kind: a.kind, severity: a.severity, id: a.id }));
+	let out = hub.run(`uclient-fetch -q -T 10 -O - --header='Content-Type: application/json' --post-file=${bodyf} '${relay}/v1/push' 2>/dev/null`);
 	unlink(bodyf);
 	try {
 		let r = json(out);
@@ -82,7 +108,7 @@ let lines = filter(split(readfile(work) ?? '', '\n'), l => length(l) > 0);
 unlink(work);
 let mode = hub.push_mode(st.push);
 if (!st.push.enabled || !mode) exit(0);
-if (mode == 'relay' && !match(st.push.relay, /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/)) exit(0);
+if (mode == 'relay' && !match(st.push.relay ?? '', /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/)) exit(0);
 let targets = hub.push_targets();
 if (!length(targets)) exit(0);
 

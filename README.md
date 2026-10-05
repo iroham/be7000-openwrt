@@ -59,7 +59,7 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 | `/www/cgi-bin/miwrt` | the HTTPS API |
 | `/usr/sbin/miwrt-hubd`, `/etc/init.d/miwrt` | one pass every 30 s, the network announcement, the two relays |
 | `/usr/sbin/miwrt-ctl` | `token <name>`, `tokens`, `revoke <name>`, `revoke-all`, `apns <key file> <key id> <team id>`, `apns-remove` |
-| `/usr/sbin/miwrt-push` | sends alerts as notifications: straight to Apple when the router holds a push key, otherwise to a relay, if one is set |
+| `/usr/sbin/miwrt-push` | encrypts alerts for each phone and sends them as notifications: straight to Apple when the router holds a push key, otherwise through the relay |
 | `/usr/sbin/miwrt-discovery-relay` | repeats smart-home discovery broadcasts from an IoT network to the main one |
 | `/usr/sbin/miwrt-mdns-reflector` | repeats mDNS (AirPlay, Chromecast, printers) between the main and the IoT network |
 | `/usr/sbin/miwrt-upload` | the upload half of the speed test |
@@ -89,7 +89,7 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 | Wi-Fi | view networks, change name or password, switch a network off, hand out the details for a QR code; optional schedule that switches a network off at set times and days |
 | Guest Wi-Fi | created on first use: own bridge, subnet and firewall zone, client isolation, optional auto-off |
 | Alerts | radio crashed or recovered, internet down or back, DNS failing, new device, a device failing to join repeatedly, radar on 5 GHz, kernel errors, phone paired or unpaired |
-| Notifications | off by default, per alert type. The router signs and sends them to Apple itself (HTTP/2 with curl, token signed with openssl) when a push key is installed; without one it can hand them to a relay |
+| Notifications | off by default, per alert type, one switch in the app. Alert text is encrypted on the router with a key only the phone has; the relay and Apple carry it without being able to read it |
 | Wi-Fi recovery | if a Wi-Fi core crashes and stays down for about 90 s, the router restarts itself: not in the first 10 minutes after boot, at most three times a day |
 | Ad blocker link | links an AdGuard Home on the network: on, off, pause, statistics, recent activity, allow or block a site, block lists, ad blocking off for a single device |
 | IoT watch | with an ad blocker linked: the sites each device on a separate network (IoT, guest) looks up, grouped by main name. After a device's first day, a site it never used before raises an alert |
@@ -116,7 +116,7 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no k
 | `GET /v1/usage`, `/v1/week`, `/v1/history`, `/v1/threats`, `/v1/overview`, `/v1/diagnose`, `/v1/firmware`, `/v1/speedtests`, `/v1/iotwatch`; `POST /v1/speedtest`, `/v1/firmware/install` | insight, firmware |
 | `GET`/`POST /v1/shaping` | speed shaping: `enabled`, `down_kbit`, `up_kbit` |
 | `GET /v1/phones`; `POST /v1/phones/revoke` | paired phones |
-| `GET /v1/push`; `POST /v1/push/register`, `/v1/push/test` | notifications |
+| `GET /v1/push` (`enabled`, `kinds`, `mode`, `registered`, `this_phone`); `POST /v1/push/register` (`token`, `env`, `key`), `/v1/push/test` | notifications |
 | `GET /v1/router/backup`; `POST /v1/router/leds`, `/v1/router/watchdog`, `/v1/router/reboot` | maintenance |
 
 ### Design notes
@@ -127,7 +127,8 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no k
 - If the pause-list file is missing or malformed the firewall ignores it and still starts.
 - Notifications: Apple only delivers a push signed with the key of the app's publisher. That key is a secret and is not in this repository or in the images: anything shipped in firmware can be read out by anyone. So there are two ways, and the router picks by itself:
   - **Direct.** `miwrt-ctl apns AuthKey_XXXXXXXXXX.p8 <key id> <team id>` stores a key under `/etc/miwrt/apns/` (root only, kept across sysupgrade, never served by the API). The router then talks to Apple itself and nothing else is involved. This is for whoever publishes the app build the phone runs: the key must belong to that app.
-  - **Relay.** A router without a key sends the alert's title and text and the phones' notification addresses to a relay that holds the key (`settings.push.relay`). No relay is configured by default.
+  - **Relay.** A router without a key sends to a relay that holds it: the Cloudflare Worker in [miwrt-relay](miwrt-relay/README.md). The firmware's default relay is `DEFAULT_RELAY` in `hub.uc` (empty until the public relay is running); `settings.push.relay` overrides it.
+- Notification privacy: at registration the phone makes a random 64-byte key and gives it to the router over the pinned HTTPS connection. For each alert and each phone the router encrypts title and text (AES-256-CBC, then HMAC-SHA256 over IV and ciphertext). The notification that travels says only "Your router has an alert"; the app's notification extension checks the seal, decrypts, and shows the real text. A relay therefore sees notification addresses, the alert's kind, and ciphertext.
 - Android: the same split would apply to Firebase Cloud Messaging (a service-account key instead of the Apple key). There is no Android app yet, so the router has no FCM sender yet.
 
 ## The phone app

@@ -1,0 +1,18 @@
+name = "miwrt-relay"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[observability]
+enabled = false
+
+# 30 notifications a minute per sending address, 10 a minute per phone
+[[ratelimits]]
+name = "PER_SENDER"
+namespace_id = "7301"
+simple = { limit = 30, period = 60 }
+
+[[ratelimits]]
+name = "PER_PHONE"
+namespace_id = "7302"
+simple = { limit = 10, period = 60 }
