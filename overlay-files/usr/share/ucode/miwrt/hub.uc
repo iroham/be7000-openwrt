@@ -111,7 +111,7 @@ export function run(cmd) {
 /* How notifications leave the router: 'direct' (this router holds an Apple push key and talks to Apple itself),
    'relay' (a relay holds the key), or null (neither is set up). */
 /* The relay a router uses when it has no push key of its own. Empty: none. A relay set in the settings wins. */
-export const DEFAULT_RELAY = '';
+export const DEFAULT_RELAY = 'https://miwrt-relay.iroham.cloud';
 export const APNS_KEY = '/etc/miwrt/apns/key.p8';
 export const APNS_CONF = '/etc/miwrt/apns/config.json';
 export function push_mode(p) {

@@ -74,7 +74,7 @@ export default {
     if (b.app !== (env.BUNDLE_ID || 'cloud.iroham.miwrt')) return json(400, { error: 'unknown app' });
     if (!ready(env)) return json(503, { error: 'The relay has no Apple push key yet.' });
 
-    let delivered = 0;
+    let delivered = 0, refused = false, broken = false;
     const gone = [];
     for (const m of b.messages.slice(0, MAX_MESSAGES)) {
       if (!m || typeof m.token !== 'string' || !/^[0-9a-f]{64,200}$/.test(m.token) || !HOSTS[m.env]) continue;
@@ -84,8 +84,10 @@ export default {
         const status = await deliver(env, m, { kind: b.kind, severity: b.severity, id: b.id });
         if (status === 200) delivered++;
         if (status === 410) gone.push(m.token);
-      } catch (e) { /* one failed phone must not stop the others */ }
+        if (status === 403) refused = true;   // Apple did not accept the relay's own key
+      } catch (e) { broken = true; /* one failed phone must not stop the others */ }
     }
-    return json(200, { delivered, gone });
+    if (broken && !delivered) return json(502, { error: 'The relay could not sign or send the notification.', delivered, gone });
+    return json(refused ? 502 : 200, refused ? { error: 'Apple refused the relay\'s push key.', delivered, gone } : { delivered, gone });
   },
 };
