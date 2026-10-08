@@ -1,0 +1,30 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: ath11k-firmware: do not check the hash of the git archive
+
+The tarball of this package is built from a git checkout, and its hash
+depends on the git, tar and zstd of the machine that builds it. The CI
+runner image changed, and the same commit now packs to another hash than
+the one pinned in the Makefile, so the build stopped with "Hash mismatch".
+The source commit is still pinned (PKG_SOURCE_VERSION and
+SOURCE_VERSION), only the hash of the archive made from it is skipped.
+
+--- a/package/firmware/ath11k-firmware/Makefile
++++ b/package/firmware/ath11k-firmware/Makefile
+@@ -10,7 +10,7 @@
+ PKG_NAME:=ath11k-firmware
+ PKG_SOURCE_DATE:=2024-10-14
+ PKG_SOURCE_VERSION:=15f050122da5ef5bef2cc8c7c19dfb7f98060a49
+-PKG_MIRROR_HASH:=e7a89d1570f32552ade539376181494724b5eafb31d00451ff2dcf5a2922a0cb
++PKG_MIRROR_HASH:=skip
+ PKG_RELEASE:=1
+ 
+ PKG_SOURCE_PROTO:=git
+@@ -36,7 +36,7 @@
+ 	PROTO:=git
+ 	URL:=https://github.com/quic/upstream-wifi-fw.git
+ 	SOURCE_VERSION:=795809c7041582bd51bdfaa1f548b916ae8d4382
+-	MIRROR_HASH:=b55bf7204543c7ba87876e84788239b0e47ad62434c5b0d1169526cde36a9daa
++	MIRROR_HASH:=skip
+ 	SUBDIR:=$(ATH11K_LEGACY_FW_SUBDIR)
+ endef
+ $(eval $(call Download,$(ATH11K_LEGACY_FW_NAME)))
