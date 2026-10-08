@@ -14,6 +14,7 @@ const KEY = DIR + '/id_ed25519';
 const HOSTS = DIR + '/hosts.json';
 const CODES = '/tmp/miwrt/power-codes.json';
 const CODE_LIFE = 1800;
+const RUNDIR = '/tmp/miwrt';
 const ACTIONS = { status: true, sleep: true, restart: true, hibernate: true, shutdown: true };
 const PLUG_VERSIONS = [ '3.5', '3.4', '3.3' ];
 
@@ -118,7 +119,41 @@ esac
 `;
 }
 
-function windows_script(from, pub, code) {
+// Added to the Windows setup for a laptop that cannot be woken from sleep: it never sleeps, it hibernates.
+const NEVER_SLEEP = `# This PC cannot be woken from sleep, so it never sleeps: everything that used to sleep it now hibernates it.
+# To undo: delete the registry key HKLM\\SOFTWARE\\Policies\\Microsoft\\Power\\PowerSettings\\abfc2519-3608-4c2a-94ea-171b0ed546ab
+# and the values ShowSleepOption / ShowHibernateOption under ...\\Explorer\\FlyoutMenuSettings, then set the
+# sleep and lid options again in Control Panel, Power Options.
+function Get-Idle([string]$which) {
+	try { $m = (powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE | Select-String "Current $which Power Setting Index: (0x[0-9a-fA-F]+)").Matches; if ($m.Count) { return [Convert]::ToInt32($m[0].Groups[1].Value, 16) } } catch {}
+	return 0
+}
+$idleAc = Get-Idle 'AC'; $idleDc = Get-Idle 'DC'
+# what used to be "sleep after N minutes idle" becomes "hibernate after N minutes idle"
+if ($idleAc -gt 0) { powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP HIBERNATEIDLE $idleAc | Out-Null }
+if ($idleDc -gt 0) { powercfg /setdcvalueindex SCHEME_CURRENT SUB_SLEEP HIBERNATEIDLE $idleDc | Out-Null }
+powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP STANDBYIDLE 0 | Out-Null
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_SLEEP STANDBYIDLE 0 | Out-Null
+powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP HYBRIDSLEEP 0 | Out-Null
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_SLEEP HYBRIDSLEEP 0 | Out-Null
+# lid closed on battery, and the sleep button: hibernate
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 2 | Out-Null
+powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS SBUTTONACTION 2 | Out-Null
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS SBUTTONACTION 2 | Out-Null
+# Windows policy "allow standby states when sleeping": off, on mains and on battery
+$pol = 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Power\\PowerSettings\\abfc2519-3608-4c2a-94ea-171b0ed546ab'
+if (-not (Test-Path $pol)) { New-Item -Path $pol -Force | Out-Null }
+Set-ItemProperty -Path $pol -Name ACSettingIndex -Value 0 -Type DWord
+Set-ItemProperty -Path $pol -Name DCSettingIndex -Value 0 -Type DWord
+# Start menu power button: offer Hibernate, not Sleep
+$menu = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FlyoutMenuSettings'
+if (-not (Test-Path $menu)) { New-Item -Path $menu -Force | Out-Null }
+Set-ItemProperty -Path $menu -Name ShowHibernateOption -Value 1 -Type DWord
+Set-ItemProperty -Path $menu -Name ShowSleepOption -Value 0 -Type DWord
+`;
+
+function windows_script(from, pub, code, deep) {
+	let never_sleep = !deep ? '' : NEVER_SLEEP;
 	return `# MiWRT remote power for this PC.
 # Lets your MiWRT router (${from}) put this PC to sleep or restart it, and nothing else:
 #  - The OpenSSH server that comes with Windows is installed and started, reachable only from ${from}.
@@ -189,7 +224,7 @@ Get-NetAdapter -Physical | ForEach-Object {
 powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0 | Out-Null
 powercfg /change hibernate-timeout-ac 0 | Out-Null
 powercfg /hibernate on | Out-Null
-powercfg /setactive SCHEME_CURRENT | Out-Null
+${never_sleep}powercfg /setactive SCHEME_CURRENT | Out-Null
 
 $body = Join-Path $env:TEMP 'miwrt-register.json'
 ('{"code":"${code}","user":"' + $env:USERNAME + '"}') | Set-Content -Encoding ASCII -NoNewline $body
@@ -225,7 +260,7 @@ export function status(mac) {
 	let h = hub.load(HOSTS, {})[mac];
 	if (!h) return { configured: false };
 	let plug = h.plug ? { linked: true, kind: h.plug.kind, name: device(h.plug.mac)?.name ?? 'Smart plug', version: h.plug.version } : { linked: false };
-	return { configured: true, os: h.os, user: h.user, added: h.added, info: h.info, plug };
+	return { configured: true, os: h.os, user: h.user, added: h.added, info: h.info, deep: !!h.deep, plug };
 };
 
 /* Live state of the linked plug: on or off, and the power it measures if it can. */
@@ -276,7 +311,7 @@ export function plug_link(mac, b) {
 };
 
 /* Makes the one-time setup command for a laptop. */
-export function setup(mac, os) {
+export function setup(mac, os, deep) {
 	if (!hub.is_mac(mac)) return { error: 'unknown device' };
 	if (os != 'mac' && os != 'windows') return { error: 'Choose macOS or Windows.' };
 	let d = device(mac);
@@ -284,10 +319,11 @@ export function setup(mac, os) {
 	let from = router_address(d.ip), pub = public_key();
 	if (!from || !pub) return { error: 'The router could not prepare its key.' };
 	let code = hexenc(hub.random_bytes(16));
-	let script = os == 'mac' ? mac_script(from, pub, code) : windows_script(from, pub, code);
+	deep = os == 'windows' && !!deep;
+	let script = os == 'mac' ? mac_script(from, pub, code) : windows_script(from, pub, code, deep);
 	let sum = digest.sha256(script), url = `https://${from}/cgi-bin/miwrt/power/s?c=${code}`;
 	let all = codes();
-	all[code] = { mac, os, ip: d.ip, exp: time() + CODE_LIFE, script };
+	all[code] = { mac, os, deep, ip: d.ip, exp: time() + CODE_LIFE, script };
 	hub.save_private(CODES, all);
 	let command = os == 'mac'
 		? `curl -fsSk '${url}' -o /tmp/miwrt-power.sh && echo '${sum}  /tmp/miwrt-power.sh' | shasum -a 256 -c - && sudo sh /tmp/miwrt-power.sh`
@@ -331,7 +367,9 @@ export function register(b, ip) {
 		let all = codes();
 		if (!all[b.code]) return 'This setup command has expired. Make a new one in the app.';
 		let hosts = hub.load(HOSTS, {});
-		hosts[c.mac] = { os: c.os, user: b.user, added: time(), info: substr(r.detail, 0, 120) };
+		let before = hosts[c.mac] ?? {};
+		hosts[c.mac] = { os: c.os, user: b.user, added: time(), info: substr(r.detail, 0, 120), deep: !!c.deep };
+		if (before.plug) hosts[c.mac].plug = before.plug;   // setting a laptop up again keeps its plug
 		mkdir(DIR, 0700);
 		hub.save_private(HOSTS, hosts);
 		delete all[b.code];
@@ -351,6 +389,58 @@ export function remove(mac) {
 	});
 };
 
+// ---------- what the laptop draws, from its plug ----------
+// A reading every 5 minutes: the last 24 hours are kept in memory, the energy per day on flash (written hourly).
+
+const ENERGY = DIR + '/energy.json';
+const SAMPLE_EVERY = 300;
+
+export function energy_tick() {
+	let hosts = hub.load(HOSTS, {}), now = time(), stamp = RUNDIR + '/energy-last';
+	let last = +(readfile(stamp) ?? 0);
+	if (now - last < SAMPLE_EVERY) return;
+	let any = false;
+	for (let mac, h in hosts) if (h.plug) any = true;
+	if (!any) return;
+	writefile(stamp, `${now}`);
+	let live = hub.load(RUNDIR + '/energy.json', {}), day = sprintf('%04d-%02d-%02d', localtime().year, localtime().mon, localtime().mday);
+	for (let mac, h in hosts) {
+		if (!h.plug) continue;
+		let r = plug_run(mac, h.plug, 'status');
+		let e = live[mac] ?? { samples: [], days: null, saved: 0 };
+		if (e.days == null) e.days = hub.load(ENERGY, {})[mac] ?? {};
+		if (r.ok && type(r.watts) in [ 'double', 'int' ]) {
+			let prev = length(e.samples) ? e.samples[length(e.samples) - 1] : null;
+			let dt = prev ? min(now - prev.ts, 2 * SAMPLE_EVERY) : SAMPLE_EVERY;   // a gap is not counted as use
+			e.days[day] = (e.days[day] ?? 0) + (r.watts * dt) / 3600.0;
+			push(e.samples, { ts: now, watts: r.watts, on: !!r.on });
+			while (length(e.samples) > 288) shift(e.samples);
+		}
+		let names = sort(keys(e.days));
+		while (length(names) > 60) delete e.days[shift(names)];
+		live[mac] = e;
+	}
+	// flash: at most once an hour
+	let lastsave = +(readfile(RUNDIR + '/energy-saved') ?? 0);
+	if (now - lastsave >= 3600) {
+		let disk = {};
+		for (let mac, e in live) disk[mac] = e.days;
+		mkdir(DIR, 0700);
+		hub.save_private(ENERGY, disk);
+		writefile(RUNDIR + '/energy-saved', `${now}`);
+	}
+	hub.save(RUNDIR + '/energy.json', live);
+};
+
+export function usage(mac) {
+	let h = hub.load(HOSTS, {})[mac];
+	if (!h?.plug) return { available: false };
+	let e = hub.load(RUNDIR + '/energy.json', {})[mac];
+	let days = e?.days ?? hub.load(ENERGY, {})[mac] ?? {}, out = [];
+	for (let d in sort(keys(days))) push(out, { day: d, wh: days[d] });
+	return { available: true, samples: e?.samples ?? [], days: out, every: SAMPLE_EVERY };
+};
+
 /* sleep, restart or status on a laptop that has been set up. Returns { ok, detail } or { error }. */
 export function action(mac, what) {
 	let h = hub.is_mac(mac) ? hub.load(HOSTS, {})[mac] : null;
@@ -367,7 +457,7 @@ export function action(mac, what) {
 	}
 	if (!ACTIONS[what]) return { error: 'unknown request' };
 	// a Windows laptop with a plug hibernates instead of sleeping: the plug can bring it back from that
-	if (what == 'sleep' && h.os == 'windows' && h.plug) what = 'hibernate';
+	if (what == 'sleep' && h.os == 'windows' && (h.plug || h.deep)) what = 'hibernate';
 	let d = device(mac);
 	if (!d?.ip || !match(d.ip, /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/)) return { error: 'The router does not know this device\'s address.' };
 	if (!match(h.user, /^[A-Za-z0-9._-]{1,32}$/)) return { error: 'The saved account name is not usable. Set remote power up again.' };

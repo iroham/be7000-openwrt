@@ -88,8 +88,8 @@ function main() {
 		if (path == '/v1/protection/lists') reply(200, hub.protection_lists());
 		if (path == '/v1/protection/log') reply(200, hub.protection_log(query.filter, query.search));
 		if (path == '/v1/protection/check') reply(200, hub.protection_check(query.domain));
-		let pm = match(path, /^\/v1\/devices\/([0-9a-f:]{17})\/power(\/plug)?$/);
-		if (pm) reply(200, pm[2] ? power.plug_status(pm[1]) : power.status(pm[1]));
+		let pm = match(path, /^\/v1\/devices\/([0-9a-f:]{17})\/power(\/plug|\/usage)?$/);
+		if (pm) reply(200, pm[2] == '/plug' ? power.plug_status(pm[1]) : pm[2] == '/usage' ? power.usage(pm[1]) : power.status(pm[1]));
 		reply(404, { error: 'not found' });
 	}
 
@@ -111,7 +111,7 @@ function main() {
 		if (path == '/v1/push/test') { hub.add_alert('router', 'Test notification', 'Notifications from your MiWRT router work.', 'warning'); done(null); }
 		m = match(path, /^\/v1\/devices\/([0-9a-f:]{17})\/power(\/setup|\/remove|\/plug)?$/);
 		if (m) {
-			if (m[2] == '/setup') { let r = power.setup(m[1], body().os); reply(r.error ? 400 : 200, r); }
+			if (m[2] == '/setup') { let b = body(), r = power.setup(m[1], b.os, b.never_sleep); reply(r.error ? 400 : 200, r); }
 			if (m[2] == '/plug') { let r = power.plug_link(m[1], body()); reply(r.error ? 400 : 200, r); }
 			if (m[2] == '/remove') done(power.remove(m[1]));
 			let r = power.action(m[1], body().action);
