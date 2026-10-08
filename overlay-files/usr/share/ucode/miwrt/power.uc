@@ -108,12 +108,11 @@ if ! nc -z 127.0.0.1 22 >/dev/null 2>&1; then
 	echo "Remote Login did not start. Switch it on in System Settings, General, Sharing, Remote Login, then run this again."
 	exit 1
 fi
-if curl -fsSk -m 15 -H 'Content-Type: application/json' -d "{\\"code\\":\\"${code}\\",\\"user\\":\\"$U\\"}" https://${from}/cgi-bin/miwrt/power/register >/dev/null; then
-	echo "Done. This Mac can now be put to sleep, restarted and woken from the MiWRT app."
-else
-	echo "This Mac is set up, but the router did not confirm. Make a new setup command in the app and run it again."
-	exit 1
-fi
+ANSWER=$(curl -sSk -m 30 -H 'Content-Type: application/json' -d "{\\"code\\":\\"${code}\\",\\"user\\":\\"$U\\"}" https://${from}/cgi-bin/miwrt/power/register 2>&1) || true
+case "$ANSWER" in
+	*'"ok"'*) echo "Done. The router logged in to this Mac. It can now be put to sleep, restarted and woken from the MiWRT app." ;;
+	*) echo "This Mac is prepared, but the router did not accept it:"; echo "  $ANSWER"; exit 1 ;;
+esac
 `;
 }
 
@@ -140,10 +139,15 @@ New-Item -ItemType Directory -Force 'C:\\ProgramData\\miwrt' | Out-Null
 @'
 # Run by the MiWRT router's key. Only these three requests are accepted.
 switch ($env:SSH_ORIGINAL_COMMAND) {
-	'status' { "ok Windows $([Environment]::OSVersion.Version)" }
+	'status' {
+		$states = (powercfg /a | Select-String -Pattern 'Standby \\(S[0-3][^)]*\\)|Hibernate' | Select-Object -First 3 | ForEach-Object { $_.Matches[0].Value }) -join ', '
+		"ok Windows $([Environment]::OSVersion.Version); sleep: $states"
+	}
 	'sleep' {
 		'ok'
-		Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile', '-Command', 'Start-Sleep 1; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Suspend, $false, $false)'
+		# started through WMI so it is not tied to this login, which ends at once
+		$cmd = 'powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep 2; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Suspend, $false, $false)"'
+		Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd } | Out-Null
 	}
 	'restart' { 'ok'; shutdown.exe /r /t 3 | Out-Null }
 	default { 'not allowed'; exit 1 }
@@ -162,13 +166,14 @@ icacls 'C:\\ProgramData\\ssh\\administrators_authorized_keys' /inheritance:r /gr
 
 # only the router may reach the SSH server
 $rule = Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
-if ($rule) { $rule | Set-NetFirewallRule -Enabled True -RemoteAddress '${from}' }
-else { New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (MiWRT router only)' -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow -RemoteAddress '${from}' | Out-Null }
+# (Windows makes this rule for "Private" networks only; a home Wi-Fi marked "Public" would silently block the router)
+if ($rule) { $rule | Set-NetFirewallRule -Enabled True -Profile Any -RemoteAddress '${from}' }
+else { New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (MiWRT router only)' -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow -Profile Any -RemoteAddress '${from}' | Out-Null }
 
 # let the network adapters wake the PC
 Get-NetAdapter -Physical | ForEach-Object {
 	try { Set-NetAdapterPowerManagement -Name $_.Name -WakeOnMagicPacket Enabled -ErrorAction Stop } catch {}
-	powercfg /deviceenablewake "$($_.InterfaceDescription)" 2>$null | Out-Null
+	try { powercfg /deviceenablewake "$($_.InterfaceDescription)" | Out-Null } catch {}
 }
 # on the charger: a closed lid keeps the PC running, and it never hibernates by itself
 powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0 | Out-Null
@@ -177,11 +182,11 @@ powercfg /setactive SCHEME_CURRENT | Out-Null
 
 $body = Join-Path $env:TEMP 'miwrt-register.json'
 ('{"code":"${code}","user":"' + $env:USERNAME + '"}') | Set-Content -Encoding ASCII -NoNewline $body
-curl.exe -fsSk -m 15 -H 'Content-Type: application/json' -d "@$body" https://${from}/cgi-bin/miwrt/power/register | Out-Null
-$ok = $LASTEXITCODE -eq 0
+$answer = curl.exe -sk -m 30 -H 'Content-Type: application/json' -d "@$body" https://${from}/cgi-bin/miwrt/power/register | Out-String
+if (-not $answer) { $answer = 'no answer from the router' }
 Remove-Item $body -ErrorAction SilentlyContinue
-if ($ok) { Write-Host 'Done. This PC can now be put to sleep, restarted and woken from the MiWRT app.' }
-else { Write-Host 'This PC is set up, but the router did not confirm. Make a new setup command in the app and run it again.'; exit 1 }
+if ($answer -match '"ok"') { Write-Host 'Done. The router logged in to this PC. It can now be put to sleep, restarted and woken from the MiWRT app.' }
+else { Write-Host 'This PC is prepared, but the router did not accept it:'; Write-Host "  $answer"; exit 1 }
 `;
 }
 
@@ -193,7 +198,7 @@ function codes() {
 
 export function status(mac) {
 	let h = hub.load(HOSTS, {})[mac];
-	return h ? { configured: true, os: h.os, user: h.user, added: h.added } : { configured: false };
+	return h ? { configured: true, os: h.os, user: h.user, added: h.added, info: h.info } : { configured: false };
 };
 
 /* Makes the one-time setup command for a laptop. */
@@ -222,23 +227,41 @@ export function script(code) {
 	return codes()[code]?.script ?? null;
 };
 
-/* Called by the setup script when it has finished on the laptop. */
+/* One login try, no waking. Returns the laptop's answer after "ok", or null. */
+function probe(user, ip, what, limit) {
+	mkdir(DIR + '/.ssh', 0700);
+	let out = trim(hub.run(`HOME=${DIR} timeout ${limit} dbclient -y -T -i ${KEY} -o BatchMode=yes '${user}@${ip}' ${what} 2>&1 </dev/null`));
+	for (let line in split(out, '\n')) {
+		let m = match(trim(line), /^ok ?(.*)$/);
+		if (m) return { detail: m[1], out };
+	}
+	return { detail: null, out };
+}
+
+/* Called by the setup script when it has finished on the laptop. The laptop is accepted only after the
+   router has managed to log in to it once. */
 export function register(b, ip) {
 	if (type(b?.code) != 'string' || !match(b.code, /^[0-9a-f]{32}$/)) return 'bad code';
 	if (type(b.user) != 'string' || !match(b.user, /^[A-Za-z0-9._-]{1,32}$/)) return 'This account name has characters the router cannot use.';
+	let c = codes()[b.code];
+	if (!c) return 'This setup command has expired. Make a new one in the app.';
+	if (c.ip != ip) return 'The setup command was made for a different device.';
+	// the laptop's SSH identity is remembered at the first login; forget any older one for this address
+	let kh = DIR + '/.ssh/known_hosts', old = readfile(kh);
+	if (old) writefile(kh, join('\n', filter(split(old, '\n'), l => length(l) && index(l, ip + ' ') != 0)) + '\n');
+	let r = probe(b.user, ip, 'status', 12);
+	if (r.detail == null)
+		return match(r.out, /[Pp]ermission denied|publickey/) ? 'The router reached this computer but its key was not accepted.'
+			: 'The router could not log in to this computer. Its firewall may be blocking remote login from the router.';
 	return hub.locked(() => {
-		let all = codes(), c = all[b.code];
-		if (!c) return 'This setup command has expired. Make a new one in the app.';
-		if (c.ip != ip) return 'The setup command was made for a different device.';
+		let all = codes();
+		if (!all[b.code]) return 'This setup command has expired. Make a new one in the app.';
 		let hosts = hub.load(HOSTS, {});
-		hosts[c.mac] = { os: c.os, user: b.user, added: time() };
+		hosts[c.mac] = { os: c.os, user: b.user, added: time(), info: substr(r.detail, 0, 120) };
 		mkdir(DIR, 0700);
 		hub.save_private(HOSTS, hosts);
 		delete all[b.code];
 		hub.save_private(CODES, all);
-		// the laptop's SSH identity is remembered at the first login; forget any older one for this address
-		let kh = DIR + '/.ssh/known_hosts', old = readfile(kh);
-		if (old) writefile(kh, join('\n', filter(split(old, '\n'), l => length(l) && index(l, ip + ' ') != 0)) + '\n');
 		hub.add_alert('router', 'Remote power set up', `${device(c.mac)?.name ?? c.mac} can now be put to sleep and restarted from the app.`, 'info');
 		return null;
 	});
