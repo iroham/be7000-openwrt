@@ -422,7 +422,9 @@ export function wifi_check() {
 
 export function wake(mac) {
 	if (!hub.is_mac(mac)) return 'unknown device';
-	return system([ '/usr/sbin/miwrt-wol', mac ]) == 0 ? null : 'Could not send the wake-up signal.';
+	let ip = null;
+	for (let d in (hub.cached('devices')?.devices ?? [])) if (d.mac == mac && match(d.ip ?? '', /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/)) ip = d.ip;
+	return system(ip ? [ '/usr/sbin/miwrt-wol', mac, ip ] : [ '/usr/sbin/miwrt-wol', mac ]) == 0 ? null : 'Could not send the wake-up signal.';
 };
 
 // ---------- the address and name server (dnsmasq) ----------

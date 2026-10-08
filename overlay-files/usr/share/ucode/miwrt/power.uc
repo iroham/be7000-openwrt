@@ -298,7 +298,7 @@ export function action(mac, what) {
 	let out = ask(8), detail = answered(out), woke = false;
 	// no answer: the laptop is probably asleep with its lid closed. Wake it, then ask again for a while.
 	for (let i = 0; detail == null && !refused(out) && i < 4; i++) {
-		system([ '/usr/sbin/miwrt-wol', mac ]);
+		system([ '/usr/sbin/miwrt-wol', mac, d.ip ]);
 		woke = true;
 		sleep(3000);
 		out = ask(6);

@@ -1,18 +1,50 @@
 #!/usr/bin/lua
--- Sends a Wake-on-LAN magic packet for one hardware address on every LAN-side bridge.
+-- Sends a Wake-on-LAN magic packet for one hardware address.
+-- Twice over: as a broadcast on every LAN-side bridge (what wired devices expect), and, when the device's
+-- last address is given, straight to that device. A sleeping Wi-Fi device is often only woken by a packet
+-- addressed to itself, and the router no longer knows where a sleeping device is, so its address is pinned
+-- to its hardware address for the moment of sending.
 local nixio = require "nixio"
-local mac = arg[1] or ""
+local mac, ip = arg[1] or "", arg[2]
 if not mac:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then os.exit(1) end
+if ip and not ip:match("^%d+%.%d+%.%d+%.%d+$") then ip = nil end
 local raw = mac:gsub(":", ""):gsub("%x%x", function(h) return string.char(tonumber(h, 16)) end)
 local packet = string.rep(string.char(255), 6) .. string.rep(raw, 16)
 local sent = false
-for dev in nixio.fs.dir("/sys/class/net") do
-	if dev:match("^br%-") then
-		local s = nixio.socket("inet", "dgram")
-		s:setsockopt("socket", "broadcast", 1)
-		s:setsockopt("socket", "bindtodevice", dev)
-		if s:sendto(packet, "255.255.255.255", 9) then sent = true end
-		s:close()
+
+local function bridge_of(addr)
+	local p = io.popen("ip -4 -o route get " .. addr .. " 2>/dev/null")
+	local line = p and p:read("*l") or ""
+	if p then p:close() end
+	return line:match(" dev (br%-[%w%-_]+)")
+end
+
+for round = 1, 3 do
+	for dev in nixio.fs.dir("/sys/class/net") do
+		if dev:match("^br%-") then
+			local s = nixio.socket("inet", "dgram")
+			s:setsockopt("socket", "broadcast", 1)
+			s:setsockopt("socket", "bindtodevice", dev)
+			if s:sendto(packet, "255.255.255.255", 9) then sent = true end
+			s:close()
+		end
 	end
+	if ip then
+		local dev = bridge_of(ip)
+		if dev then
+			os.execute(string.format("ip neigh replace %s lladdr %s dev %s nud permanent 2>/dev/null", ip, mac, dev))
+			local s = nixio.socket("inet", "dgram")
+			for _, port in ipairs({ 9, 7 }) do
+				if s:sendto(packet, ip, port) then sent = true end
+			end
+			s:close()
+		end
+	end
+	if round < 3 then nixio.nanosleep(0, 400000000) end
+end
+if ip then
+	local dev = bridge_of(ip)
+	-- back to a normal entry, so a changed address is learned again
+	if dev then os.execute(string.format("ip neigh replace %s lladdr %s dev %s nud stale 2>/dev/null", ip, mac, dev)) end
 end
 os.exit(sent and 0 or 1)
