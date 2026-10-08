@@ -180,7 +180,7 @@ return baseclass.extend({
 				return;
 			}
 			var s = r.settings || {};
-			if (s.netmode && s.netmode != 'router') {
+			if (s.netmode && s.netmode != 'router' && s.netmode != 'whc_cap') {
 				ui.showModal(tx.previewTitle, [ E('p', {}, tx.notRouter.format(s.netmode)),
 					E('div', { 'class': 'right' }, E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, tx.close)) ]);
 				return;

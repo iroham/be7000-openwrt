@@ -249,8 +249,10 @@ cmd_apply() {
 	collect full | sed "s/'/'\\\\''/g; s/^\([^=]*\)=\(.*\)$/\1='\2'/" > $t
 	cleanup
 	. $t
+	# whc_cap is the main router of a Xiaomi mesh: it still routes and has the
+	# WAN, only whc_re (extender) and the access point modes are not routers
 	case "$netmode" in
-	router|"") ;;
+	router|""|whc_cap) ;;
 	*) rm -f $t; die "stock ran in mode $netmode, not as a router; nothing taken" ;;
 	esac
 	sysupgrade -b $BACKUP >/dev/null 2>&1 || { rm -f $t; die "cannot back up the current settings"; }
