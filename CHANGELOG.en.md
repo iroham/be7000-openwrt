@@ -2,6 +2,9 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.4.5**, October 8, 2026.
+- On the Slots page the button that switches to the slot with the factory firmware could answer `slot 0 holds no firmware this can boot ()` although the firmware was there. The slot that the page had looked at sometimes did not detach in time, and the second look made when switching failed. The detach is now retried a few times, what is left of the look is cleared before the switch, and the error message shows the real reason.
+
 **1.4.4**, October 3, 2026.
 - If your /overlay is on a USB disk and bigoverlay is turned off, then after updating to 1.4.3 the router stayed on the small internal partition and its packages and Hybrid Failover were gone until you restarted it by hand, I broke that myself in 1.4.3 while changing the check before the extra reboot, and now the check looks at the disk from the extroot settings and a turned off bigoverlay does not get in the way.
 - On the Build update page the release text is shown formatted, with headings, lists and highlighted code, and only in the interface language instead of one run of text in three languages.

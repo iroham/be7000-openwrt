@@ -40,6 +40,29 @@ cmd_status() {
 		"$(jstr "$(sed -n "s/^DISTRIB_DESCRIPTION='\(.*\)'$/\1/p" /etc/openwrt_release)")"
 }
 
+# the device is busy for a moment after ubiblock --remove, so try a few times
+detach_look() {
+	local i=0
+	while [ $i -lt 8 ]; do
+		ubidetach -d 9 >/dev/null 2>&1 && return 0
+		[ -d /sys/class/ubi/ubi9 ] || return 0
+		sleep 1
+		i=$((i + 1))
+	done
+	return 1
+}
+
+# a look that was cut short can leave the slot attached as ubi9, with its
+# squashfs still mounted or exposed through ubiblock: undo what is left
+clear_look() {
+	local n
+	umount /tmp/be7000-slot-look 2>/dev/null
+	for n in /sys/class/ubi/ubi9_*; do
+		[ -e "$n" ] && ubiblock --remove "/dev/$(basename "$n")" >/dev/null 2>&1
+	done
+	detach_look
+}
+
 # read-only look into the other slot: attach, expose the squashfs through
 # ubiblock, mount it read-only, read the version files, undo everything
 cmd_info() {
@@ -80,7 +103,7 @@ cmd_info() {
 	else
 		kind=unknown
 	fi
-	ubidetach -d 9 >/dev/null 2>&1 || rc=1
+	detach_look || rc=1
 	printf '{"slot":%s,"kind":"%s","version":"%s","detached":%s}\n' "$slot" "$kind" "$(jstr "$ver")" "$([ $rc = 0 ] && echo true || echo false)"
 }
 
@@ -100,15 +123,28 @@ stock_settings_flag() {
 }
 
 cmd_switch() {
-	local slot="$1" cur kind
+	local slot="$1" cur kind info why
 	cur="$(current)" || { echo "no ubi.mtd=rootfs* on the command line" >&2; return 1; }
 	case "$slot" in 0|1) ;; *) echo "slot is 0 or 1" >&2; return 1 ;; esac
 	[ "$slot" = "$cur" ] && { echo "slot $slot is already running" >&2; return 1; }
-	kind="$(cmd_info "$slot" | sed -n 's/.*"kind":"\([a-z]*\)".*/\1/p')"
+	info="$(cmd_info "$slot")"
+	case "$info" in
+	*'"error":"slot already attached"'*)
+		# the Slots page looked at this slot a moment ago and it did not
+		# detach in time: clear that and look once more
+		clear_look
+		info="$(cmd_info "$slot")" ;;
+	esac
+	kind="$(printf '%s' "$info" | sed -n 's/.*"kind":"\([a-z]*\)".*/\1/p')"
 	case "$kind" in
 	stock) stock_settings_flag ;;
 	openwrt|test) ;;
-	*) echo "slot $slot holds no firmware this can boot ($kind)" >&2; return 1 ;;
+	*)
+		# no "kind" means the look itself failed: say why instead of an empty ()
+		why="$kind"
+		[ -n "$why" ] || why="$(printf '%s' "$info" | sed -n 's/.*"error":"\([^"]*\)".*/\1/p')"
+		echo "slot $slot holds no firmware this can boot (${why:-no answer from the look})" >&2
+		return 1 ;;
 	esac
 	fw_setenv flag_try_sys1_failed 0 || return 1
 	fw_setenv flag_try_sys2_failed 0
