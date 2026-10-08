@@ -2,6 +2,9 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.4.6**, October 8, 2026.
+- Importing the settings from stock refused to run when the factory firmware reported the mode `whc_cap`, and said it was not running as a router. Stock sets that mode on the main router of a mesh network, and it still routes. It is accepted now, and the import is refused only for the extender and the access point modes.
+
 **1.4.5**, October 8, 2026.
 - On the Slots page the button that switches to the slot with the factory firmware could answer `slot 0 holds no firmware this can boot ()` although the firmware was there. The slot that the page had looked at sometimes did not detach in time, and the second look made when switching failed. The detach is now retried a few times, what is left of the look is cleared before the switch, and the error message shows the real reason.
 
