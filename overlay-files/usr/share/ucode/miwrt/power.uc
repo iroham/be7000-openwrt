@@ -14,7 +14,7 @@ const KEY = DIR + '/id_ed25519';
 const HOSTS = DIR + '/hosts.json';
 const CODES = '/tmp/miwrt/power-codes.json';
 const CODE_LIFE = 1800;
-const ACTIONS = { status: true, sleep: true, restart: true };
+const ACTIONS = { status: true, sleep: true, restart: true, hibernate: true, shutdown: true };
 
 function public_key() {
 	if (!access(KEY, 'r')) {
@@ -52,7 +52,7 @@ function mac_script(from, pub, code) {
 # Lets your MiWRT router (${from}) put this Mac to sleep or restart it, and nothing else:
 #  - Remote Login (SSH) is switched on.
 #  - The router's key is accepted only from ${from} and can only run /usr/local/bin/miwrt-power.
-#  - One sudo rule lets your account run "shutdown -r now" without a password.
+#  - One sudo rule lets your account run "shutdown -r now" and "shutdown -h now" without a password.
 #  - On the charger, the Mac is told to wake for network access and not to drop into the deep
 #    power-off sleep it cannot be woken from. Nothing changes on battery.
 # To undo: delete the miwrt-router line from ~/.ssh/authorized_keys, and remove
@@ -66,18 +66,19 @@ H=$(dscl . -read "/Users/$U" NFSHomeDirectory | awk '{print $2}')
 mkdir -p /usr/local/bin
 cat > /usr/local/bin/miwrt-power <<'EOS'
 #!/bin/sh
-# Run by the MiWRT router's key. Only these three requests are accepted.
+# Run by the MiWRT router's key. Only these requests are accepted.
 case "$SSH_ORIGINAL_COMMAND" in
 	status) echo "ok macOS $(sw_vers -productVersion)" ;;
 	sleep) echo ok; nohup sh -c 'sleep 1; pmset sleepnow' >/dev/null 2>&1 & ;;
 	restart) echo ok; nohup sh -c 'sleep 1; sudo -n /sbin/shutdown -r now' >/dev/null 2>&1 & ;;
+	shutdown) echo ok; nohup sh -c 'sleep 1; sudo -n /sbin/shutdown -h now' >/dev/null 2>&1 & ;;
 	*) echo "not allowed"; exit 1 ;;
 esac
 EOS
 chown root:wheel /usr/local/bin/miwrt-power
 chmod 755 /usr/local/bin/miwrt-power
 
-echo "$U ALL=(root) NOPASSWD: /sbin/shutdown -r now" > /etc/sudoers.d/miwrt-power
+echo "$U ALL=(root) NOPASSWD: /sbin/shutdown -r now, /sbin/shutdown -h now" > /etc/sudoers.d/miwrt-power
 chmod 440 /etc/sudoers.d/miwrt-power
 visudo -cf /etc/sudoers.d/miwrt-power >/dev/null || { rm -f /etc/sudoers.d/miwrt-power; echo "Could not add the restart rule."; exit 1; }
 
@@ -137,10 +138,12 @@ Start-Service sshd
 
 New-Item -ItemType Directory -Force 'C:\\ProgramData\\miwrt' | Out-Null
 @'
-# Run by the MiWRT router's key. Only these three requests are accepted.
+# Run by the MiWRT router's key. Only these requests are accepted.
 switch ($env:SSH_ORIGINAL_COMMAND) {
 	'status' {
-		$states = (powercfg /a | Select-String -Pattern 'Standby \\(S[0-3][^)]*\\)|Hibernate' | Select-Object -First 3 | ForEach-Object { $_.Matches[0].Value }) -join ', '
+		$avail = @()
+		foreach ($l in (powercfg /a)) { if ($l -match 'not available') { break }; if ($l -match 'Standby \\(S[0-3][^)]*\\)|Hibernate') { $avail += $Matches[0] } }
+		$states = ($avail | Select-Object -Unique) -join ', '
 		"ok Windows $([Environment]::OSVersion.Version); sleep: $states"
 	}
 	'sleep' {
@@ -149,7 +152,13 @@ switch ($env:SSH_ORIGINAL_COMMAND) {
 		$cmd = 'powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep 2; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState([System.Windows.Forms.PowerState]::Suspend, $false, $false)"'
 		Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd } | Out-Null
 	}
+	'hibernate' {
+		'ok'
+		$cmd = 'powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep 2; shutdown.exe /h"'
+		Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd } | Out-Null
+	}
 	'restart' { 'ok'; shutdown.exe /r /t 3 | Out-Null }
+	'shutdown' { 'ok'; shutdown.exe /s /t 3 | Out-Null }
 	default { 'not allowed'; exit 1 }
 }
 '@ | Set-Content -Encoding ASCII 'C:\\ProgramData\\miwrt\\power.ps1'
@@ -178,6 +187,7 @@ Get-NetAdapter -Physical | ForEach-Object {
 # on the charger: a closed lid keeps the PC running, and it never hibernates by itself
 powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0 | Out-Null
 powercfg /change hibernate-timeout-ac 0 | Out-Null
+powercfg /hibernate on | Out-Null
 powercfg /setactive SCHEME_CURRENT | Out-Null
 
 $body = Join-Path $env:TEMP 'miwrt-register.json'
@@ -305,7 +315,7 @@ export function action(mac, what) {
 		detail = answered(out);
 	}
 	if (detail != null) {
-		if (what != 'status') hub.add_alert('device', what == 'sleep' ? 'Put to sleep' : 'Restarted', d.name, 'info');
+		if (what != 'status') hub.add_alert('device', ({ sleep: 'Put to sleep', hibernate: 'Hibernated', restart: 'Restarted', shutdown: 'Shut down' })[what], d.name, 'info');
 		return { ok: true, detail, woke };
 	}
 	if (match(out, /not allowed/)) return { error: 'The laptop refused that request.' };
