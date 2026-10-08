@@ -425,6 +425,23 @@ export function wake(mac) {
 	return system([ '/usr/sbin/miwrt-wol', mac ]) == 0 ? null : 'Could not send the wake-up signal.';
 };
 
+// ---------- the address and name server (dnsmasq) ----------
+
+/* Called on every pass. Does a reload that was asked for, and starts the server again if it has stopped:
+   without it no device gets an address and lookups sent to the router fail, while everything else looks fine. */
+export function services_tick() {
+	if (stat(RUN + '/dnsmasq-reload')) {
+		unlink(RUN + '/dnsmasq-reload');
+		system('/etc/init.d/dnsmasq reload >/dev/null 2>&1');
+		return;
+	}
+	let inst = connect().call('service', 'list', { name: 'dnsmasq' })?.dnsmasq?.instances;
+	if (type(inst) != 'object' || !length(keys(inst))) return;   // switched off on purpose
+	for (let k, v in inst) if (v.running) return;
+	system('/etc/init.d/dnsmasq start >/dev/null 2>&1');
+	hub.add_alert('router', 'Address service restarted', 'The part of the router that hands out addresses to devices had stopped, so devices could join Wi-Fi but not get online. It was started again.', 'critical');
+};
+
 // ---------- Wi-Fi off on a schedule ----------
 
 /* Called on every pass. Switches a scheduled network off at its start time and back on at its end.

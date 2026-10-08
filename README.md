@@ -94,6 +94,7 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 | Guest Wi-Fi | created on first use: own bridge, subnet and firewall zone, client isolation, optional auto-off |
 | Alerts | radio crashed or recovered, internet down or back, DNS failing, new device, a device failing to join repeatedly, radar on 5 GHz, kernel errors, phone paired or unpaired |
 | Notifications | off by default, per alert type, one switch in the app. Alert text is encrypted on the router with a key only the phone has; the relay and Apple carry it without being able to read it |
+| Address service guard | if dnsmasq (addresses for devices, lookups sent to the router) stops, the next 30 s pass starts it again and raises an alert. The service's own reloads of dnsmasq are done one at a time by that pass |
 | Wi-Fi recovery | if a Wi-Fi core crashes and stays down for about 90 s, the router restarts itself: not in the first 10 minutes after boot, at most three times a day |
 | Ad blocker link | links an AdGuard Home on the network: on, off, pause, statistics, recent activity, allow or block a site, block lists, ad blocking off for a single device |
 | IoT watch | with an ad blocker linked: the sites each device on a separate network (IoT, guest) looks up, grouped by main name. After a device's first day, a site it never used before raises an alert |

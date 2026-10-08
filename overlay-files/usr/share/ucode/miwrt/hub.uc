@@ -689,7 +689,9 @@ function apply_hosts(db) {
 		if (fixed) c.set('dhcp', sid, 'ip', fixed);
 	}
 	c.commit('dhcp');
-	system([ '/etc/init.d/dnsmasq', 'reload' ]);
+	// The reload is done by the next 30 s pass, one at a time. Reloading from here could hit the address
+	// server twice in a row, and a reload signal that arrives while it is still starting stops it.
+	writefile(RUN + '/dnsmasq-reload', '1');
 }
 
 
