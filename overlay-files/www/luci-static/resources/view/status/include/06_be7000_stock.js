@@ -6,7 +6,8 @@
 // Stock settings block on Status, Overview. Shown only when the settings
 // stock left behind can be taken (preview, then take them) or were taken
 // already (what came over, undo). The work is be7000-stock-import behind
-// the rpcd object be7000-stock.
+// the rpcd object be7000-stock. The offer can be hidden on a router that is
+// already set up; that choice is kept in this browser.
 
 var callStatus = rpc.declare({ object: 'be7000-stock', method: 'status' });
 var callPreview = rpc.declare({ object: 'be7000-stock', method: 'preview' });
@@ -18,6 +19,7 @@ var TEXT = {
 		title: 'Настройки стока',
 		found: 'На роутере остались настройки заводской прошивки, сети Wi-Fi и подключение к интернету. Их можно перенести сюда, чтобы не вводить заново.',
 		look: 'Посмотреть и перенести',
+		hide: 'Не нужно, скрыть',
 		taken: 'Настройки перенесены со стока %s.',
 		takenAuto: 'Настройки перенесены со стока автоматически при первой загрузке, %s.',
 		what: 'Перенесено %s.',
@@ -52,6 +54,7 @@ var TEXT = {
 		title: 'Stock settings',
 		found: 'The factory firmware left its settings on this router, the Wi-Fi networks and the internet connection. You can take them over instead of entering them again.',
 		look: 'Review and take over',
+		hide: 'Not needed, hide this',
 		taken: 'Settings taken from stock on %s.',
 		takenAuto: 'Settings taken from stock automatically on the first boot, %s.',
 		what: 'Taken over %s.',
@@ -86,6 +89,7 @@ var TEXT = {
 		title: '原厂固件设置',
 		found: '这台路由器上保留着原厂固件的设置，包括 Wi-Fi 网络和互联网连接。可以把它们导入到这里，不必重新输入。',
 		look: '查看并导入',
+		hide: '不需要，隐藏',
 		taken: '已于 %s 从原厂固件导入设置。',
 		takenAuto: '首次启动时已自动从原厂固件导入设置，%s。',
 		what: '已导入 %s。',
@@ -130,8 +134,15 @@ function row(label, value) {
 	]);
 }
 
+var HIDE_KEY = 'miwrt-stock-notice-hidden';
+
+function hidden() {
+	try { return window.localStorage.getItem(HIDE_KEY) == '1'; } catch (e) { return false; }
+}
+
 return baseclass.extend({
-	title: '',
+	// set here, not in render: the page reads the title before it renders the block
+	title: TEXT[lang()].title,
 
 	load: function() {
 		return L.resolveDefault(callStatus(), {});
@@ -144,7 +155,8 @@ return baseclass.extend({
 		if (!st.imported && !st.stock_settings)
 			return null;
 
-		this.title = tx.title;
+		if (!st.imported && hidden())
+			return null;
 
 		if (st.imported) {
 			var parts = [];
@@ -168,7 +180,16 @@ return baseclass.extend({
 			E('button', {
 				'class': 'cbi-button cbi-button-action important',
 				'click': ui.createHandlerFn(this, 'preview', tx)
-			}, tx.look)
+			}, tx.look),
+			' ',
+			E('button', {
+				'class': 'cbi-button cbi-button-neutral',
+				'click': function(ev) {
+					try { window.localStorage.setItem(HIDE_KEY, '1'); } catch (e) {}
+					var box = ev.target.closest('.cbi-section') || ev.target.parentNode;
+					box.style.display = 'none';
+				}
+			}, tx.hide)
 		]);
 	},
 

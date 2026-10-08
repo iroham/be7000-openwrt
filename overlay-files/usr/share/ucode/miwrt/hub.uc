@@ -8,7 +8,7 @@ import { connect } from 'ubus';
 import { cursor } from 'uci';
 import * as digest from 'digest';
 
-export const VERSION = '0.7';
+export const VERSION = '0.8';
 const ETC = '/etc/miwrt';
 const RUN = '/tmp/miwrt';
 const DEVICES = ETC + '/devices.json';

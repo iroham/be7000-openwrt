@@ -5,6 +5,7 @@
 import { stdin } from 'fs';
 import * as hub from 'miwrt.hub';
 import * as extras from 'miwrt.extras';
+import * as power from 'miwrt.power';
 
 function reply(code, obj) {
 	const reason = { '200': 'OK', '400': 'Bad Request', '401': 'Unauthorized', '403': 'Forbidden', '404': 'Not Found', '429': 'Too Many Requests' };
@@ -34,6 +35,15 @@ function main() {
 		let b = body(), r = hub.pair(b.password, b.name, ip);
 		reply(r.code, r.code == 200 ? { token: r.token } : { error: r.error });
 	}
+
+	// remote power setup: reached from the laptop being set up, with its one-time code
+	if (path == '/power/s' && method == 'GET') {
+		let m = match(getenv('QUERY_STRING') ?? '', /(^|&)c=([0-9a-f]{32})(&|$)/), text = m ? power.script(m[2]) : null;
+		if (!text) reply(404, { error: 'This setup command has expired. Make a new one in the app.' });
+		print('Status: 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\n\r\n', text);
+		exit(0);
+	}
+	if (path == '/power/register' && method == 'POST') done(power.register(body(), ip));
 
 	let auth = getenv('HTTP_AUTHORIZATION') ?? '';
 	if (substr(auth, 0, 7) != 'Bearer ' || !hub.token_ok(substr(auth, 7)))
@@ -78,6 +88,8 @@ function main() {
 		if (path == '/v1/protection/lists') reply(200, hub.protection_lists());
 		if (path == '/v1/protection/log') reply(200, hub.protection_log(query.filter, query.search));
 		if (path == '/v1/protection/check') reply(200, hub.protection_check(query.domain));
+		let pm = match(path, /^\/v1\/devices\/([0-9a-f:]{17})\/power$/);
+		if (pm) reply(200, power.status(pm[1]));
 		reply(404, { error: 'not found' });
 	}
 
@@ -97,6 +109,13 @@ function main() {
 		if (path == '/v1/firmware/install') done(extras.firmware_install());
 		if (path == '/v1/push/register') done(hub.push_register(substr(auth, 7), body()));
 		if (path == '/v1/push/test') { hub.add_alert('router', 'Test notification', 'Notifications from your MiWRT router work.', 'warning'); done(null); }
+		m = match(path, /^\/v1\/devices\/([0-9a-f:]{17})\/power(\/setup|\/remove)?$/);
+		if (m) {
+			if (m[2] == '/setup') { let r = power.setup(m[1], body().os); reply(r.error ? 400 : 200, r); }
+			if (m[2] == '/remove') done(power.remove(m[1]));
+			let r = power.action(m[1], body().action);
+			reply(r.error ? 400 : 200, r);
+		}
 		m = match(path, /^\/v1\/devices\/([0-9a-f:]{17})\/wake$/);
 		if (m) done(extras.wake(m[1]));
 		if (path == '/v1/groups') done(hub.groups_action(body()));

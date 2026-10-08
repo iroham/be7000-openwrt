@@ -55,6 +55,7 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 |---|---|
 | `/usr/share/ucode/miwrt/hub.uc` | state collection, device list, alerts, pausing, access keys |
 | `/usr/share/ucode/miwrt/extras.uc` | Wi-Fi settings and schedule, guest Wi-Fi, firmware check and install, blocked threats, connection test, speed test, Wi-Fi check, speed shaping, IoT watch, summaries |
+| `/usr/share/ucode/miwrt/power.uc` | remote power for laptops: sleep and restart over SSH with a restricted key, setup scripts for macOS and Windows |
 | `/www/cgi-bin/miwrt` | the HTTPS API |
 | `/usr/sbin/miwrt-hubd`, `/etc/init.d/miwrt` | one pass every 30 s, the network announcement, the two relays |
 | `/usr/sbin/miwrt-ctl` | `token <name>`, `tokens`, `revoke <name>`, `revoke-all`, `apns <key file> <key id> <team id>`, `apns-remove` |
@@ -94,6 +95,7 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 | IoT watch | with an ad blocker linked: the sites each device on a separate network (IoT, guest) looks up, grouped by main name. After a device's first day, a site it never used before raises an alert |
 | Speed shaping | switch SQM (cake) on or off and set the download and upload limits |
 | Checks | connection test, speed test from the router (download and upload), Wi-Fi channel check, blocked threats (banIP), protection overview, weekly summary, 48 hours of health samples |
+| Laptop power | sleep, restart and wake for Mac and Windows laptops. The router holds one SSH key; each laptop accepts it only from the router and only for a fixed script (status, sleep, restart). A laptop is added with one setup command, valid once for 30 minutes, whose download is checked against a checksum. Wake uses Wake-on-LAN and needs the laptop asleep on its charger |
 | Maintenance | settings backup download, lights on, off or off at night, restart, firmware version, update check and install (through `be7000-update`, into the second slot) |
 | Discovery relay | where an IoT network exists (`br-iot`), smart-home announcements (UDP 6666 and 6667) are repeated onto the main network so phone apps still find their devices |
 | Casting across networks | where an IoT network exists, mDNS is repeated both ways so phones on the main network find AirPlay and Chromecast devices, printers and speakers on the IoT side. Discovery only: the firewall still decides what may connect. The IoT zone needs an input rule for UDP 5353 |
@@ -107,6 +109,8 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no k
 | `GET /v1/status`, `/v1/devices`, `/v1/alerts`, `/v1/meta` | the main screens |
 | `POST /v1/devices/<mac>` | `name`, `category`, `icon`, `blocked`, `pause_minutes`, `approve`, `fixed_ip`, `filtering` (`on` or `off`) |
 | `POST /v1/devices/<mac>/wake` | Wake-on-LAN |
+| `GET /v1/devices/<mac>/power`; `POST /v1/devices/<mac>/power` (`action`: `sleep`, `restart`, `status`), `/power/setup` (`os`: `mac`, `windows`), `/power/remove` | laptop power |
+| `GET /power/s?c=<code>`, `POST /power/register` | used by the laptop's setup script, authorised by the one-time code, no access key |
 | `GET`/`POST /v1/groups`, `/v1/schedules` | people and rooms, schedules |
 | `POST /v1/settings` | `approve_new`, `watchdog`, `night`, `push` |
 | `GET /v1/wifi`, `/v1/wifi/secret?id=`, `/v1/wifi/check`; `POST /v1/wifi/<id>` | Wi-Fi: `ssid`, `key`, `enabled`, `schedule` (`enabled`, `from`, `to`, `days`) |
