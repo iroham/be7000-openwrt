@@ -1,0 +1,16 @@
+#!/bin/sh
+# 5 GHz: no periodic group key renewal.
+# On this router the renewal that hostapd does every 24 hours fails for every 5 GHz client
+# ("group key handshake failed after 4 tries") and disconnects them all at once; some clients do not
+# recover until the radio restarts. 2.4 GHz renews without trouble and is left alone.
+# A value set by hand is kept.
+changed=0
+for s in $(uci -q show wireless | sed -n "s/^wireless\.\([^.]*\)=wifi-iface$/\1/p"); do
+	dev=$(uci -q get wireless.$s.device) || continue
+	[ "$(uci -q get wireless.$dev.band)" = 5g ] || continue
+	[ -n "$(uci -q get wireless.$s.wpa_group_rekey)" ] && continue
+	uci set wireless.$s.wpa_group_rekey='0'
+	changed=1
+done
+[ "$changed" = 1 ] && uci commit wireless
+exit 0

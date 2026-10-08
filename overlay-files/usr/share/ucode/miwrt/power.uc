@@ -53,6 +53,8 @@ function mac_script(from, pub, code) {
 #  - Remote Login (SSH) is switched on.
 #  - The router's key is accepted only from ${from} and can only run /usr/local/bin/miwrt-power.
 #  - One sudo rule lets your account run "shutdown -r now" without a password.
+#  - On the charger, the Mac is told to wake for network access and not to drop into the deep
+#    power-off sleep it cannot be woken from. Nothing changes on battery.
 # To undo: delete the miwrt-router line from ~/.ssh/authorized_keys, and remove
 # /usr/local/bin/miwrt-power and /etc/sudoers.d/miwrt-power.
 set -e
@@ -94,8 +96,12 @@ chmod 600 "$H/.ssh/authorized_keys"
 systemsetup -setremotelogin on >/dev/null 2>&1 || true
 launchctl enable system/com.openssh.sshd >/dev/null 2>&1 || true
 launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist >/dev/null 2>&1 || true
-# wake for network access while on the charger
-pmset -c womp 1 >/dev/null 2>&1 || true
+# On the charger: wake for network access, keep the network alive while asleep, and never fall into the
+# deep power-off sleep that a wake-up signal cannot reach. A closed lid still sleeps the Mac (macOS does
+# that by design); the router wakes it when you ask for something. Settings a model lacks are skipped.
+for kv in "womp 1" "tcpkeepalive 1" "powernap 1" "autopoweroff 0" "standby 0"; do
+	pmset -c $kv >/dev/null 2>&1 || true
+done
 
 sleep 2
 if ! nc -z 127.0.0.1 22 >/dev/null 2>&1; then
@@ -116,6 +122,9 @@ function windows_script(from, pub, code) {
 # Lets your MiWRT router (${from}) put this PC to sleep or restart it, and nothing else:
 #  - The OpenSSH server that comes with Windows is installed and started, reachable only from ${from}.
 #  - The router's key is accepted only from ${from} and can only run C:\\ProgramData\\miwrt\\power.ps1.
+#  - On the charger: closing the lid no longer puts the PC to sleep, it never hibernates by itself
+#    (a hibernated PC cannot be woken over the network), and its network adapters may wake it.
+#    Nothing changes on battery.
 # To undo: delete the miwrt-router line from C:\\ProgramData\\ssh\\administrators_authorized_keys
 # and delete C:\\ProgramData\\miwrt.
 $ErrorActionPreference = 'Stop'
@@ -157,7 +166,14 @@ if ($rule) { $rule | Set-NetFirewallRule -Enabled True -RemoteAddress '${from}' 
 else { New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (MiWRT router only)' -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow -RemoteAddress '${from}' | Out-Null }
 
 # let the network adapters wake the PC
-Get-NetAdapter -Physical | ForEach-Object { try { Set-NetAdapterPowerManagement -Name $_.Name -WakeOnMagicPacket Enabled -ErrorAction Stop } catch {} }
+Get-NetAdapter -Physical | ForEach-Object {
+	try { Set-NetAdapterPowerManagement -Name $_.Name -WakeOnMagicPacket Enabled -ErrorAction Stop } catch {}
+	powercfg /deviceenablewake "$($_.InterfaceDescription)" 2>$null | Out-Null
+}
+# on the charger: a closed lid keeps the PC running, and it never hibernates by itself
+powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0 | Out-Null
+powercfg /change hibernate-timeout-ac 0 | Out-Null
+powercfg /setactive SCHEME_CURRENT | Out-Null
 
 $body = Join-Path $env:TEMP 'miwrt-register.json'
 ('{"code":"${code}","user":"' + $env:USERNAME + '"}') | Set-Content -Encoding ASCII -NoNewline $body
@@ -247,15 +263,30 @@ export function action(mac, what) {
 	if (!d?.ip || !match(d.ip, /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/)) return { error: 'The router does not know this device\'s address.' };
 	if (!match(h.user, /^[A-Za-z0-9._-]{1,32}$/)) return { error: 'The saved account name is not usable. Set remote power up again.' };
 	mkdir(DIR + '/.ssh', 0700);
-	let out = trim(hub.run(`HOME=${DIR} timeout 12 dbclient -y -T -i ${KEY} -o BatchMode=yes '${h.user}@${d.ip}' ${what} 2>&1 </dev/null`));
-	for (let line in split(out, '\n')) {
-		let m = match(trim(line), /^ok ?(.*)$/);
-		if (!m) continue;
+	let ask = (limit) => trim(hub.run(`HOME=${DIR} timeout ${limit} dbclient -y -T -i ${KEY} -o BatchMode=yes '${h.user}@${d.ip}' ${what} 2>&1 </dev/null`));
+	let answered = (out) => {
+		for (let line in split(out, '\n')) {
+			let m = match(trim(line), /^ok ?(.*)$/);
+			if (m) return m[1];
+		}
+		return null;
+	};
+	let refused = (out) => match(out, /not allowed|[Hh]ost key mismatch|HOST KEY|[Pp]ermission denied|publickey/) != null;
+	let out = ask(8), detail = answered(out), woke = false;
+	// no answer: the laptop is probably asleep with its lid closed. Wake it, then ask again for a while.
+	for (let i = 0; detail == null && !refused(out) && i < 4; i++) {
+		system([ '/usr/sbin/miwrt-wol', mac ]);
+		woke = true;
+		sleep(3000);
+		out = ask(6);
+		detail = answered(out);
+	}
+	if (detail != null) {
 		if (what != 'status') hub.add_alert('device', what == 'sleep' ? 'Put to sleep' : 'Restarted', d.name, 'info');
-		return { ok: true, detail: m[1] };
+		return { ok: true, detail, woke };
 	}
 	if (match(out, /not allowed/)) return { error: 'The laptop refused that request.' };
 	if (match(out, /[Hh]ost key mismatch|HOST KEY/)) return { error: 'The laptop\'s identity changed since setup. Remove remote power for it and set it up again.' };
 	if (match(out, /[Pp]ermission denied|auth|publickey/)) return { error: 'The laptop did not accept the router\'s key. Run the setup command on it again.' };
-	return { error: d.online ? 'The laptop did not answer. Check that remote login is still on.' : 'The laptop is asleep or off the network. Wake it first.' };
+	return { error: 'The laptop did not answer, even after a wake-up signal. It may be off, on battery, or away from this network.' };
 };
