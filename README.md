@@ -67,7 +67,8 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 | `/usr/sbin/miwrt-discovery-relay` | repeats smart-home discovery broadcasts from an IoT network to the main one |
 | `/usr/sbin/miwrt-mdns-reflector` | repeats mDNS (AirPlay, Chromecast, printers) between the main and the IoT network |
 | `/usr/sbin/miwrt-upload` | the upload half of the speed test |
-| `/usr/sbin/miwrt-wol` | Wake-on-LAN |
+| `/usr/sbin/miwrt-wol` | Wake-on-LAN, as a broadcast and straight to the device's own address |
+| `/usr/sbin/miwrt-tuya` | switches a Tuya Wi-Fi plug on the local network (protocol 3.3, 3.4, 3.5), without Tuya's cloud |
 | `/usr/share/miwrt/oui.txt` | maker per MAC prefix |
 | `/etc/miwrt/` | settings and state, kept across sysupgrade |
 
@@ -101,6 +102,7 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 | Speed shaping | switch SQM (cake) on or off and set the download and upload limits |
 | Checks | connection test, speed test from the router (download and upload), Wi-Fi channel check, blocked threats (banIP), protection overview, weekly summary, 48 hours of health samples |
 | Laptop power | sleep, restart and wake for Mac and Windows laptops. The router holds one SSH key; each laptop accepts it only from the router and only for a fixed script (status, sleep, restart). A laptop is added with one setup command, valid once for 30 minutes, whose download is checked against a checksum. Wake uses Wake-on-LAN and needs the laptop asleep on its charger; a sleep or restart request wakes a sleeping laptop first. The setup also prepares the laptop for this on mains power: wake for network access and no deep power-off sleep on macOS; on Windows, wake on magic packet, no hibernation, and a closed lid no longer sleeps the PC |
+| Smart plug power-on | for laptops whose Wi-Fi is off while they sleep: a Tuya plug on the charger, linked with its device ID and local key, is switched off for 10 seconds to start a laptop that powers on when its charger is connected. Works from shutdown and from hibernation; with a plug linked, "sleep" on Windows means hibernate. The plug's power reading is shown |
 | Maintenance | settings backup download, lights on, off or off at night, restart, firmware version, update check and install (through `be7000-update`, into the second slot) |
 | Discovery relay | where an IoT network exists (`br-iot`), smart-home announcements (UDP 6666 and 6667) are repeated onto the main network so phone apps still find their devices |
 | Casting across networks | where an IoT network exists, mDNS is repeated both ways so phones on the main network find AirPlay and Chromecast devices, printers and speakers on the IoT side. Discovery only: the firewall still decides what may connect. The IoT zone needs an input rule for UDP 5353 |
@@ -114,7 +116,7 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no k
 | `GET /v1/status`, `/v1/devices`, `/v1/alerts`, `/v1/meta` | the main screens |
 | `POST /v1/devices/<mac>` | `name`, `category`, `icon`, `blocked`, `pause_minutes`, `approve`, `fixed_ip`, `filtering` (`on` or `off`) |
 | `POST /v1/devices/<mac>/wake` | Wake-on-LAN |
-| `GET /v1/devices/<mac>/power`; `POST /v1/devices/<mac>/power` (`action`: `sleep`, `restart`, `status`), `/power/setup` (`os`: `mac`, `windows`), `/power/remove` | laptop power |
+| `GET /v1/devices/<mac>/power`, `/power/plug`; `POST /v1/devices/<mac>/power` (`action`: `sleep`, `hibernate`, `restart`, `shutdown`, `poweron`, `status`), `/power/setup` (`os`: `mac`, `windows`), `/power/plug` (`plug`, `device_id`, `local_key`, or `remove`), `/power/remove` | laptop power |
 | `GET /power/s?c=<code>`, `POST /power/register` | used by the laptop's setup script, authorised by the one-time code, no access key |
 | `GET`/`POST /v1/groups`, `/v1/schedules` | people and rooms, schedules |
 | `POST /v1/settings` | `approve_new`, `watchdog`, `night`, `push` |

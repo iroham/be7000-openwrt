@@ -1,0 +1,297 @@
+#!/usr/bin/lua
+-- Talks to a Tuya Wi-Fi plug on the local network, without Tuya's cloud.
+--   miwrt-tuya <address> <device id> <key file> <version> status|on|off|cycle [seconds]
+-- The key file holds the device's 16-character "local key". Versions 3.3, 3.4 and 3.5 are spoken.
+-- Prints one line of JSON: {"ok":true,"on":true,"watts":41.2} or {"error":"..."}.
+-- The router has no encryption library for Lua, so AES and HMAC are done by the openssl program and the
+-- rest (GCM's counter mode and checksum, framing) is done here.
+local nixio = require "nixio"
+local bit = nixio.bit
+local ip, devid, keyfile, version, action, secs = arg[1], arg[2], arg[3], arg[4], arg[5], tonumber(arg[6]) or 10
+
+local function out(t)
+	local parts = {}
+	for k, v in pairs(t) do
+		parts[#parts + 1] = string.format("%q:%s", k, type(v) == "string" and string.format("%q", v) or tostring(v))
+	end
+	print("{" .. table.concat(parts, ",") .. "}")
+end
+local function fail(msg) out({ error = msg }); os.exit(1) end
+
+if not (ip and ip:match("^%d+%.%d+%.%d+%.%d+$") and devid and devid:match("^[%w]+$") and keyfile and action) then fail("usage") end
+if version ~= "3.3" and version ~= "3.4" and version ~= "3.5" then fail("unknown protocol version") end
+local kf = io.open(keyfile, "rb"); if not kf then fail("no key") end
+local KEY = kf:read("*a"):gsub("%s+$", ""); kf:close()
+if #KEY ~= 16 then fail("the local key must be 16 characters") end
+
+-- ---------- small helpers ----------
+local TMP = "/tmp/miwrt/tuya-" .. nixio.getpid() .. "-"
+os.execute("mkdir -p /tmp/miwrt && chmod 700 /tmp/miwrt")
+local function hex(s) return (s:gsub(".", function(c) return string.format("%02x", c:byte()) end)) end
+local function u32(n) return string.char(bit.band(bit.rshift(n, 24), 255), bit.band(bit.rshift(n, 16), 255), bit.band(bit.rshift(n, 8), 255), bit.band(n, 255)) end
+local function rd32(s, i) local a, b, c, d = s:byte(i, i + 3); return ((a * 256 + b) * 256 + c) * 256 + d end
+local function xor(a, b) local t = {}; for i = 1, #a do t[i] = string.char(bit.bxor(a:byte(i), b:byte(i))) end; return table.concat(t) end
+local function writef(name, data) local f = io.open(TMP .. name, "wb"); f:write(data); f:close() end
+local function readf(name) local f = io.open(TMP .. name, "rb"); if not f then return "" end; local d = f:read("*a"); f:close(); return d end
+local function cleanup() for _, n in ipairs({ "in", "out" }) do os.remove(TMP .. n) end end
+local function random(n) local f = io.open("/dev/urandom", "rb"); local d = f:read(n); f:close(); return d end
+
+-- AES-128-ECB on whole blocks, no padding added or removed
+local function ecb(key, data, decrypt)
+	writef("in", data)
+	os.execute(string.format("openssl enc %s -aes-128-ecb -K %s -nopad -in %sin -out %sout 2>/dev/null", decrypt and "-d" or "-e", hex(key), TMP, TMP))
+	local r = readf("out"); cleanup(); return r
+end
+local function pad(s) local n = 16 - #s % 16; return s .. string.rep(string.char(n), n) end
+local function unpad(s) local n = s:byte(#s) or 0; if n < 1 or n > 16 then return s end; return s:sub(1, #s - n) end
+local function hmac(key, data)
+	writef("in", data)
+	os.execute(string.format("openssl dgst -sha256 -mac HMAC -macopt hexkey:%s -binary -out %sout %sin 2>/dev/null", hex(key), TMP, TMP))
+	local r = readf("out"); cleanup(); return r
+end
+
+-- ---------- AES-GCM (12-byte IV, 16-byte tag) ----------
+local function words(s) return { rd32(s, 1), rd32(s, 5), rd32(s, 9), rd32(s, 13) } end
+local function unwords(w) return u32(w[1]) .. u32(w[2]) .. u32(w[3]) .. u32(w[4]) end
+local function gmul(x, h)   -- multiplication in GF(2^128), both as 4 big-endian words
+	local z, v = { 0, 0, 0, 0 }, { h[1], h[2], h[3], h[4] }
+	for i = 1, 4 do
+		local xi = x[i]
+		for b = 31, 0, -1 do
+			if bit.band(bit.rshift(xi, b), 1) == 1 then for k = 1, 4 do z[k] = bit.bxor(z[k], v[k]) end end
+			local lsb = bit.band(v[4], 1)
+			v[4] = bit.bor(bit.rshift(v[4], 1), bit.lshift(bit.band(v[3], 1), 31))
+			v[3] = bit.bor(bit.rshift(v[3], 1), bit.lshift(bit.band(v[2], 1), 31))
+			v[2] = bit.bor(bit.rshift(v[2], 1), bit.lshift(bit.band(v[1], 1), 31))
+			v[1] = bit.rshift(v[1], 1)
+			if lsb == 1 then v[1] = bit.bxor(v[1], 0xE1000000) end
+		end
+	end
+	for k = 1, 4 do if z[k] < 0 then z[k] = z[k] + 4294967296 end end
+	return z
+end
+local function ghash(h, aad, ct)
+	local function blocks(s) return s .. string.rep("\0", (16 - #s % 16) % 16) end
+	local data = blocks(aad) .. blocks(ct) .. u32(0) .. u32(#aad * 8) .. u32(0) .. u32(#ct * 8)
+	local y, hw = { 0, 0, 0, 0 }, words(h)
+	for i = 1, #data, 16 do
+		local w = words(data:sub(i, i + 15))
+		for k = 1, 4 do y[k] = bit.bxor(y[k], w[k]); if y[k] < 0 then y[k] = y[k] + 4294967296 end end
+		y = gmul(y, hw)
+	end
+	return unwords(y)
+end
+-- one openssl call gives everything GCM needs: H, the tag mask and the keystream
+local function gcm_parts(key, iv, len)
+	local n = math.ceil(len / 16)
+	local t = { string.rep("\0", 16), iv .. u32(1) }
+	for i = 1, n do t[#t + 1] = iv .. u32(i + 1) end
+	local e = ecb(key, table.concat(t))
+	return e:sub(1, 16), e:sub(17, 32), e:sub(33, 32 + len)
+end
+local function gcm_encrypt(key, iv, plain, aad)
+	local h, mask, stream = gcm_parts(key, iv, #plain)
+	local ct = xor(plain, stream)
+	return ct, xor(ghash(h, aad or "", ct), mask)
+end
+local function gcm_decrypt(key, iv, ct, aad, tag)
+	local h, mask, stream = gcm_parts(key, iv, #ct)
+	if tag and xor(ghash(h, aad or "", ct), mask) ~= tag then return nil end
+	return xor(ct, stream)
+end
+
+-- ---------- CRC32 (3.3 frames) ----------
+local function crc32(s)
+	local c = 0xFFFFFFFF
+	for i = 1, #s do
+		c = bit.bxor(c, s:byte(i))
+		for _ = 1, 8 do
+			local m = bit.band(c, 1)
+			c = bit.rshift(c, 1)
+			if m == 1 then c = bit.bxor(c, 0xEDB88320) end
+		end
+	end
+	c = bit.bxor(c, 0xFFFFFFFF)
+	if c < 0 then c = c + 4294967296 end
+	return c
+end
+
+-- ---------- frames ----------
+local seq = 1
+local VER = version .. string.rep("\0", 12)
+local NO_HEADER = { [3] = true, [4] = true, [5] = true, [9] = true, [10] = true, [16] = true, [18] = true }
+
+local function frame(cmd, payload, key)
+	local s = seq; seq = seq + 1
+	if version == "3.5" then
+		if not NO_HEADER[cmd] then payload = VER .. payload end
+		local head = string.char(0, 0) .. u32(s) .. u32(cmd) .. u32(#payload + 28)
+		local iv = random(12)
+		local ct, tag = gcm_encrypt(key, iv, payload, head)
+		return "\0\0\102\153" .. head .. iv .. ct .. tag .. "\0\0\153\102"
+	end
+	if version == "3.4" then
+		if not NO_HEADER[cmd] then payload = VER .. payload end
+		payload = ecb(key, pad(payload))
+		local data = "\0\0\85\170" .. u32(s) .. u32(cmd) .. u32(#payload + 36) .. payload
+		return data .. hmac(key, data) .. "\0\0\170\85"
+	end
+	payload = ecb(key, pad(payload))
+	if not NO_HEADER[cmd] then payload = VER .. payload end
+	local data = "\0\0\85\170" .. u32(s) .. u32(cmd) .. u32(#payload + 8) .. payload
+	return data .. u32(crc32(data)) .. "\0\0\170\85"
+end
+
+local sock
+local function recv_exact(n)
+	local buf = ""
+	while #buf < n do
+		local d = sock:recv(n - #buf)
+		if not d or #d == 0 then return nil end
+		buf = buf .. d
+	end
+	return buf
+end
+
+-- Returns cmd, payload (decrypted, return code stripped) or nil
+local function read_frame(key)
+	local pre = recv_exact(4)
+	if not pre then return nil end
+	if pre == "\0\0\102\153" then
+		local head = recv_exact(14); if not head then return nil end
+		local cmd, len = rd32(head, 7), rd32(head, 11)
+		if len < 28 or len > 4096 then return nil end
+		local body = recv_exact(len + 4); if not body then return nil end
+		local iv, ct, tag = body:sub(1, 12), body:sub(13, len - 16), body:sub(len - 15, len)
+		local plain = gcm_decrypt(key, iv, ct, head, tag)
+		if not plain then return cmd, nil end
+		return cmd, plain
+	elseif pre == "\0\0\85\170" then
+		local head = recv_exact(12); if not head then return nil end
+		local cmd, len = rd32(head, 5), rd32(head, 9)
+		if len < 8 or len > 4096 then return nil end
+		local body = recv_exact(len); if not body then return nil end
+		local tail = version == "3.4" and 36 or 8
+		local payload = body:sub(5, len - tail)   -- after the 4-byte return code
+		if #payload == 0 then return cmd, "" end
+		if version == "3.3" then
+			if payload:sub(1, 3) == "3.3" then payload = payload:sub(16) end
+			if #payload % 16 ~= 0 then return cmd, "" end
+			return cmd, unpad(ecb(key, payload, true))
+		end
+		if #payload % 16 ~= 0 then return cmd, "" end
+		return cmd, unpad(ecb(key, payload, true))
+	end
+	return nil
+end
+
+-- waits for an answer to one of the wanted commands, skipping heartbeats and status pushes
+local function expect(key, wanted)
+	for _ = 1, 6 do
+		local cmd, payload = read_frame(key)
+		if not cmd then return nil end
+		if wanted[cmd] then return cmd, payload end
+	end
+	return nil
+end
+
+-- ---------- conversation ----------
+sock = nixio.socket("inet", "stream")
+sock:setopt("socket", "sndtimeo", 5)
+sock:setopt("socket", "rcvtimeo", 5)
+if not sock:connect(ip, 6668) then fail("The plug did not answer. Check that it is powered and on the network.") end
+
+local session = KEY
+if version ~= "3.3" then
+	local mine = random(16)
+	sock:send(frame(3, mine, KEY))
+	local cmd, reply = expect(KEY, { [4] = true })
+	if not reply then sock:close(); fail("The plug refused the key. Check the local key and the protocol version.") end
+	local want, theirs = hmac(KEY, mine), nil
+	for _, skip in ipairs({ 0, 4 }) do   -- some firmware puts a 4-byte return code first
+		if #reply >= skip + 48 and reply:sub(skip + 17, skip + 48) == want then theirs = reply:sub(skip + 1, skip + 16) end
+	end
+	if not theirs then sock:close(); fail("The plug refused the key. Check the local key and the protocol version.") end
+	sock:send(frame(5, hmac(KEY, theirs), KEY))
+	local mixed = xor(mine, theirs)
+	if version == "3.5" then
+		local _, _, stream = gcm_parts(KEY, mine:sub(1, 12), 16)
+		session = xor(mixed, stream)
+	else
+		session = ecb(KEY, mixed)
+	end
+end
+
+local function json_of(payload)
+	if not payload then return nil end
+	local i = payload:find("{", 1, true)
+	return i and payload:sub(i) or nil
+end
+local function dps(js)
+	if not js then return nil end
+	local t = {}
+	local block = js:match('"dps"%s*:%s*(%b{})')
+	if not block then return nil end
+	for k, v in block:gmatch('"(%d+)"%s*:%s*([^,}]+)') do t[tonumber(k)] = v end
+	return t
+end
+
+local function query()
+	local cmd, payload
+	if version == "3.3" then
+		sock:send(frame(10, string.format('{"gwId":"%s","devId":"%s","uid":"%s","t":"%d"}', devid, devid, devid, os.time()), session))
+		cmd, payload = expect(session, { [10] = true })
+	else
+		sock:send(frame(16, "{}", session))
+		cmd, payload = expect(session, { [16] = true })
+	end
+	return dps(json_of(payload))
+end
+
+local function set(values)
+	local body
+	if version == "3.3" then
+		body = string.format('{"devId":"%s","uid":"%s","t":"%d","dps":{%s}}', devid, devid, os.time(), values)
+		sock:send(frame(7, body, session))
+		return expect(session, { [7] = true }) ~= nil
+	end
+	body = string.format('{"protocol":5,"t":%d,"data":{"dps":{%s}}}', os.time(), values)
+	sock:send(frame(13, body, session))
+	return expect(session, { [13] = true }) ~= nil
+end
+
+local function report(d, extra)
+	local r = extra or {}
+	r.ok = true
+	if d and d[1] then r.on = (d[1] == "true") end
+	if d and d[19] and tonumber(d[19]) then r.watts = tonumber(d[19]) / 10 end   -- most Tuya plugs: data point 19, in 0.1 W
+	out(r)
+end
+
+if action == "status" then
+	local d = query(); sock:close()
+	if not d then fail("The plug answered but its state could not be read.") end
+	report(d)
+elseif action == "on" or action == "off" then
+	local ok = set('"1":' .. (action == "on" and "true" or "false")); sock:close()
+	if not ok then fail("The plug did not confirm.") end
+	out({ ok = true, on = action == "on" })
+elseif action == "cycle" then
+	-- Off, then on again after a pause. The plug's own countdown is set as well, so power comes back even if
+	-- this router stops halfway.
+	if secs < 3 or secs > 60 then secs = 10 end
+	if not set('"1":false') then sock:close(); fail("The plug did not confirm switching off.") end
+	set('"9":' .. secs)
+	nixio.nanosleep(secs + 2)
+	local d = query()
+	if not d or d[1] ~= "true" then   -- the countdown did not bring it back: switch it on ourselves
+		set('"1":true')
+		nixio.nanosleep(1)
+		d = query()
+	end
+	sock:close()
+	if d and d[1] == "false" then fail("The plug did not switch back on. Switch it on by hand.") end
+	report(d, { cycled = true })
+else
+	sock:close(); fail("usage")
+end

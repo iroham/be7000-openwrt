@@ -15,6 +15,7 @@ const HOSTS = DIR + '/hosts.json';
 const CODES = '/tmp/miwrt/power-codes.json';
 const CODE_LIFE = 1800;
 const ACTIONS = { status: true, sleep: true, restart: true, hibernate: true, shutdown: true };
+const PLUG_VERSIONS = [ '3.5', '3.4', '3.3' ];
 
 function public_key() {
 	if (!access(KEY, 'r')) {
@@ -206,9 +207,72 @@ function codes() {
 	return all;
 }
 
+// ---------- a smart plug on the laptop's charger ----------
+// A laptop that starts when its charger is connected can be powered on, or brought back from hibernation,
+// by switching the plug off for a few seconds. Tuya plugs are spoken to on the local network (miwrt-tuya).
+
+function plug_keyfile(mac) { return `${DIR}/plug-${replace(mac, /:/g, '')}.key`; }
+
+function plug_run(mac, plug, what, secs) {
+	let d = device(plug.mac);
+	if (!d?.ip || !match(d.ip, /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/)) return { error: 'The plug is not on the network right now.' };
+	if (!match(plug.id ?? '', /^[A-Za-z0-9]{10,40}$/) || index(PLUG_VERSIONS, plug.version) < 0) return { error: 'The plug\'s details are incomplete. Link it again.' };
+	let out = trim(hub.run(`timeout ${40 + (secs ?? 0)} lua /usr/sbin/miwrt-tuya ${d.ip} ${plug.id} ${plug_keyfile(mac)} ${plug.version} ${what} ${secs ?? ''} 2>/dev/null`));
+	try { return json(out) ?? { error: 'The plug gave no answer.' }; } catch (e) { return { error: 'The plug gave no answer.' }; }
+}
+
 export function status(mac) {
 	let h = hub.load(HOSTS, {})[mac];
-	return h ? { configured: true, os: h.os, user: h.user, added: h.added, info: h.info } : { configured: false };
+	if (!h) return { configured: false };
+	let plug = h.plug ? { linked: true, kind: h.plug.kind, name: device(h.plug.mac)?.name ?? 'Smart plug', version: h.plug.version } : { linked: false };
+	return { configured: true, os: h.os, user: h.user, added: h.added, info: h.info, plug };
+};
+
+/* Live state of the linked plug: on or off, and the power it measures if it can. */
+export function plug_status(mac) {
+	let h = hub.load(HOSTS, {})[mac];
+	if (!h?.plug) return { error: 'No plug is linked to this device.' };
+	return plug_run(mac, h.plug, 'status');
+};
+
+/* Link a Tuya plug: tries the protocol versions until the plug answers with this key. */
+export function plug_link(mac, b) {
+	if (!hub.is_mac(mac)) return { error: 'unknown device' };
+	let hosts = hub.load(HOSTS, {});
+	if (!hosts[mac]) return { error: 'Set up remote power for this device first.' };
+	if (b?.remove) {
+		return hub.locked(() => {
+			let all = hub.load(HOSTS, {});
+			if (all[mac]) { delete all[mac].plug; hub.save_private(HOSTS, all); }
+			unlink(plug_keyfile(mac));
+			return { ok: true };
+		});
+	}
+	let pmac = lc(`${b?.plug ?? ''}`), id = trim(`${b?.device_id ?? ''}`), key = trim(`${b?.local_key ?? ''}`);
+	if (!hub.is_mac(pmac) || !device(pmac)) return { error: 'Choose the plug from the list of devices.' };
+	if (pmac == mac) return { error: 'That is the laptop itself, not a plug.' };
+	if (!match(id, /^[A-Za-z0-9]{10,40}$/)) return { error: 'The device ID does not look right. It is about 20 letters and digits.' };
+	if (length(key) != 16) return { error: 'The local key is exactly 16 characters.' };
+	mkdir(DIR, 0700);
+	writefile(plug_keyfile(mac), key);
+	chmod(plug_keyfile(mac), 0600);
+	let found = null, last = null;
+	for (let v in (index(PLUG_VERSIONS, b.version) >= 0 ? [ b.version ] : PLUG_VERSIONS)) {
+		let r = plug_run(mac, { mac: pmac, id, version: v }, 'status');
+		if (r.ok) { found = { version: v, state: r }; break; }
+		last = r.error;
+	}
+	if (!found) {
+		unlink(plug_keyfile(mac));
+		return { error: match(last ?? '', /not on the network|did not answer/) ? last : 'The plug did not accept these details. Check the device ID and the local key; the key changes when a plug is paired again.' };
+	}
+	return hub.locked(() => {
+		let all = hub.load(HOSTS, {});
+		if (!all[mac]) return { error: 'Set up remote power for this device first.' };
+		all[mac].plug = { kind: 'tuya', mac: pmac, id, version: found.version };
+		hub.save_private(HOSTS, all);
+		return { ok: true, version: found.version, on: found.state.on, watts: found.state.watts };
+	});
 };
 
 /* Makes the one-time setup command for a laptop. */
@@ -289,9 +353,21 @@ export function remove(mac) {
 
 /* sleep, restart or status on a laptop that has been set up. Returns { ok, detail } or { error }. */
 export function action(mac, what) {
-	if (!hub.is_mac(mac) || !ACTIONS[what]) return { error: 'unknown request' };
-	let h = hub.load(HOSTS, {})[mac];
+	let h = hub.is_mac(mac) ? hub.load(HOSTS, {})[mac] : null;
 	if (!h) return { error: 'Remote power is not set up for this device.' };
+	if (what == 'poweron') {
+		// wake-up signal first (enough for a laptop that listens while asleep), then the plug
+		let known = device(mac);
+		system(known?.ip ? [ '/usr/sbin/miwrt-wol', mac, known.ip ] : [ '/usr/sbin/miwrt-wol', mac ]);
+		if (!h.plug) return { ok: true, detail: 'Wake-up signal sent.' };
+		let r = plug_run(mac, h.plug, 'cycle', 10);
+		if (r.error) return r;
+		hub.add_alert('device', 'Powered on', known?.name ?? mac, 'info');
+		return { ok: true, detail: 'Power was cut for 10 seconds and restored.', watts: r.watts };
+	}
+	if (!ACTIONS[what]) return { error: 'unknown request' };
+	// a Windows laptop with a plug hibernates instead of sleeping: the plug can bring it back from that
+	if (what == 'sleep' && h.os == 'windows' && h.plug) what = 'hibernate';
 	let d = device(mac);
 	if (!d?.ip || !match(d.ip, /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/)) return { error: 'The router does not know this device\'s address.' };
 	if (!match(h.user, /^[A-Za-z0-9._-]{1,32}$/)) return { error: 'The saved account name is not usable. Set remote power up again.' };
