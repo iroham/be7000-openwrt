@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=amneziawg-tools
 PKG_VERSION:=2026.08.12
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 AWG_SHA:=ee0f0a9aa34ff0a0da4b3433b9512781cfe02843
 PKG_SOURCE:=amneziawg-tools-$(AWG_SHA).tar.gz
 PKG_SOURCE_URL:=https://codeload.github.com/amnezia-vpn/amneziawg-tools/tar.gz/$(AWG_SHA)?
@@ -19,6 +19,8 @@ define Package/amneziawg-tools
   SUBMENU:=VPN
   TITLE:=AmneziaWG userspace tools (awg)
   URL:=https://amnezia.org/
+  # amneziawg.sh only needs "ip link add/set/del", which the busybox ip of
+  # the image does for any link type, so no separate ip package
   DEPENDS:=+kmod-amneziawg
 endef
 
@@ -29,6 +31,19 @@ endef
 define Package/amneziawg-tools/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/src/wg $(1)/usr/bin/awg
+	$(INSTALL_BIN) ./files/amneziawg_watchdog $(1)/usr/bin/
+	$(INSTALL_DIR) $(1)/lib/netifd/proto
+	$(INSTALL_BIN) ./files/amneziawg.sh $(1)/lib/netifd/proto/
+endef
+
+# netifd reads its protocol handlers once at start, so after installing or
+# upgrading this package on a running router the amneziawg protocol appears
+# only after a network restart or a reboot.
+define Package/amneziawg-tools/postinst
+#!/bin/sh
+[ -n "$${IPKG_INSTROOT}" ] && exit 0
+echo "amneziawg-tools: run /etc/init.d/network restart or reboot to use AmneziaWG interfaces"
+exit 0
 endef
 
 $(eval $(call BuildPackage,amneziawg-tools))

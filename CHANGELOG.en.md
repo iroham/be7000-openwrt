@@ -2,6 +2,9 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.4.7**, October 9, 2026.
+- An AmneziaWG interface created in LuCI on the Network, Interfaces page did not come up. The amneziawg-tools package lacked the script netifd uses to bring such an interface up, so the protocol was unknown. The script and amneziawg_watchdog are part of the package now. Hybrid Failover was not affected, it brings AWG up on its own.
+
 **1.4.6**, October 8, 2026.
 - Importing the settings from stock refused to run when the factory firmware reported the mode `whc_cap`, and said it was not running as a router. Stock sets that mode on the main router of a mesh network, and it still routes. It is accepted now, and the import is refused only for the extender and the access point modes.
 
