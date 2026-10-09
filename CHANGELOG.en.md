@@ -4,6 +4,7 @@
 
 **1.4.7**, October 9, 2026.
 - An AmneziaWG interface created in LuCI on the Network, Interfaces page did not come up. The amneziawg-tools package lacked the script netifd uses to bring such an interface up, so the protocol was unknown. The script and amneziawg_watchdog are part of the package now. Hybrid Failover was not affected, it brings AWG up on its own.
+- The feed now has the kernel modules and LuCI packages for GRE, L2TP, PPTP, IPIP, VXLAN, 6in4, 6rd, 6to4, DS-Lite, MAP, 464XLAT, relayd, bonding, SSTP, OpenConnect, vpnc and OpenFortiVPN, plus LuCI for MBIM and NCM modems. Before, such interfaces could not be created because the packages were missing from the feed. They are not in the image, install them in LuCI on the System, Software page or with apk. The kernel modules are built for the 1.4.7 kernel, so they need the firmware update.
 
 **1.4.6**, October 8, 2026.
 - Importing the settings from stock refused to run when the factory firmware reported the mode `whc_cap`, and said it was not running as a router. Stock sets that mode on the main router of a mesh network, and it still routes. It is accepted now, and the import is refused only for the extender and the access point modes.
