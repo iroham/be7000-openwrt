@@ -450,10 +450,10 @@ export function action(mac, what) {
 		let known = device(mac);
 		system(known?.ip ? [ '/usr/sbin/miwrt-wol', mac, known.ip ] : [ '/usr/sbin/miwrt-wol', mac ]);
 		if (!h.plug) return { ok: true, detail: 'Wake-up signal sent.' };
-		let r = plug_run(mac, h.plug, 'cycle', 10);
+		let r = plug_run(mac, h.plug, 'cycle', 45);
 		if (r.error) return r;
 		hub.add_alert('device', 'Powered on', known?.name ?? mac, 'info');
-		return { ok: true, detail: 'Power was cut for 10 seconds and restored.', watts: r.watts };
+		return { ok: true, detail: 'Power was cut for 45 seconds and restored. The laptop takes about a minute to come online.', watts: r.watts };
 	}
 	if (!ACTIONS[what]) return { error: 'unknown request' };
 	// a Windows laptop with a plug hibernates instead of sleeping: the plug can bring it back from that
