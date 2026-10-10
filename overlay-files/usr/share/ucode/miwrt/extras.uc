@@ -218,7 +218,7 @@ export function guest_set(b) {
 		hub.save(ETC + '/settings.json', s);
 		hub.add_alert('router', b.on ? 'Guest Wi-Fi turned on' : 'Guest Wi-Fi turned off', b.on ? (hours > 0 ? `${ssid}, for ${hours} h.` : ssid) : '', 'info');
 		// new network pieces first, then the radios
-		system('(sleep 2; /etc/init.d/network reload; sleep 3; /etc/init.d/firewall reload; /etc/init.d/dnsmasq reload) >/dev/null 2>&1 &');
+		system('(sleep 2; /etc/init.d/network reload; sleep 3; /etc/init.d/firewall reload; /etc/init.d/dnsmasq restart) >/dev/null 2>&1 &');
 		return null;
 	});
 };
@@ -434,7 +434,10 @@ export function wake(mac) {
 export function services_tick() {
 	if (stat(RUN + '/dnsmasq-reload')) {
 		unlink(RUN + '/dnsmasq-reload');
-		system('/etc/init.d/dnsmasq reload >/dev/null 2>&1');
+		// A full stop and start, not a reload. On a reload with changed settings the service manager stops the
+		// server and counts that as a crash; the count never clears, and after six of them it leaves the
+		// server stopped. A stop and start begins a fresh count each time.
+		system('/etc/init.d/dnsmasq restart >/dev/null 2>&1');
 		return;
 	}
 	let inst = connect().call('service', 'list', { name: 'dnsmasq' })?.dnsmasq?.instances;
