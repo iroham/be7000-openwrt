@@ -40,6 +40,7 @@ The last two patches fix real driver bugs and do not depend on the board, they a
 | 006 | BE7000 DTS: a 12 MB reservation for the MLO global memory of the 5 GHz dual-MAC firmware, like stock mlo_global_mem |
 | 014 | PPE hardware offload, the series from OpenWrt PR 24178, see below |
 | 005 | BE7000 DTS: the kernel does not vote the l2 regulator over RPM, same as stock. With that request some boards had no reception on the UNIPHY0 lane from the QCA8084, i.e. no Ethernet at all. USB gets a fixed 1.8 V supply |
+| 015 | ath11k-firmware: the hash of the archive made from git is not checked. It depends on the git, tar and zstd of the build machine, and after the CI runner image changed the same commit packed to another hash and the build stopped with "Hash mismatch". The source commit itself stays pinned |
 
 ## Hardware offload (PPE)
 

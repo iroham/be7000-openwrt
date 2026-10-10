@@ -4,7 +4,7 @@ OpenWrt firmware for the Xiaomi BE7000 (board RC06, Qualcomm IPQ9554), tuned to 
 
 MiWRT is built on [Beam WRT](https://github.com/timofey-maykov/be7000-openwrt) by timofey-maykov, which in turn stands on the kravasuper port of OpenWrt to this router. Everything Beam WRT does, MiWRT does: native boot from flash (no kexec), the stock firmware kept in the second slot, two-slot updates with automatic fallback, Wi-Fi 7 on 5 GHz, the 2.5 Gbit/s ports, USB 3, NFC, the split 5 GHz modes and the PPE offload work. The original documentation is kept in [docs/upstream](docs/upstream/README.en.md).
 
-Released version: **1.4.0.3**, based on Beam WRT 1.4.0 (OpenWrt main d958caf, kernel 6.18.52). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.0.3.md).
+Released version: **1.4.0.3**, based on Beam WRT 1.4.0 (OpenWrt main d958caf, kernel 6.18.52). The source is merged up to Beam WRT 1.4.7, see [below](#beam-wrt-141-to-147-in-the-source). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.0.3.md).
 
 ## Contents
 
@@ -46,6 +46,28 @@ Returning from the two-radio 5 GHz mode to one radio left the upper radio's chan
 ### Shipped in the image
 
 `curl` with HTTP/2 (the notification sender needs it), `sqm-scripts` and its LuCI page (cake), `nlbwmon` and its page (per-device traffic accounting), `banip` and its page (IP block lists), `umdns` (mDNS) and `tcpdump-mini`. They survive every sysupgrade without depending on the feed.
+
+### Beam WRT 1.4.1 to 1.4.7, in the source
+
+The source now carries everything Beam WRT released up to 1.4.7. The released image 1.4.0.3 does not have it yet; the next MiWRT release will.
+
+| From Beam WRT | What it brings | In the image |
+|---|---|---|
+| 1.4.1, 1.4.3 | MLO (one network on both 5 GHz halves) starts reliably: no scan while the network is created, a retry when one link fails, a longer allowance before falling back to two radios, correct display on the Wireless and Overview pages, the 5 GHz LED follows the MLO interface | yes |
+| 1.4.1, 1.4.3 | Docker: the data directory is tested before it is accepted, containers reach the internet and their ports open from the LAN, `be7000-docker firewall` and `diag` | Docker itself is installed on request |
+| 1.4.2 to 1.4.4 | An overlay on a USB disk is mounted again after a firmware update (one extra reboot, guarded against a loop); packages are restored with direct DNS when a DNS add-on is not back yet | yes |
+| 1.4.2 | The official OpenWrt target snapshot is no longer a package source; kernel modules come only from the feed built for this kernel | yes |
+| 1.4.2 | Zapret Manager on Services, Add-ons, with Zapret, Zapret2, ByeDPI, NetShift, sing-box and hev-socks5-tunnel in the signed feed. These are tools against provider-side blocking; nothing is installed or switched on until chosen | optional packages |
+| 1.4.3 | The router checks for a new MiWRT release once a day and shows a notice in the top bar and on Overview; the switch is on System, Build update. It asks GitHub for this repository's releases and sends nothing else | yes |
+| 1.4.3 | A "State (MiWRT)" LED trigger: any LED can show whether a process runs, an address answers or a command succeeds | yes |
+| 1.4.5 | System, Slots: switching to the factory firmware no longer fails with an empty reason | yes |
+| 1.4.6 | Importing settings from stock also works when the router was the main unit of a Xiaomi mesh | yes |
+| 1.4.7 | AmneziaWG interfaces made in LuCI come up; GRE, L2TP, PPTP, IPIP, VXLAN, 6in4, 6rd, 6to4, DS-Lite, MAP, 464XLAT, relayd, bonding, SSTP, OpenConnect, vpnc, OpenFortiVPN and MBIM/NCM modem pages are in the feed | optional packages |
+| 1.4.7 | The build no longer stops on the archive hash of the 2.4 GHz radio firmware package | build only |
+
+The third-party sources behind the optional packages are pinned to exact commits in `feeds-extra.conf`. At the time of the merge three of the four pins were the newest commit of their repository; NetShift had moved on and stays on the commit Beam WRT built and tested.
+
+Nothing in these releases changes the Wi-Fi drivers, hostapd, the kernel or dnsmasq.
 
 ### Name and look
 
