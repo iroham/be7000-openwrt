@@ -30,7 +30,7 @@ Notifications are off until you switch them on, and can be switched off again at
 ## Other connections the router makes for the app
 
 - Speed test: downloads from and uploads to Cloudflare's public speed test servers, only when you start a test.
-- Firmware check: asks GitHub for the latest release of this project. From the release after 1.4.0.3 the router also asks by itself once a day, so it can show a notice; this can be switched off on System, Build update.
+- Firmware check: asks GitHub for the latest release of this project. From 1.4.7.1 the router also asks by itself once a day, so it can show a notice; this can be switched off on System, Build update.
 - Ad blocker link: if you link an AdGuard Home, the router talks to it on your network with the login you entered. That login is stored on the router.
 
 ## Children

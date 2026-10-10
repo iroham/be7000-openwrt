@@ -4,7 +4,7 @@ OpenWrt firmware for the Xiaomi BE7000 (board RC06, Qualcomm IPQ9554), tuned to 
 
 MiWRT is built on [Beam WRT](https://github.com/timofey-maykov/be7000-openwrt) by timofey-maykov, which in turn stands on the kravasuper port of OpenWrt to this router. Everything Beam WRT does, MiWRT does: native boot from flash (no kexec), the stock firmware kept in the second slot, two-slot updates with automatic fallback, Wi-Fi 7 on 5 GHz, the 2.5 Gbit/s ports, USB 3, NFC, the split 5 GHz modes and the PPE offload work. The original documentation is kept in [docs/upstream](docs/upstream/README.en.md).
 
-Released version: **1.4.0.3**, based on Beam WRT 1.4.0 (OpenWrt main d958caf, kernel 6.18.52). The source is merged up to Beam WRT 1.4.7, see [below](#beam-wrt-141-to-147-in-the-source). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.0.3.md).
+Released version: **1.4.7.1**, based on Beam WRT 1.4.7 (OpenWrt main d958caf, kernel 6.18.52). What came from Beam WRT since 1.4.0 is listed [below](#beam-wrt-141-to-147). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.7.1.md).
 
 ## Contents
 
@@ -47,9 +47,9 @@ Returning from the two-radio 5 GHz mode to one radio left the upper radio's chan
 
 `curl` with HTTP/2 (the notification sender needs it), `sqm-scripts` and its LuCI page (cake), `nlbwmon` and its page (per-device traffic accounting), `banip` and its page (IP block lists), `umdns` (mDNS) and `tcpdump-mini`. They survive every sysupgrade without depending on the feed.
 
-### Beam WRT 1.4.1 to 1.4.7, in the source
+### Beam WRT 1.4.1 to 1.4.7
 
-The source now carries everything Beam WRT released up to 1.4.7. The released image 1.4.0.3 does not have it yet; the next MiWRT release will.
+MiWRT 1.4.7.1 carries everything Beam WRT released up to 1.4.7. It adds to what MiWRT 1.4.0.3 did and changes none of it: the app service, the radio settings and the packages in the image are the same.
 
 | From Beam WRT | What it brings | In the image |
 |---|---|---|
@@ -59,7 +59,7 @@ The source now carries everything Beam WRT released up to 1.4.7. The released im
 | 1.4.2 | The official OpenWrt target snapshot is no longer a package source; kernel modules come only from the feed built for this kernel | yes |
 | 1.4.2 | Zapret Manager on Services, Add-ons, with Zapret, Zapret2, ByeDPI, NetShift, sing-box and hev-socks5-tunnel in the signed feed. These are tools against provider-side blocking; nothing is installed or switched on until chosen | optional packages |
 | 1.4.3 | The router checks for a new MiWRT release once a day and shows a notice in the top bar and on Overview; the switch is on System, Build update. It asks GitHub for this repository's releases and sends nothing else | yes |
-| 1.4.3 | A "State (MiWRT)" LED trigger: any LED can show whether a process runs, an address answers or a command succeeds | yes |
+| 1.4.3 | A "State (MiWRT)" LED trigger: any LED can show whether a process runs, an address answers or a command succeeds. Beam WRT also assigns the amber network LED to 2.4 GHz traffic by default; MiWRT leaves that LED alone (`/usr/libexec/be7000-leds seed` assigns it) | yes |
 | 1.4.5 | System, Slots: switching to the factory firmware no longer fails with an empty reason | yes |
 | 1.4.6 | Importing settings from stock also works when the router was the main unit of a Xiaomi mesh | yes |
 | 1.4.7 | AmneziaWG interfaces made in LuCI come up; GRE, L2TP, PPTP, IPIP, VXLAN, 6in4, 6rd, 6to4, DS-Lite, MAP, 464XLAT, relayd, bonding, SSTP, OpenConnect, vpnc, OpenFortiVPN and MBIM/NCM modem pages are in the feed | optional packages |
