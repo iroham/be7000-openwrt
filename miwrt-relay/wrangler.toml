@@ -17,3 +17,9 @@ simple = { limit = 60, period = 60 }
 name = "PER_PHONE"
 namespace_id = "7302"
 simple = { limit = 10, period = 60 }
+
+# Which router may send to which phone (fingerprints only, see src/index.js).
+# Your own deployment needs its own: wrangler kv namespace create BINDINGS
+[[kv_namespaces]]
+binding = "BINDINGS"
+id = "PUT-YOUR-NAMESPACE-ID-HERE"

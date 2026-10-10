@@ -97,7 +97,7 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 ### Finding and pairing
 
 - The router announces `_miwrt._tcp` (port 443) on the main network through umdns. The app finds it by itself.
-- Pairing asks for the router's administrator password, the same one LuCI uses. The router checks it with its own login service and hands the phone a random 256-bit access key. Only the key's hash is stored. Five wrong passwords lock pairing for 10 minutes.
+- Pairing asks for the router's administrator password, the same one LuCI uses, and the password stays on the phone. The router keeps it as a salted hash (`/etc/shadow`); `POST /pair/start` gives the app the salt and a random value, the app computes the same hash and answers `POST /pair/finish` with an HMAC-SHA256 over both sides' random values and the fingerprint of the certificate it is talking to, and the router answers with its own. A device in between with another certificate gets a proof the router refuses; a device only posing as the router cannot produce the router's answer, and the app then saves nothing. On success the phone gets a random 256-bit access key; only the key's hash is stored. Wrong passwords are counted per address (5 in 10 minutes) and overall (40). The older `POST /pair`, which takes the password itself, stays for app versions that know nothing else.
 - The API is served over HTTPS with the router's own certificate. The app remembers that certificate at pairing and refuses any other afterwards.
 - Every phone has its own key; keys can be listed and revoked from the app or with `miwrt-ctl`.
 - The API is reachable from the main network only. Guest and IoT zones and the WAN side are rejected by the firewall.
@@ -149,7 +149,7 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no k
 | `GET`/`POST /v1/shaping` | speed shaping: `enabled`, `down_kbit`, `up_kbit` |
 | `GET /v1/phones`; `POST /v1/phones/revoke` | paired phones |
 | `GET /v1/push` (`enabled`, `kinds`, `mode`, `registered`, `this_phone`); `POST /v1/push/register` (`token`, `env`, `key`), `/v1/push/test` | notifications |
-| `GET /v1/router/backup`; `POST /v1/router/leds`, `/v1/router/watchdog`, `/v1/router/reboot` | maintenance |
+| `POST /v1/router/backup` (with the administrator password); `POST /v1/router/leds`, `/v1/router/watchdog`, `/v1/router/reboot` | maintenance |
 
 ### Design notes
 
@@ -171,12 +171,15 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no k
   - The app service's files and `/etc/miwrt` are readable by root only.
   - Firmware updates: the build signs `sha256sums.txt` with the key every image carries (`sha256sums.txt.sig`). The updater takes files only from this repository's releases and refuses a release whose signature does not match the key in its own ROM. 1.4.7.1 and older do not check this yet.
   - The relay Worker counts every notification against the sending home (an IPv6 home counts as one /64), sends nothing when its limiter is unavailable, and checks the size before reading a request.
+  - A settings backup (`POST /v1/router/backup`) needs the administrator password as well as the access key: it holds the Wi-Fi passwords and the router's own keys.
+  - The relay keeps a fingerprint per phone and accepts that phone's notifications only with the random value the phone gave its router (`sender` at registration, `auth` towards the relay).
+  - Fresh installs: the Wi-Fi password is the unit's serial number from its label, without the slash, instead of one password shared by every router. Only a unit whose serial cannot be read falls back to the old one.
   - The Hybrid Failover feed is rebuilt only when started by hand: that build runs the upstream project's script within reach of the feed signing key.
 - Android: the same split would apply to Firebase Cloud Messaging (a service-account key instead of the Apple key). There is no Android app yet, so the router has no FCM sender yet.
 
 ## The phone app
 
-A native iPhone app (SwiftUI) for this service exists and is in testing; its source is not in this repository. It finds the router by itself, pairs with the administrator password, and covers everything in the table above. Before the password is sent, the app checks that the address it found is the router the phone is actually connected through, and warns if it is not. It also has a home-screen and lock-screen widget (internet and Wi-Fi state, devices online, current rates) and Siri shortcuts.
+A native iPhone app (SwiftUI) for this service exists and is in testing; its source is not in this repository. It finds the router by itself, pairs with the administrator password (which stays on the phone), and covers everything in the table above. Before the password is sent, the app checks that the address it found is the router the phone is actually connected through, and warns if it is not. It also has a home-screen and lock-screen widget (internet and Wi-Fi state, devices online, current rates) and Siri shortcuts.
 
 ## Installing, updating, going back
 

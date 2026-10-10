@@ -62,7 +62,7 @@ On the first boot the firmware takes the Wi-Fi names and passwords, the internet
 
 If the factory firmware was set up, the router stays at its address, usually 192.168.31.1. Wi-Fi keeps the same names and passwords and the internet works by itself. Nothing needs to change on the computer.
 
-If the factory firmware was not set up or the import failed, the router is at 192.168.1.1. The Wi-Fi network is OpenWrt-BE7000 with password be7000openwrt.
+If the factory firmware was not set up or the import failed, the router is at 192.168.1.1. The Wi-Fi network is OpenWrt-BE7000. Its password is the router's serial number from the label on the bottom (SN), typed without the slash. Change it after the first login. Only if the router could not read its own serial number is the password be7000openwrt.
 
 Status, Overview shows what was taken, with an undo button. The admin password of the factory firmware is not taken.
 

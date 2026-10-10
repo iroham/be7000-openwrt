@@ -1169,6 +1169,8 @@ export function push_register(tok, b) {
 		all[h].apns = { token: b.token, env: b.env == 'production' ? 'production' : 'sandbox' };
 		// the phone's own key: alert text is encrypted with it, so only that phone can read it
 		if (type(b.key) == 'string' && match(b.key, /^[0-9a-f]{128}$/)) all[h].apns.key = b.key;
+		// a random value the phone made: the relay accepts notifications for this phone only with it
+		if (type(b.sender) == 'string' && match(b.sender, /^[0-9a-f]{64}$/)) all[h].apns.sender = b.sender;
 		save_private(TOKENS, all);
 		return null;
 	});
@@ -1210,31 +1212,124 @@ export function revoke_phone(id) {
 };
 
 /* Pairing proves you know the router's administrator password, the same one LuCI asks for. */
-export function pair(password, name, ip) {
-	// Wrong passwords are counted per address (5 in 10 minutes) and overall (40), under the lock so that
-	// requests sent side by side cannot each slip under the limit. One device cannot lock everyone else out.
+/* Wrong passwords are counted per address (5 in 10 minutes) and overall (40). Callers hold the lock, so
+   requests sent side by side cannot each slip under the limit, and one device cannot lock everyone else out. */
+function fails_now(ip) {
+	let rec = load(RUN + '/pairfail.json', {}), now = time();
+	if (type(rec) != 'object') rec = {};
+	let all = filter(type(rec.all) == 'array' ? rec.all : [], t => now - t < 600), per = {};
+	for (let k, v in (type(rec.ip) == 'object' ? rec.ip : {})) {
+		let f = filter(type(v) == 'array' ? v : [], t => now - t < 600);
+		if (length(f)) per[k] = f;
+	}
+	let who = match(ip ?? '', /^[0-9A-Fa-f.:]{2,45}$/) ? ip : 'unknown';
+	return { all, per, who, now, blocked: length(per[who] ?? []) >= 5 || length(all) >= 40 };
+}
+
+function fails_add(f) {
+	let mine = f.per[f.who] ?? [];
+	push(mine, f.now);
+	f.per[f.who] = mine;
+	push(f.all, f.now);
+	save(RUN + '/pairfail.json', { all: f.all, ip: f.per });
+}
+
+const TOO_MANY = { code: 429, error: 'Too many wrong passwords. Try again in 10 minutes.' };
+const WRONG = { code: 403, error: 'That is not the router\'s administrator password.' };
+
+/* Is this the router's administrator password? Returns null when it is, else { code, error }. */
+export function check_password(password, ip) {
 	return locked(() => {
-		let rec = load(RUN + '/pairfail.json', {}), now = time();
-		if (type(rec) != 'object') rec = {};
-		let all = filter(type(rec.all) == 'array' ? rec.all : [], t => now - t < 600), per = {};
-		for (let k, v in (type(rec.ip) == 'object' ? rec.ip : {})) {
-			let f = filter(type(v) == 'array' ? v : [], t => now - t < 600);
-			if (length(f)) per[k] = f;
-		}
-		let who = match(ip ?? '', /^[0-9A-Fa-f.:]{2,45}$/) ? ip : 'unknown';
-		let mine = per[who] ?? [];
-		if (length(mine) >= 5 || length(all) >= 40) return { code: 429, error: 'Too many wrong passwords. Try again in 10 minutes.' };
+		let f = fails_now(ip);
+		if (f.blocked) return TOO_MANY;
 		let conn = connect();
 		let ses = (type(password) == 'string' && length(password)) ? conn.call('session', 'login', { username: 'root', password, timeout: 5 }) : null;
 		if (!ses?.ubus_rpc_session) {
-			push(mine, now);
-			per[who] = mine;
-			push(all, now);
-			save(RUN + '/pairfail.json', { all, ip: per });
-			return { code: 403, error: 'That is not the router\'s administrator password.' };
+			fails_add(f);
+			return WRONG;
 		}
 		conn.call('session', 'destroy', { ubus_rpc_session: ses.ubus_rpc_session });
-		add_alert('router', 'A phone was paired', `${substr(name ?? 'iPhone', 0, 40)} from ${ip}.`, 'warning');
-		return { code: 200, token: mint_token(name, ip) };
+		return null;
+	});
+};
+
+/* The older pairing: the app sends the password itself. Kept for app versions that know nothing else. */
+export function pair(password, name, ip) {
+	let bad = check_password(password, ip);
+	if (bad) return bad;
+	add_alert('router', 'A phone was paired', `${substr(name ?? 'iPhone', 0, 40)} from ${ip}.`, 'warning');
+	return { code: 200, token: mint_token(name, ip) };
+};
+
+// ---------- pairing without sending the password ----------
+//
+// The router keeps the administrator password as a salted hash. The app is told the salt, works out the same
+// hash from what the user typed, and both sides prove to each other that they hold it, with a keyed checksum
+// over two fresh random values and the fingerprint of the certificate the app is talking to. Someone sitting
+// between phone and router with a certificate of their own gets a checksum made for the wrong certificate:
+// the router refuses it, and the password was never on the wire to be read.
+
+const PAIRING = RUN + '/pairing.json';
+
+function hmac_sha256(key_hex, msg) {
+	let pad = (x) => {
+		let out = '';
+		for (let i = 0; i < 64; i++) out += sprintf('%02x', (i < 32 ? hex(substr(key_hex, i * 2, 2)) : 0) ^ x);
+		return hexdec(out);
+	};
+	return digest.sha256(pad(0x5c) + hexdec(digest.sha256(pad(0x36) + msg)));
+}
+
+/* The stored hash of the administrator password, or null when there is none of a kind the app can compute. */
+function admin_hash() {
+	for (let line in split(readfile('/etc/shadow') ?? '', '\n')) {
+		let f = split(line, ':');
+		if (f[0] == 'root') return match(f[1] ?? '', /^\$(1|5|6)\$([A-Za-z0-9.\/=]+\$){1,2}[A-Za-z0-9.\/]{20,90}$/) ? f[1] : null;
+	}
+	return null;
+}
+
+/* SHA-256 of the certificate the app sees when it talks to this router, in hex. */
+function own_fingerprint() {
+	let cert = cursor().get('uhttpd', 'main', 'cert') ?? '/etc/uhttpd.crt';
+	if (!match(cert, /^\/[A-Za-z0-9._\/-]+$/)) return null;
+	let out = trim(run(`(openssl x509 -in ${cert} -outform DER 2>/dev/null || openssl x509 -inform DER -in ${cert} -outform DER 2>/dev/null) | sha256sum | cut -c1-64`));
+	return match(out, /^[0-9a-f]{64}$/) && out != 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' ? out : null;
+}
+
+export function pair_start(ip) {
+	return locked(() => {
+		if (fails_now(ip).blocked) return TOO_MANY;
+		let h = admin_hash();
+		if (!h) return { code: 409, error: 'This router has no administrator password that the app can check. Set one on the router\'s web page (System, Administration), then pair.' };
+		let all = load(PAIRING, {}), now = time();
+		if (type(all) != 'object') all = {};
+		for (let k in keys(all)) if ((all[k].exp ?? 0) < now) delete all[k];
+		if (length(all) >= 20) return { code: 429, error: 'Too many pairing attempts at once. Try again in a minute.' };
+		let sid = hexenc(random_bytes(12)), nonce = hexenc(random_bytes(32));
+		all[sid] = { nonce, exp: now + 120 };
+		save_private(PAIRING, all);
+		return { code: 200, sid, nonce, spec: substr(h, 0, rindex(h, '$') + 1) };
+	});
+};
+
+export function pair_finish(b, ip) {
+	return locked(() => {
+		let f = fails_now(ip);
+		if (f.blocked) return TOO_MANY;
+		if (type(b?.sid) != 'string' || !match(b.sid, /^[0-9a-f]{24}$/) || type(b.nonce) != 'string' || !match(b.nonce, /^[0-9a-f]{64}$/)
+			|| type(b.proof) != 'string' || !match(b.proof, /^[0-9a-f]{64}$/)) return { code: 400, error: 'bad request' };
+		let all = load(PAIRING, {}), s = type(all) == 'object' ? all[b.sid] : null;
+		if (s) { delete all[b.sid]; save_private(PAIRING, all); }   // one try per start
+		if (!s || (s.exp ?? 0) < f.now) return { code: 410, error: 'Pairing took too long. Try again.' };
+		let h = admin_hash(), fp = own_fingerprint();
+		if (!h || !fp) return { code: 500, error: 'The router could not check the pairing.' };
+		let key = digest.sha256(h);
+		if (hmac_sha256(key, `miwrt-pair-c|${s.nonce}|${b.nonce}|${fp}`) != b.proof) {
+			fails_add(f);
+			return WRONG;
+		}
+		add_alert('router', 'A phone was paired', `${substr(b.name ?? 'iPhone', 0, 40)} from ${ip}.`, 'warning');
+		return { code: 200, token: mint_token(b.name, ip), proof: hmac_sha256(key, `miwrt-pair-r|${b.nonce}|${s.nonce}|${fp}`) };
 	});
 };

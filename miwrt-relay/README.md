@@ -12,7 +12,7 @@ Apple only delivers a notification signed with the key of the app's publisher. T
 
 The alert's title and text are encrypted on the router (AES-256-CBC, then HMAC-SHA256) with a key the phone made and gave to the router at registration, over the pinned HTTPS connection. The relay and Apple cannot read them; the phone's notification extension decrypts them. The visible fallback text is a fixed "Your router has an alert".
 
-Nothing is stored and nothing is logged.
+Nothing is logged. One record per phone is kept in a KV namespace (`BINDINGS`): a SHA-256 fingerprint of the phone's notification address next to a fingerprint of a random value the phone gave its router. A phone's notifications are then accepted only with that value, so knowing a phone's address is not enough to send to it. Records expire 60 days after their last use. Create the namespace for your own deployment with `wrangler kv namespace create BINDINGS` and put its id in `wrangler.toml`.
 
 ## Limits
 

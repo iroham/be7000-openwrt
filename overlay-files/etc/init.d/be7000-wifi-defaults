@@ -23,7 +23,18 @@ START=99
 
 MARK=/etc/.be7000_secure_defaults
 SSID=OpenWrt-BE7000
-KEY=be7000openwrt
+# The password is this unit's serial number as printed on its label, without
+# the slash: different on every router and not something the radio gives away.
+# Only a unit whose serial cannot be read falls back to the old shared one.
+OLD_KEY=be7000openwrt
+
+default_key() {
+	local sn
+	sn="$(fw_printenv -n SN 2>/dev/null | tr -cd 'A-Za-z0-9')"
+	[ -n "$sn" ] || sn="$(strings "/dev/$(grep '"bdata"' /proc/mtd | cut -d: -f1)ro" 2>/dev/null | sed -n 's/^SN=//p' | head -1 | tr -cd 'A-Za-z0-9')"
+	[ "${#sn}" -ge 8 ] && [ "${#sn}" -le 63 ] && { echo "$sn"; return 0; }
+	echo "$OLD_KEY"
+}
 
 configured() {
 	local r enc
@@ -62,6 +73,7 @@ boot() {
 				exit 0
 			fi
 		fi
+		KEY="$(default_key)"
 		for r in 0 1; do
 			uci -q get wireless.radio$r >/dev/null || continue
 			uci -q set wireless.radio$r.disabled=0
@@ -72,7 +84,11 @@ boot() {
 		done
 		uci commit wireless
 		touch "$MARK"
-		logger -t be7000-wifi-defaults "fresh install: Wi-Fi $SSID enabled on both bands"
+		if [ "$KEY" = "$OLD_KEY" ]; then
+			logger -t be7000-wifi-defaults "fresh install: Wi-Fi $SSID enabled on both bands, serial not readable, shared default password in use: change it"
+		else
+			logger -t be7000-wifi-defaults "fresh install: Wi-Fi $SSID enabled on both bands, password is the serial number without the slash"
+		fi
 		wifi reload
 	) </dev/null >/dev/null 2>&1 &
 }

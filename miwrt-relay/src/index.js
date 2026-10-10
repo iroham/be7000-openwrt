@@ -4,7 +4,12 @@
 // (firmware is public), so routers hand their notifications to this relay and the relay passes them to Apple.
 //
 // What the relay sees: each phone's notification address and an encrypted blob. The alert's text is encrypted
-// on the router with a key only the phone has; the relay and Apple cannot read it. Nothing is stored or logged.
+// on the router with a key only the phone has; the relay and Apple cannot read it. Nothing is logged.
+//
+// What the relay keeps (KV namespace BINDINGS): for each phone, a fingerprint (SHA-256) of its notification
+// address next to a fingerprint of a random value that the phone made and gave to its router. Notifications
+// for that phone are then only accepted with that value, so knowing a phone's address is not enough to send
+// to it. A record goes away 60 days after it was last used. Neither fingerprint can be turned back.
 //
 // Secrets (wrangler secret put): APNS_KEY (contents of AuthKey_XXXXXXXXXX.p8), APNS_KEY_ID, APNS_TEAM_ID.
 // Optional variable: BUNDLE_ID (default cloud.iroham.miwrt).
@@ -47,6 +52,26 @@ function senderKey(ip) {
   return full.slice(0, 4).map((x) => x.replace(/^0+(?=.)/, '')).join(':') + '::/64';
 }
 
+const sha256hex = async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+// Does this message come from the router the phone registered with? A phone whose app is too old to have
+// made the value has no record and is served as before; the first message that carries one makes the record.
+async function bound(env, m) {
+  if (!env.BINDINGS) return true;
+  const day = String(Math.floor(Date.now() / 86400000));
+  const phone = await sha256hex('phone|' + m.token);
+  const mine = typeof m.auth === 'string' && /^[0-9a-f]{64}$/.test(m.auth) ? await sha256hex('sender|' + m.auth) : null;
+  const kept = await env.BINDINGS.get(phone);
+  if (!kept) {
+    if (mine) await env.BINDINGS.put(phone, mine + ':' + day, { expirationTtl: 5184000 });
+    return true;
+  }
+  const [who, when] = kept.split(':');
+  if (who !== mine) return false;
+  if (when !== day) await env.BINDINGS.put(phone, mine + ':' + day, { expirationTtl: 5184000 });   // at most one write a day
+  return true;
+}
+
 async function deliver(env, m, meta) {
   const kind = String(meta.kind || 'router').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) || 'router';
   const id = typeof meta.id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(meta.id) ? meta.id : undefined;
@@ -71,7 +96,7 @@ async function deliver(env, m, meta) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method === 'GET' && url.pathname === '/health') return json(200, { ok: true, service: 'miwrt-relay', version: 2, ready: ready(env) });
+    if (request.method === 'GET' && url.pathname === '/health') return json(200, { ok: true, service: 'miwrt-relay', version: 3, ready: ready(env) });
     if (request.method !== 'POST' || url.pathname !== '/v1/push') return json(404, { error: 'not found' });
 
     const sender = senderKey(request.headers.get('cf-connecting-ip') || 'unknown');
@@ -86,7 +111,7 @@ export default {
     if (b.app !== (env.BUNDLE_ID || 'cloud.iroham.miwrt')) return json(400, { error: 'unknown app' });
     if (!ready(env)) return json(503, { error: 'The relay has no Apple push key yet.' });
 
-    let delivered = 0, refused = false, broken = false, counted = 0;
+    let delivered = 0, refused = false, broken = false, counted = 0, blocked = 0;
     const gone = [];
     for (const m of b.messages.slice(0, MAX_MESSAGES)) {
       if (!m || typeof m.token !== 'string' || !/^[0-9a-f]{64,200}$/.test(m.token) || typeof m.env !== 'string' || !Object.hasOwn(HOSTS, m.env)) continue;
@@ -97,6 +122,7 @@ export default {
         break;
       }
       counted++;
+      try { if (!(await bound(env, m))) { blocked++; continue; } } catch (e) { broken = true; continue; }
       if (await limited(env.PER_PHONE, m.token)) continue;
       try {
         const status = await deliver(env, m, { kind: b.kind, severity: b.severity, id: b.id });
@@ -106,6 +132,6 @@ export default {
       } catch (e) { broken = true; /* one failed phone must not stop the others */ }
     }
     if (broken && !delivered) return json(502, { error: 'The relay could not sign or send the notification.', delivered, gone });
-    return json(refused ? 502 : 200, refused ? { error: 'Apple refused the relay\'s push key.', delivered, gone } : { delivered, gone });
+    return json(refused ? 502 : 200, refused ? { error: 'Apple refused the relay\'s push key.', delivered, gone } : { delivered, gone, blocked });
   },
 };

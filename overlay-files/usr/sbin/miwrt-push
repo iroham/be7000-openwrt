@@ -91,6 +91,7 @@ function send_relay(a, targets, relay) {
 	for (let t in slice(targets, 0, 20)) {
 		let m = { token: t.token, env: t.env }, enc = encrypt(t.key, a);
 		if (enc) m.enc = enc;
+		if (match(t.sender ?? '', /^[0-9a-f]{64}$/)) m.auth = t.sender;
 		push(messages, m);
 	}
 	writefile(bodyf, sprintf('%J', { app: APP, messages, kind: a.kind, severity: a.severity, id: a.id }));
