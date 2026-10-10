@@ -44,6 +44,8 @@ function router_address(ip) {
 	return null;
 }
 
+const USER_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,31}$/;
+
 function key_line(from, command, pub) {
 	return `from="${from}",command="${command}",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ${pub} miwrt-router`;
 }
@@ -52,13 +54,13 @@ function mac_script(from, pub, code) {
 	return `#!/bin/sh
 # MiWRT remote power for this Mac.
 # Lets your MiWRT router (${from}) put this Mac to sleep or restart it, and nothing else:
-#  - Remote Login (SSH) is switched on.
+#  - Remote Login (SSH) is switched on. If it was off before, it accepts keys only, no passwords.
 #  - The router's key is accepted only from ${from} and can only run /usr/local/bin/miwrt-power.
 #  - One sudo rule lets your account run "shutdown -r now" and "shutdown -h now" without a password.
 #  - On the charger, the Mac is told to wake for network access and not to drop into the deep
 #    power-off sleep it cannot be woken from. Nothing changes on battery.
 # To undo: delete the miwrt-router line from ~/.ssh/authorized_keys, and remove
-# /usr/local/bin/miwrt-power and /etc/sudoers.d/miwrt-power.
+# /usr/local/bin/miwrt-power, /etc/sudoers.d/miwrt-power and /etc/ssh/sshd_config.d/000-miwrt.conf.
 set -e
 [ "$(id -u)" = 0 ] || { echo "Run this with sudo."; exit 1; }
 U="\${SUDO_USER:-$(stat -f %Su /dev/console)}"
@@ -95,6 +97,14 @@ chown -R "$U" "$H/.ssh"
 chmod 700 "$H/.ssh"
 chmod 600 "$H/.ssh/authorized_keys"
 
+# Was Remote Login already on? Then it is yours and stays exactly as it is. If this setup is what
+# switches it on, it is switched on for keys only: nobody can try passwords against this Mac on another
+# network. To allow passwords later, delete /etc/ssh/sshd_config.d/000-miwrt.conf.
+if ! nc -z 127.0.0.1 22 >/dev/null 2>&1 && [ -d /etc/ssh/sshd_config.d ] && [ ! -e /etc/ssh/sshd_config.d/000-miwrt.conf ]; then
+	printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\n' > /etc/ssh/sshd_config.d/000-miwrt.conf
+	chmod 644 /etc/ssh/sshd_config.d/000-miwrt.conf
+	echo "Remote Login was off. It is now on for the router's key only; password logins stay off."
+fi
 # Remote Login on (the second form works where the first needs Full Disk Access)
 systemsetup -setremotelogin on >/dev/null 2>&1 || true
 launchctl enable system/com.openssh.sshd >/dev/null 2>&1 || true
@@ -326,7 +336,7 @@ export function setup(mac, os, deep) {
 	all[code] = { mac, os, deep, ip: d.ip, exp: time() + CODE_LIFE, script };
 	hub.save_private(CODES, all);
 	let command = os == 'mac'
-		? `curl -fsSk '${url}' -o /tmp/miwrt-power.sh && echo '${sum}  /tmp/miwrt-power.sh' | shasum -a 256 -c - && sudo sh /tmp/miwrt-power.sh`
+		? `d=$(mktemp -d) && curl -fsSk '${url}' -o "$d/miwrt-power.sh" && echo "${sum}  $d/miwrt-power.sh" | shasum -a 256 -c - && sudo sh "$d/miwrt-power.sh"`
 		: `curl.exe -fsSk "${url}" -o "$env:TEMP\\miwrt-power.ps1"; if ((Get-FileHash "$env:TEMP\\miwrt-power.ps1").Hash -eq '${uc(sum)}') { powershell -ExecutionPolicy Bypass -File "$env:TEMP\\miwrt-power.ps1" } else { 'The download did not match. Nothing was run.' }`;
 	return { command, os, expires_in: CODE_LIFE };
 };
@@ -340,7 +350,7 @@ export function script(code) {
 /* One login try, no waking. Returns the laptop's answer after "ok", or null. */
 function probe(user, ip, what, limit) {
 	mkdir(DIR + '/.ssh', 0700);
-	let out = trim(hub.run(`HOME=${DIR} timeout ${limit} dbclient -y -T -i ${KEY} -o BatchMode=yes '${user}@${ip}' ${what} 2>&1 </dev/null`));
+	let out = trim(hub.run(`HOME=${DIR} timeout ${limit} dbclient -y -T -i ${KEY} -o BatchMode=yes -l '${user}' '${ip}' ${what} 2>&1 </dev/null`));
 	for (let line in split(out, '\n')) {
 		let m = match(trim(line), /^ok ?(.*)$/);
 		if (m) return { detail: m[1], out };
@@ -348,18 +358,30 @@ function probe(user, ip, what, limit) {
 	return { detail: null, out };
 }
 
+const KNOWN = DIR + '/.ssh/known_hosts';
+
+/* The identity (host key) the router has on file for an address, as "type key", or null. */
+function hostkey_of(ip) {
+	for (let l in split(readfile(KNOWN) ?? '', '\n')) {
+		let m = match(l, /^([^ ]+) (ssh-[a-z0-9-]+|ecdsa-[a-z0-9-]+) ([A-Za-z0-9+\/=]+)$/);
+		if (m && m[1] == ip) return m[2] + ' ' + m[3];
+	}
+	return null;
+}
+
 /* Called by the setup script when it has finished on the laptop. The laptop is accepted only after the
    router has managed to log in to it once. */
 export function register(b, ip) {
 	if (type(b?.code) != 'string' || !match(b.code, /^[0-9a-f]{32}$/)) return 'bad code';
-	if (type(b.user) != 'string' || !match(b.user, /^[A-Za-z0-9._-]{1,32}$/)) return 'This account name has characters the router cannot use.';
+	if (type(b.user) != 'string' || !match(b.user, USER_RE)) return 'This account name has characters the router cannot use.';
 	let c = codes()[b.code];
 	if (!c) return 'This setup command has expired. Make a new one in the app.';
 	if (c.ip != ip) return 'The setup command was made for a different device.';
 	// the laptop's SSH identity is remembered at the first login; forget any older one for this address
-	let kh = DIR + '/.ssh/known_hosts', old = readfile(kh);
-	if (old) writefile(kh, join('\n', filter(split(old, '\n'), l => length(l) && index(l, ip + ' ') != 0)) + '\n');
+	let old = readfile(KNOWN);
+	if (old) writefile(KNOWN, join('\n', filter(split(old, '\n'), l => length(l) && index(l, ip + ' ') != 0)) + '\n');
 	let r = probe(b.user, ip, 'status', 12);
+	let hostkey = hostkey_of(ip);
 	if (r.detail == null)
 		return match(r.out, /[Pp]ermission denied|publickey/) ? 'The router reached this computer but its key was not accepted.'
 			: 'The router could not log in to this computer. Its firewall may be blocking remote login from the router.';
@@ -369,6 +391,7 @@ export function register(b, ip) {
 		let hosts = hub.load(HOSTS, {});
 		let before = hosts[c.mac] ?? {};
 		hosts[c.mac] = { os: c.os, user: b.user, added: time(), info: substr(r.detail, 0, 120), deep: !!c.deep };
+		if (hostkey) hosts[c.mac].hostkey = hostkey;
 		if (before.plug) hosts[c.mac].plug = before.plug;   // setting a laptop up again keeps its plug
 		mkdir(DIR, 0700);
 		hub.save_private(HOSTS, hosts);
@@ -460,9 +483,19 @@ export function action(mac, what) {
 	if (what == 'sleep' && h.os == 'windows' && (h.plug || h.deep)) what = 'hibernate';
 	let d = device(mac);
 	if (!d?.ip || !match(d.ip, /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/)) return { error: 'The router does not know this device\'s address.' };
-	if (!match(h.user, /^[A-Za-z0-9._-]{1,32}$/)) return { error: 'The saved account name is not usable. Set remote power up again.' };
+	if (!match(h.user, USER_RE)) return { error: 'The saved account name is not usable. Set remote power up again.' };
 	mkdir(DIR + '/.ssh', 0700);
-	let ask = (limit) => trim(hub.run(`HOME=${DIR} timeout ${limit} dbclient -y -T -i ${KEY} -o BatchMode=yes '${h.user}@${d.ip}' ${what} 2>&1 </dev/null`));
+	// The laptop must show the identity it had at setup, at whatever address it has today: the router
+	// writes that identity down for the current address and then refuses any other. A laptop set up
+	// before this was recorded is learned at its next answer.
+	let pinned = match(h.hostkey ?? '', /^[a-z0-9-]+ [A-Za-z0-9+\/=]+$/) != null;
+	if (pinned) {
+		let keep = filter(split(readfile(KNOWN) ?? '', '\n'), l => length(l) && index(l, d.ip + ' ') != 0);
+		push(keep, d.ip + ' ' + h.hostkey);
+		writefile(KNOWN, join('\n', keep) + '\n');
+		chmod(KNOWN, 0600);
+	}
+	let ask = (limit) => trim(hub.run(`HOME=${DIR} timeout ${limit} dbclient ${pinned ? '' : '-y'} -T -i ${KEY} -o BatchMode=yes -l '${h.user}' '${d.ip}' ${what} 2>&1 </dev/null`));
 	let answered = (out) => {
 		for (let line in split(out, '\n')) {
 			let m = match(trim(line), /^ok ?(.*)$/);
@@ -481,6 +514,13 @@ export function action(mac, what) {
 		detail = answered(out);
 	}
 	if (detail != null) {
+		if (!pinned) {
+			let k = hostkey_of(d.ip);
+			if (k) hub.locked(() => {
+				let hosts = hub.load(HOSTS, {});
+				if (hosts[mac] && !hosts[mac].hostkey) { hosts[mac].hostkey = k; hub.save_private(HOSTS, hosts); }
+			});
+		}
 		if (what != 'status') hub.add_alert('device', ({ sleep: 'Put to sleep', hibernate: 'Hibernated', restart: 'Restarted', shutdown: 'Shut down' })[what], d.name, 'info');
 		return { ok: true, detail, woke };
 	}

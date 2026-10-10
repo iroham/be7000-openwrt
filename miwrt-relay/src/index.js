@@ -32,14 +32,25 @@ async function providerToken(env) {
   return cached.token;
 }
 
+// A limiter that is missing or failing counts as "over the limit": the relay sends nothing it cannot count.
 async function limited(limiter, key) {
-  if (!limiter) return false;
-  try { return !(await limiter.limit({ key })).success; } catch (e) { return false; }
+  if (!limiter) return true;
+  try { return !(await limiter.limit({ key })).success; } catch (e) { return true; }
+}
+
+// One home is one sender. An IPv6 home has a whole /64 of addresses, so only the network part counts.
+function senderKey(ip) {
+  if (!ip.includes(':')) return ip;
+  const [head, tail = ''] = ip.toLowerCase().split('::');
+  const h = head ? head.split(':') : [], t = tail ? tail.split(':') : [];
+  const full = ip.includes('::') ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
+  return full.slice(0, 4).map((x) => x.replace(/^0+(?=.)/, '')).join(':') + '::/64';
 }
 
 async function deliver(env, m, meta) {
   const kind = String(meta.kind || 'router').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) || 'router';
-  const payload = { aps: { alert: GENERIC, sound: 'default', 'thread-id': kind }, kind, alert_id: meta.id };
+  const id = typeof meta.id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(meta.id) ? meta.id : undefined;
+  const payload = { aps: { alert: GENERIC, sound: 'default', 'thread-id': kind }, kind, alert_id: id };
   if (m.enc) { payload.aps['mutable-content'] = 1; payload.enc = m.enc; }
   const r = await fetch(`${HOSTS[m.env]}/3/device/${m.token}`, {
     method: 'POST',
@@ -63,9 +74,10 @@ export default {
     if (request.method === 'GET' && url.pathname === '/health') return json(200, { ok: true, service: 'miwrt-relay', version: 2, ready: ready(env) });
     if (request.method !== 'POST' || url.pathname !== '/v1/push') return json(404, { error: 'not found' });
 
-    const ip = request.headers.get('cf-connecting-ip') || 'unknown';
-    if (await limited(env.PER_SENDER, ip)) return json(429, { error: 'Too many notifications from this address. Try again in a minute.' });
-
+    const sender = senderKey(request.headers.get('cf-connecting-ip') || 'unknown');
+    // the size is checked before the body is read
+    const declared = Number(request.headers.get('content-length'));
+    if (!Number.isFinite(declared) || declared <= 0 || declared > MAX_BODY) return json(declared > MAX_BODY ? 413 : 411, { error: declared > MAX_BODY ? 'too large' : 'length required' });
     const text = await request.text();
     if (text.length > MAX_BODY) return json(413, { error: 'too large' });
     let b;
@@ -74,11 +86,17 @@ export default {
     if (b.app !== (env.BUNDLE_ID || 'cloud.iroham.miwrt')) return json(400, { error: 'unknown app' });
     if (!ready(env)) return json(503, { error: 'The relay has no Apple push key yet.' });
 
-    let delivered = 0, refused = false, broken = false;
+    let delivered = 0, refused = false, broken = false, counted = 0;
     const gone = [];
     for (const m of b.messages.slice(0, MAX_MESSAGES)) {
-      if (!m || typeof m.token !== 'string' || !/^[0-9a-f]{64,200}$/.test(m.token) || !HOSTS[m.env]) continue;
+      if (!m || typeof m.token !== 'string' || !/^[0-9a-f]{64,200}$/.test(m.token) || typeof m.env !== 'string' || !Object.hasOwn(HOSTS, m.env)) continue;
       if (m.enc !== undefined && (typeof m.enc !== 'string' || !/^[A-Za-z0-9+/=]{44,3000}$/.test(m.enc))) continue;
+      // every notification counts against the sender, not every request
+      if (await limited(env.PER_SENDER, sender)) {
+        if (!counted) return json(429, { error: 'Too many notifications from this address. Try again in a minute.' });
+        break;
+      }
+      counted++;
       if (await limited(env.PER_PHONE, m.token)) continue;
       try {
         const status = await deliver(env, m, { kind: b.kind, severity: b.severity, id: b.id });

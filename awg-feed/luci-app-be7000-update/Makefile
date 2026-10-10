@@ -6,12 +6,12 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-be7000-update
 PKG_VERSION:=1.0
-PKG_RELEASE:=7
+PKG_RELEASE:=8
 PKG_LICENSE:=GPL-2.0-only
 PKG_MAINTAINER:=timofey-maykov
 
 LUCI_TITLE:=Firmware updates from GitHub for the BE7000 build
-LUCI_DEPENDS:=+luci-base +uclient-fetch +libustream-mbedtls +ca-bundle +jsonfilter
+LUCI_DEPENDS:=+luci-base +uclient-fetch +libustream-mbedtls +ca-bundle +jsonfilter +openssl-util
 LUCI_PKGARCH:=all
 
 include $(TOPDIR)/feeds/luci/luci.mk

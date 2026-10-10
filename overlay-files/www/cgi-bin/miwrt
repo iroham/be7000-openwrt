@@ -32,6 +32,10 @@ function main() {
 		reply(200, { ok: true, service: 'miwrt', version: hub.VERSION, pairing: 'password' });
 
 	if (path == '/pair' && method == 'POST') {
+		// the password is only taken over the encrypted port and as JSON, which a web page in a browser
+		// cannot send to the router behind the user's back
+		if (getenv('HTTPS') != 'on' || index(lc(getenv('CONTENT_TYPE') ?? ''), 'application/json') != 0)
+			reply(400, { error: 'Pair from the MiWRT app.' });
 		let b = body(), r = hub.pair(b.password, b.name, ip);
 		reply(r.code, r.code == 200 ? { token: r.token } : { error: r.error });
 	}

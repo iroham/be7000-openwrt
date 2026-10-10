@@ -1,5 +1,8 @@
 #!/bin/sh
 # Keeps the MiWRT app's view of the router fresh: one pass every 30 seconds.
+# What it writes is for the administrator only.
+umask 077
+chmod 700 /etc/miwrt 2>/dev/null
 ucode -e "import * as hub from 'miwrt.hub'; hub.boot();"
 while :; do
 	ucode -e "import * as hub from 'miwrt.hub'; import * as extras from 'miwrt.extras'; import * as power from 'miwrt.power'; hub.tick(); extras.guest_expire(); extras.wifi_schedule_tick(); extras.iot_watch_tick(); extras.services_tick(); power.energy_tick();" 2>&1 | logger -t miwrt-hubd

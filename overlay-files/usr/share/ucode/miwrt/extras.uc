@@ -555,13 +555,17 @@ export function iot_watch_tick() {
 		if (!log.entries) continue;
 		let rec = db[d.mac];
 		if (!rec) { rec = db[d.mac] = { since: now, sites: {} }; dirty = true; }
+		// ceilings: 300 remembered sites per device and three alerts per device per pass, so a device that
+		// looks up endless new names cannot fill the storage or flood the phone
+		let told = 0;
 		for (let e in log.entries) {
 			if (e.ip != d.ip) continue;
 			let b = base_domain(e.domain);
 			if (!b || (b in rec.sites)) continue;
+			if (length(rec.sites) >= 300) break;
 			rec.sites[b] = now;
 			dirty = true;
-			if (now - rec.since > 86400)
+			if (now - rec.since > 86400 && told++ < 3)
 				hub.add_alert('device', 'An IoT device contacted something new', `${d.name} looked up ${b} for the first time.`, 'warning', `iot-${d.mac}-${b}`, 86400 * 30);
 		}
 	}

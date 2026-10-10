@@ -7,11 +7,11 @@ routes = [{ pattern = "miwrt-relay.iroham.cloud", custom_domain = true }]
 [observability]
 enabled = false
 
-# 30 notifications a minute per sending address, 10 a minute per phone
+# 60 notifications a minute per sending home (an IPv6 home counts as one), 10 a minute per phone
 [[ratelimits]]
 name = "PER_SENDER"
 namespace_id = "7301"
-simple = { limit = 30, period = 60 }
+simple = { limit = 60, period = 60 }
 
 [[ratelimits]]
 name = "PER_PHONE"

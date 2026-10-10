@@ -372,6 +372,10 @@ jobs:
           cp "../owrt/bin/targets/$TARGET/$DEVICE-squashfs-sysupgrade.bin" .
           cp "../owrt/bin/targets/$TARGET/$DEVICE.manifest" .
           sha256sum "$DEVICE-squashfs-factory.ubi" "$DEVICE-squashfs-sysupgrade.bin" > sha256sums.txt
+          # The checksum list is signed with the key every image carries, so a router can tell that an
+          # update really comes from this build and not just from whoever can upload a release.
+          openssl dgst -sha256 -sign ../owrt/private-key.pem -out sha256sums.txt.sig sha256sums.txt
+          openssl dgst -sha256 -verify ../owrt/public-key.pem -signature sha256sums.txt.sig sha256sums.txt
           cp "$DEVICE-squashfs-factory.ubi" ../repo/scripts/install-from-stock.sh \
              ../repo/scripts/rollback-to-stock.sh ../repo/docs/instruction/*.txt sha256sums.txt zip/
           # the index's first line carries the version
@@ -395,7 +399,7 @@ jobs:
             args=(--generate-notes)
           fi
           assets=("$ZIP" "$DEVICE-squashfs-factory.ubi" \
-                  "$DEVICE-squashfs-sysupgrade.bin" "$DEVICE.manifest" sha256sums.txt)
+                  "$DEVICE-squashfs-sysupgrade.bin" "$DEVICE.manifest" sha256sums.txt sha256sums.txt.sig)
           # A release for this tag may already exist (created by hand, or a
           # rerun): then just replace its files rather than fail at the end.
           if gh release view "${{ github.ref_name }}" -R "${{ github.repository }}" >/dev/null 2>&1; then

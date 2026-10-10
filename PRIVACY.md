@@ -31,6 +31,9 @@ Notifications are off until you switch them on, and can be switched off again at
 
 - Speed test: downloads from and uploads to Cloudflare's public speed test servers, only when you start a test.
 - Firmware check: asks GitHub for the latest release of this project. From 1.4.7.1 the router also asks by itself once a day, so it can show a notice; this can be switched off on System, Build update.
+- Add-ons page: opening Services, Add-ons can refresh the package list from this project's feed (at most every 10 minutes).
+- Only with the optional Hybrid Failover add-on: while its package is being restored after a firmware update, the router sends name lookups straight to 8.8.8.8 (Google) and 77.88.8.8 (Yandex) until the add-on is back. Docker containers get the same two servers when an older Hybrid Failover is installed.
+- The optional Zapret Manager and the tools it installs contact servers of their own choosing; they are not covered by this text.
 - Ad blocker link: if you link an AdGuard Home, the router talks to it on your network with the login you entered. That login is stored on the router.
 
 ## Children

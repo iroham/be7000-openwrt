@@ -141,7 +141,17 @@ do_download() {
 	local free
 	free=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
 	[ "${free:-0}" -gt 120 ] || fail "$(t "мало свободной памяти для загрузки образа: ${free} МБ" "not enough free memory to download the image: ${free} MB")"
+	# Only this project's own release files are taken, and the checksum list must carry the signature
+	# of the key this image was built with. A release someone else managed to upload does not have it.
+	local base="https://github.com/$REPO/releases/download/"
+	case "$url" in "$base"*) ;; *) fail "$(t "образ лежит не в релизах проекта" "the image is not in this project's releases")" ;; esac
+	case "$sums" in "$base"*) ;; *) fail "$(t "sha256sums.txt лежит не в релизах проекта" "sha256sums.txt is not in this project's releases")" ;; esac
 	fetch "$sums" "$SUMS" || fail "$(t "не удалось скачать sha256sums.txt" "could not download sha256sums.txt")"
+	local pub=/rom/etc/apk/keys/public-key.pem
+	[ -s "$pub" ] || pub=/etc/apk/keys/public-key.pem
+	fetch "$sums.sig" "$SUMS.sig" || fail "$(t "у релиза нет подписи (sha256sums.txt.sig)" "the release is not signed (no sha256sums.txt.sig)")"
+	openssl dgst -sha256 -verify "$pub" -signature "$SUMS.sig" "$SUMS" >/dev/null 2>&1 ||
+		{ rm -f "$SUMS" "$SUMS.sig"; fail "$(t "подпись релиза не подходит к ключу этой прошивки" "the release signature does not match this firmware's key")"; }
 	fetch "$url" "$IMG" || { rm -f "$IMG"; fail "$(t "не удалось скачать образ" "could not download the image")"; }
 	local want got
 	want=$(grep -- '-squashfs-sysupgrade\.bin' "$SUMS" | awk '{print $1}')

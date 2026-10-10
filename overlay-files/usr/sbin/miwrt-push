@@ -50,7 +50,8 @@ function encrypt(key, a) {
 	if (!match(key ?? '', /^[0-9a-f]{128}$/)) return null;
 	let ek = substr(key, 0, 64), mk = substr(key, 64), iv = hexenc(hub.random_bytes(16));
 	let base = tmp('e');
-	writefile(base + '.pt', sprintf('%J', { t: substr(a.title ?? '', 0, 120), b: substr(a.body ?? '', 0, 400) }));
+	// the time, id and kind travel inside the sealed text, so an old alert cannot be passed off as a new one
+	writefile(base + '.pt', sprintf('%J', { t: substr(a.title ?? '', 0, 120), b: substr(a.body ?? '', 0, 400), ts: time(), id: a.id, k: a.kind }));
 	writefile(base + '.iv', hexdec(iv));
 	let out = trim(hub.run(`openssl enc -aes-256-cbc -K ${ek} -iv ${iv} -in ${base}.pt -out ${base}.ct 2>/dev/null && cat ${base}.iv ${base}.ct | openssl dgst -sha256 -mac HMAC -macopt hexkey:${mk} -binary > ${base}.mac 2>/dev/null && cat ${base}.iv ${base}.ct ${base}.mac | openssl base64 -A 2>/dev/null`));
 	for (let x in [ 'pt', 'iv', 'ct', 'mac' ]) unlink(`${base}.${x}`);
@@ -108,7 +109,7 @@ let lines = filter(split(readfile(work) ?? '', '\n'), l => length(l) > 0);
 unlink(work);
 let mode = hub.push_mode(st.push);
 if (!st.push.enabled || !mode) exit(0);
-if (mode == 'relay' && !match(st.push.relay ?? '', /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/)) exit(0);
+if (mode == 'relay' && !hub.relay_ok(st.push.relay)) exit(0);
 let targets = hub.push_targets();
 if (!length(targets)) exit(0);
 

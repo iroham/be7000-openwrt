@@ -80,6 +80,13 @@ export function save_private(path, obj) {
 	rename(t, path);
 }
 
+const MAX_DEVICES = 600;
+
+/* A device record nobody has touched: no name, category, icon, block, approval, fixed address or exception. */
+function plain_device(d) {
+	return !d.custom_name && !d.category && !d.icon && !d.blocked && !d.pending && !d.fixed_ip && !d.unfiltered;
+}
+
 // One writer at a time: the 30 s pass and requests from the app both change the same files.
 let lock_held = false;
 export function locked(fn) {
@@ -110,6 +117,12 @@ export function run(cmd) {
 
 /* How notifications leave the router: 'direct' (this router holds an Apple push key and talks to Apple itself),
    'relay' (a relay holds the key), or null (neither is set up). */
+/* A relay is reached over https. Plain http is accepted only for one on the home network, by its address. */
+export function relay_ok(r) {
+	return match(r ?? '', /^https:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/) != null
+		|| match(r ?? '', /^http:\/\/(10|192\.168|172\.(1[6-9]|2[0-9]|3[01]))(\.[0-9]{1,3}){2,3}(:[0-9]{1,5})?$/) != null;
+};
+
 /* The relay a router uses when it has no push key of its own. Empty: none. A relay set in the settings wins. */
 export const DEFAULT_RELAY = 'https://miwrt-relay.iroham.cloud';
 export const APNS_KEY = '/etc/miwrt/apns/key.p8';
@@ -406,9 +419,27 @@ function merge_devices(s, db, rt) {
 
 		let d = db[mac];
 		if (!d) {
+			// A ceiling on remembered devices: something that keeps inventing addresses must not fill the
+			// router's storage. The oldest device nobody named makes room; if all are named, the new one waits.
+			if (length(db) >= MAX_DEVICES) {
+				let oldest = null, at = null;
+				for (let m, o in db) {
+					if ((m in assoc) || (m in s.wired) || !plain_device(o)) continue;
+					let t = o.last_seen ?? o.first_seen ?? 0;
+					if (at == null || t < at) { at = t; oldest = m; }
+				}
+				if (oldest == null) continue;
+				delete db[oldest];
+			}
 			d = db[mac] = { first_seen: now, vendor: vendor_of(mac) };
 			dirty = true;
-			if (!rt.learning && online) {
+			rt.new_seen = filter(rt.new_seen ?? [], t => now - t < 3600);
+			push(rt.new_seen, now);
+			if (!rt.learning && online && length(rt.new_seen) > 10) {
+				// more than ten new devices in an hour: one alert for the lot
+				if (settings().approve_new) d.pending = true;
+				add_alert('device', 'Many new devices are joining', 'More than ten new devices appeared within an hour. Open Devices to see them.', 'warning', 'new-flood', 3600);
+			} else if (!rt.learning && online) {
 				let label = leases[mac]?.hostname ?? d.vendor ?? mac;
 				let where = `the ${net_of(s.nets, ip)} network${(mac in assoc) ? ' (' + assoc[mac].band + ')' : ' (cable)'}`;
 				if (settings().approve_new) {
@@ -436,11 +467,12 @@ function merge_devices(s, db, rt) {
 	// forget devices nobody named that have not been seen for 90 days (rotating private addresses, guests)
 	for (let mac in keys(db)) {
 		let d = db[mac];
-		if (!(mac in live) && !d.custom_name && !d.category && !d.icon && !d.blocked && !d.pending && !d.fixed_ip && !d.unfiltered && now - (d.last_seen ?? d.first_seen ?? now) > 90 * 86400) {
+		if (!(mac in live) && plain_device(d) && now - (d.last_seen ?? d.first_seen ?? now) > 90 * 86400) {
 			delete db[mac];
 			dirty = true;
 		}
 	}
+	for (let mac in keys(rt.last_seen)) if (!(mac in db)) delete rt.last_seen[mac];
 	if (dirty) save(DEVICES, db);
 
 	let reasons = block_reasons(db, now);
@@ -530,7 +562,9 @@ function build_status(s, rt, devices) {
 
 /* Alerts that only show up in the system log: radar on 5 GHz, a device that keeps failing to join, kernel trouble. */
 function log_alerts(rt, db) {
-	let lines = filter(split(run("logread -e 'DFS-RADAR-DETECTED|radar detected|did not acknowledge authentication|Kernel panic|Oops:|Out of memory'"), '\n'), l => length(l) > 0);
+	// only lines written by the access point or the kernel count: a device can put any text into the log
+	// through the name it gives when it asks for an address
+	let lines = filter(split(run("logread -e 'DFS-RADAR-DETECTED|radar detected|did not acknowledge authentication|Kernel panic|Oops:|Out of memory'"), '\n'), l => length(l) > 0 && match(l, / (hostapd|kernel): /));
 	let start = 0;
 	if (rt.log_mark == null) start = length(lines);   // first pass after boot: old lines are history
 	else {
@@ -540,6 +574,7 @@ function log_alerts(rt, db) {
 	if (length(lines)) rt.log_mark = lines[length(lines) - 1];
 	if (!rt.join_fail) rt.join_fail = {};
 	let now = time();
+	for (let m in keys(rt.join_fail)) if (now - (rt.join_fail[m].since ?? 0) > 3600) delete rt.join_fail[m];
 	for (let line in slice(lines, start)) {
 		if (match(line, /DFS-RADAR-DETECTED|radar detected/))
 			add_alert('radio', 'Radar detected on 5 GHz', 'The router is moving 5 GHz to another channel. It may pause for about a minute.', 'warning', 'radar', 600);
@@ -858,7 +893,7 @@ export function set_setting(b) {
 			if ('enabled' in b.push) p.enabled = !!b.push.enabled;
 			if ('relay' in b.push) {
 				let r = replace(trim(b.push.relay ?? ''), /\/+$/, '');
-				if (length(r) && !match(r, /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/)) return 'The relay address does not look right.';
+				if (length(r) && !relay_ok(r)) return 'The relay address must start with https://. Plain http:// is accepted only for a relay on your own network.';
 				p.relay = length(r) ? r : null;
 			}
 			if (type(b.push.kinds) == 'object') {
@@ -1176,17 +1211,30 @@ export function revoke_phone(id) {
 
 /* Pairing proves you know the router's administrator password, the same one LuCI asks for. */
 export function pair(password, name, ip) {
-	let fails = load(RUN + '/pairfail.json', []), now = time();
-	fails = filter(fails, t => now - t < 600);
-	if (length(fails) >= 5) return { code: 429, error: 'Too many wrong passwords. Try again in 10 minutes.' };
-	let conn = connect();
-	let ses = (type(password) == 'string' && length(password)) ? conn.call('session', 'login', { username: 'root', password, timeout: 5 }) : null;
-	if (!ses?.ubus_rpc_session) {
-		push(fails, now);
-		save(RUN + '/pairfail.json', fails);
-		return { code: 403, error: 'That is not the router\'s administrator password.' };
-	}
-	conn.call('session', 'destroy', { ubus_rpc_session: ses.ubus_rpc_session });
-	add_alert('router', 'A phone was paired', `${substr(name ?? 'iPhone', 0, 40)} from ${ip}.`, 'warning');
-	return { code: 200, token: mint_token(name, ip) };
+	// Wrong passwords are counted per address (5 in 10 minutes) and overall (40), under the lock so that
+	// requests sent side by side cannot each slip under the limit. One device cannot lock everyone else out.
+	return locked(() => {
+		let rec = load(RUN + '/pairfail.json', {}), now = time();
+		if (type(rec) != 'object') rec = {};
+		let all = filter(type(rec.all) == 'array' ? rec.all : [], t => now - t < 600), per = {};
+		for (let k, v in (type(rec.ip) == 'object' ? rec.ip : {})) {
+			let f = filter(type(v) == 'array' ? v : [], t => now - t < 600);
+			if (length(f)) per[k] = f;
+		}
+		let who = match(ip ?? '', /^[0-9A-Fa-f.:]{2,45}$/) ? ip : 'unknown';
+		let mine = per[who] ?? [];
+		if (length(mine) >= 5 || length(all) >= 40) return { code: 429, error: 'Too many wrong passwords. Try again in 10 minutes.' };
+		let conn = connect();
+		let ses = (type(password) == 'string' && length(password)) ? conn.call('session', 'login', { username: 'root', password, timeout: 5 }) : null;
+		if (!ses?.ubus_rpc_session) {
+			push(mine, now);
+			per[who] = mine;
+			push(all, now);
+			save(RUN + '/pairfail.json', { all, ip: per });
+			return { code: 403, error: 'That is not the router\'s administrator password.' };
+		}
+		conn.call('session', 'destroy', { ubus_rpc_session: ses.ubus_rpc_session });
+		add_alert('router', 'A phone was paired', `${substr(name ?? 'iPhone', 0, 40)} from ${ip}.`, 'warning');
+		return { code: 200, token: mint_token(name, ip) };
+	});
 };
