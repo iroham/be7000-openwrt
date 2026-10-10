@@ -131,7 +131,7 @@ A small service on the router that a phone app talks to. Nothing else is needed 
 
 ### API
 
-Base: `https://<router>/cgi-bin/miwrt`. `GET /health` and `POST /pair` need no key; everything else needs `Authorization: Bearer <key>`.
+Base: `https://<router>/cgi-bin/miwrt`. `GET /health`, `POST /pair/start`, `POST /pair/finish` and the older `POST /pair` need no key; everything else needs `Authorization: Bearer <key>`.
 
 | Method and path | Purpose |
 |---|---|
