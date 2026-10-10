@@ -1,22 +1,21 @@
 name: hybrid-failover feed
 
-# Keeps feed/hybrid-failover/ on gh-pages at the latest hybrid-failover
+# Brings feed/hybrid-failover/ on gh-pages to the latest hybrid-failover
 # release. The upstream release builds no aarch64_cortex-a73 packages, so this
 # builds them from the release tag with the project's own packaging script and
 # signs the index with the same key as the main feed. It only commits when the
 # release is newer than what the feed holds.
 
+# Runs by hand only. The build step runs the upstream project's own script with
+# the feed signing key in reach, so it must not follow upstream releases
+# unattended: start it after looking at what the release changed.
 on:
-  schedule:
-    - cron: "17 */3 * * *"
   workflow_dispatch:
     inputs:
       force:
         description: "Rebuild even if the feed already holds the latest release"
         type: boolean
         default: false
-  repository_dispatch:
-    types: [hybrid-failover-release]
 
 concurrency:
   group: hybrid-failover-feed
@@ -53,6 +52,7 @@ jobs:
           repository: ${{ env.UPSTREAM }}
           ref: ${{ steps.ver.outputs.tag }}
           path: hf
+          persist-credentials: false
 
       - uses: actions/setup-go@v5
         if: steps.ver.outputs.skip != '1'
