@@ -1085,3 +1085,39 @@ msgstr "On, ms"
 
 msgid "Не горит, мс"
 msgstr "Off, ms"
+
+msgid "Бесшовный роуминг Wi-Fi. Уводит клиентов с 2,4 ГГц на 5 ГГц, когда они рядом с роутером, и помогает им быстро переходить между точками доступа одной сети."
+msgstr "Seamless Wi-Fi roaming. Moves clients from 2.4 GHz to 5 GHz when they are close to the router and helps them switch quickly between access points of one network."
+
+msgid "Сам включает в настройках Wi-Fi 802.11k (соседние точки), 802.11v (переход по подсказке роутера) и 802.11r (быстрый переход без повторного входа)."
+msgstr "Turns on 802.11k (neighbouring access points), 802.11v (moving on the router's hint) and 802.11r (fast transition without logging in again) in the Wi-Fi settings by itself."
+
+msgid "Переводит клиента в другой диапазон только тогда, когда связь от этого точно не станет хуже."
+msgstr "Moves a client to the other band only when the link is certain not to get worse."
+
+msgid "Собирает из нескольких роутеров OpenWrt одну сеть Wi-Fi: настраивает их как точки доступа и показывает общую таблицу клиентов."
+msgstr "Joins several OpenWrt routers into one Wi-Fi network: sets them up as access points and shows a shared client table."
+
+msgid "Особенности на Beam WRT"
+msgstr "On Beam WRT"
+
+msgid "Сеть MLO roamd не меняет. 802.11r на ней приводил к сбою прошивки модуля 5 ГГц и перезагрузке роутера, поэтому в сборке для Beam WRT такие сети пропускаются."
+msgstr "roamd leaves the MLO network unchanged. 802.11r on it crashed the 5 GHz module firmware and rebooted the router, so the Beam WRT build skips such networks."
+
+msgid "BE7000 может управлять сетью из нескольких роутеров. Подключить его узлом к сети, которой управляет другой роутер, пока нельзя: контроллер ставит пакеты из фида roamd, а там нет сборки под процессор BE7000."
+msgstr "The BE7000 can manage a network of several routers. It cannot yet join as a node a network that another router manages: that controller installs packages from the roamd feed, which has no build for the BE7000 CPU."
+
+msgid "Обновления roamd приходят из фида Beam WRT вместе с остальными пакетами, а не через встроенную проверку обновлений."
+msgstr "roamd updates come from the Beam WRT feed together with the other packages, not through its built-in update check."
+
+msgid "Поставятся служба roamd, страница Сеть, Роуминг Wi-Fi и её перевод."
+msgstr "The roamd service, the Network, Wi-Fi Roaming page and its translation will be installed."
+
+msgid "Служба сразу запустится и пропишет 802.11k/v/r в настройки Wi-Fi. Wi-Fi при этом перезапустится на несколько секунд."
+msgstr "The service starts right away and writes 802.11k/v/r into the Wi-Fi settings. Wi-Fi restarts for a few seconds."
+
+msgid "Открыть roamd"
+msgstr "Open roamd"
+
+msgid "Эти команды выполняются в заводской прошивке. В самом Beam WRT nvram нет, здесь слот переключает эта страница."
+msgstr "These commands run in the factory firmware. Beam WRT itself has no nvram, here the slot is switched by this page."

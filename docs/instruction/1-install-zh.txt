@@ -73,3 +73,26 @@ ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa root@192.
 在浏览器里打开路由器地址，https 也可以。马上设置 root 密码。如果 Wi-Fi 还是默认密码，到 网络, 无线 页面里改掉。
 
 成功启动后，固件会在引导程序里锁定自己的槽位。之后断电就不会再回到原厂固件了。要回去，可以用 系统, 槽位 页面上的按钮或者回滚脚本，详见 3-rollback-and-problems-zh.txt。
+
+如果现在装的是其他 OpenWrt
+
+例如 kravasuper 移植版或 Quarx2k 的 NAND 版本，并且路由器用的是原厂引导程序。我们的安装脚本在那里无法运行，它需要原厂固件。为此压缩包里有 install-from-openwrt.sh。它在那个 OpenWrt 里运行，第一次运行只查看两个槽位里装的是什么。
+
+scp -O install-from-openwrt.sh openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi root@192.168.1.1:/tmp/
+ssh root@192.168.1.1 "sh /tmp/install-from-openwrt.sh"
+
+接下来分两种情况。
+
+另一个槽位里是原厂固件。不能覆盖它，它是 Beam WRT 无法启动时的后备。脚本会把启动切换到原厂固件，不会擦除任何东西。
+
+ssh root@192.168.1.1 "sh /tmp/install-from-openwrt.sh to-stock reboot"
+
+路由器会启动原厂固件，通常地址是 192.168.31.1。然后按本文件的步骤从头安装，Beam WRT 会取代那个 OpenWrt。
+
+另一个槽位里不是原厂固件，例如另一个 OpenWrt。这时 Beam WRT 会直接写入该槽位。
+
+ssh root@192.168.1.1 "sh /tmp/install-from-openwrt.sh install /tmp/openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi reboot"
+
+如果 Beam WRT 无法启动，下次通电后路由器会回到你安装时使用的那个 OpenWrt。
+
+如果路由器的引导程序不是原厂的（例如 QWRT 的），脚本会拒绝执行。请先按那个固件的说明恢复原厂引导程序。

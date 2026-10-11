@@ -31,6 +31,8 @@ nvram set flag_ota_reboot=0
 nvram commit
 reboot
 
+这些命令在原厂固件里执行，原厂固件有 nvram。Beam WRT 本身没有 nvram，在 Beam WRT 里请在 系统 → 槽位 页面切换槽位。
+
 如果没有 SSH，就按照 1-install-zh.txt 重新安装 Beam WRT。你的 Beam WRT 设置会保留。
 
 

@@ -73,3 +73,26 @@ If the router does not answer over the cable, try another LAN port or connect ov
 Open the router address in a browser, https works too. Set the root password right away. If Wi-Fi still has the default password, change it on Network, Wireless.
 
 After a successful boot the firmware locks its slot in the bootloader. Cutting the power no longer takes you back to the factory firmware. For that there is a button on System, Slots and the rollback script, see 3-rollback-and-problems-en.txt.
+
+If another OpenWrt is installed now
+
+For example the kravasuper port or the Quarx2k NAND build, with the factory bootloader. Our installer will not run there, it needs the factory firmware. For this case the archive has install-from-openwrt.sh. It runs on the router from that OpenWrt and first only looks at what the slots hold.
+
+scp -O install-from-openwrt.sh openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi root@192.168.1.1:/tmp/
+ssh root@192.168.1.1 "sh /tmp/install-from-openwrt.sh"
+
+Then there are two cases.
+
+The other slot holds the factory firmware. It must not be overwritten, it is the fallback if Beam WRT does not boot. The script switches the boot to it and erases nothing.
+
+ssh root@192.168.1.1 "sh /tmp/install-from-openwrt.sh to-stock reboot"
+
+The router boots the factory firmware, usually at 192.168.31.1. Then install by the steps of this file from the start. Beam WRT replaces that OpenWrt.
+
+The other slot holds something else, for example another OpenWrt. Then Beam WRT is written there right away.
+
+ssh root@192.168.1.1 "sh /tmp/install-from-openwrt.sh install /tmp/openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi reboot"
+
+If Beam WRT does not boot, the next power-on brings back the OpenWrt you installed from.
+
+If the bootloader is not the factory one (QWRT, for example), the script refuses. Put the factory bootloader back first, as that firmware's instruction says.

@@ -93,6 +93,7 @@ return view.extend({
 				E('p', {}, _('Роутер загрузит заводскую прошивку, и она сама станет основной. Настройки Beam WRT останутся на месте.')),
 				E('p', {}, _('Вернуться на Beam WRT из стока можно так. Если в стоке включён SSH, выполните')),
 				E('pre', {}, 'nvram set flag_last_success=%d\nnvram set flag_boot_rootfs=%d\nnvram set flag_ota_reboot=0\nnvram commit\nreboot'.format(1 - slot, 1 - slot)),
+				E('p', {}, _('Эти команды выполняются в заводской прошивке. В самом Beam WRT nvram нет, здесь слот переключает эта страница.')),
 				E('p', {}, _('Или поставьте Beam WRT заново скриптом из архива релиза, настройки сохранятся.'))
 			];
 		else

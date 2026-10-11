@@ -19,6 +19,7 @@ Beam WRT 1.4，适用于小米 BE7000
 
 openwrt-qualcommbe-ipq95xx-xiaomi_be7000-squashfs-factory.ubi 是从原厂固件安装用的镜像。
 install-from-stock.sh 把镜像写入空闲的槽位，并把启动切换过去。
+install-from-openwrt.sh 用于路由器上装的是其他 OpenWrt 且使用原厂引导程序的情况，详见 1-install-zh.txt 末尾。
 rollback-to-stock.sh 让路由器回到原厂固件。系统, 槽位 页面也能做同样的事。
 sha256sums.txt 是校验值。
 

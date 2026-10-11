@@ -31,6 +31,8 @@ nvram set flag_ota_reboot=0
 nvram commit
 reboot
 
+Эти команды выполняются в заводской прошивке, там nvram есть. В самом Beam WRT его нет, там слот переключается на странице Система, Слоты.
+
 Если SSH нет, поставьте Beam WRT заново по 1-install.txt. Настройки Beam WRT сохранятся.
 
 

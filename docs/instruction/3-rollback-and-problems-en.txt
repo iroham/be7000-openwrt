@@ -31,6 +31,8 @@ nvram set flag_ota_reboot=0
 nvram commit
 reboot
 
+These commands run in the factory firmware, which has nvram. Beam WRT itself has no nvram, there the slot is switched on the System, Slots page.
+
 Without SSH, install Beam WRT again as in 1-install-en.txt. Your Beam WRT settings are kept.
 
 
