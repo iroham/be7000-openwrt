@@ -19,6 +19,7 @@ const ICONS = {
 	light: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>',
 	dark: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
 	update: '<path d="M4 12a8 8 0 0 1 14-5.3M20 4v5h-5M20 12a8 8 0 0 1-14 5.3M4 20v-5h5"/>',
+	plug: '<path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0zM12 16v5"/>',
 	enter: '<path d="M20 5v7a3 3 0 0 1-3 3H5M9 11l-4 4 4 4"/>'
 };
 
@@ -27,19 +28,40 @@ const STRINGS = {
 		search: 'Поиск', placeholder: 'Найти страницу или настройку...', empty: 'Ничего не найдено',
 		auto: 'Авто', light: 'Светлая', dark: 'Тёмная', theme: 'Оформление', logout: 'Выйти',
 		go: 'открыть', move: 'выбор', close: 'закрыть',
-		newVersion: 'Вышла версия %s'
+		newVersion: 'Вышла версия %s',
+		netifd: 'Перезапустить сеть',
+		netifdTitle: 'Новые протоколы ждут перезапуска сети',
+		netifdText: 'Установлены протоколы, которые сеть ещё не знает: %s. Интерфейсы с ними не поднимутся, пока сеть не перезапущена.',
+		netifdWarn: 'Wi-Fi и проводная сеть пропадут на 10-20 секунд, потом страница подключится снова.',
+		netifdGo: 'Перезапустить сеть',
+		netifdCancel: 'Позже',
+		netifdWait: 'Сеть перезапускается...'
 	},
 	en: {
 		search: 'Search', placeholder: 'Jump to a page or setting...', empty: 'Nothing found',
 		auto: 'Auto', light: 'Light', dark: 'Dark', theme: 'Appearance', logout: 'Log out',
 		go: 'open', move: 'navigate', close: 'close',
-		newVersion: 'Version %s is out'
+		newVersion: 'Version %s is out',
+		netifd: 'Restart network',
+		netifdTitle: 'New protocols wait for a network restart',
+		netifdText: 'Protocols the network does not know yet were installed: %s. Interfaces using them will not come up until the network is restarted.',
+		netifdWarn: 'Wi-Fi and the wired network go away for 10-20 seconds, then the page reconnects.',
+		netifdGo: 'Restart network',
+		netifdCancel: 'Later',
+		netifdWait: 'The network is restarting...'
 	},
 	zh: {
 		search: '搜索', placeholder: '查找页面或设置...', empty: '未找到',
 		auto: '自动', light: '浅色', dark: '深色', theme: '外观', logout: '退出',
 		go: '打开', move: '选择', close: '关闭',
-		newVersion: '新版本 %s 已发布'
+		newVersion: '新版本 %s 已发布',
+		netifd: '重启网络',
+		netifdTitle: '新协议需要重启网络',
+		netifdText: '已安装网络尚未识别的协议：%s。在重启网络之前，使用这些协议的接口无法启动。',
+		netifdWarn: 'Wi-Fi 和有线网络会中断 10 到 20 秒，之后页面会重新连接。',
+		netifdGo: '重启网络',
+		netifdCancel: '稍后',
+		netifdWait: '网络正在重启...'
 	}
 };
 
@@ -115,6 +137,49 @@ return baseclass.extend({
 
 		this.renderFoot();
 		this.checkUpdate();
+		this.checkNetifd();
+	},
+
+	// netifd learns its protocols once, when it starts. After a package adds a
+	// new one (gre, xl2tpd, 6in4 ...) the apk hook of be7000-netifd records it,
+	// and until the network is restarted interfaces of that protocol stay down.
+	// A button in the top bar offers the restart. Asked on every page load, it
+	// is one local call; on builds without be7000-netifd the call fails quietly.
+	checkNetifd() {
+		rpc.declare({ object: 'be7000-netifd', method: 'status' })().then((res) => {
+			const pending = (res && Array.isArray(res.pending)) ? res.pending : [];
+			const right = document.querySelector('.nb-topbar-right');
+
+			if (!pending.length || !right || right.querySelector('.nb-netifd'))
+				return;
+
+			const btn = E('button', {
+				'type': 'button',
+				'class': 'nb-update nb-netifd',
+				'title': this.t.netifdTitle
+			}, [ icon('plug'), E('span', {}, [ this.t.netifd ]) ]);
+
+			btn.addEventListener('click', () => {
+				ui.showModal(this.t.netifdTitle, [
+					E('p', {}, [ this.t.netifdText.replace('%s', pending.join(', ')) ]),
+					E('p', {}, [ this.t.netifdWarn ]),
+					E('div', { 'class': 'right' }, [
+						E('button', { 'class': 'btn', 'click': ui.hideModal }, [ this.t.netifdCancel ]),
+						' ',
+						E('button', {
+							'class': 'btn cbi-button-action',
+							'click': () => {
+								ui.showModal(this.t.netifdTitle, [ E('p', { 'class': 'spinning' }, [ this.t.netifdWait ]) ]);
+								rpc.declare({ object: 'be7000-netifd', method: 'restart' })().catch(() => {});
+								window.setTimeout(() => { location.reload(); }, 20000);
+							}
+						}, [ this.t.netifdGo ])
+					])
+				]);
+			});
+
+			right.insertBefore(btn, right.firstChild);
+		}).catch(() => {});
 	},
 
 	// A small button in the top bar when the daily check of be7000-update
