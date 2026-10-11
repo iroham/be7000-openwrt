@@ -1,0 +1,124 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: wifi: ath12k: keep the peer address table valid during firmware recovery
+
+Firmware recovery tears the datapath down and builds it again from
+ath12k_core_restart(), which does not hold the wiphy lock. In between
+dp->rhead_peer_addr is freed and set to NULL. mac80211 callbacks keep
+running meanwhile: when hostapd removes an MLD AP that had stations,
+__sta_info_flush() asks for the final station statistics and
+ath12k_mac_op_sta_statistics() looks the peer up in that table. With
+the table gone the lookup reads address 0 under dp_lock with bottom
+halves off and the kernel panics with "Fatal exception in interrupt".
+
+Seen on BE7000 (QCN9274, firmware WLAN.WBE.1.6-01243) when a wifi
+reload of an MLO interface coincides with a firmware crash.
+
+All users of the table already hold dp_lock. Publish and clear the
+pointer under that lock, free the old table after dropping it, and let
+lookup, insert and remove treat a missing table as empty. dp_lock and
+the table mutex were also initialised again on every recovery while
+other threads could hold them, set them up once when dp is allocated.
+
+--- a/drivers/net/wireless/ath/ath12k/dp.c
++++ b/drivers/net/wireless/ath/ath12k/dp.c
+@@ -1483,10 +1483,13 @@
+ 	spin_lock_init(&dp->reo_cmd_lock);
+ 	spin_lock_init(&dp->reo_rxq_flush_lock);
+ 
+-	spin_lock_init(&dp->dp_lock);
++	/* dp_lock and link_peer_rhash_tbl_lock are set up once when dp is
++	 * allocated. This runs again on firmware recovery while mac80211
++	 * callbacks may hold them.
++	 */
++	spin_lock_bh(&dp->dp_lock);
+ 	INIT_LIST_HEAD(&dp->peers);
+-
+-	mutex_init(&dp->link_peer_rhash_tbl_lock);
++	spin_unlock_bh(&dp->dp_lock);
+ 
+ 	dp->reo_cmd_cache_flush_count = 0;
+ 	dp->idle_link_rbm =
+--- a/drivers/net/wireless/ath/ath12k/dp_peer.c
++++ b/drivers/net/wireless/ath/ath12k/dp_peer.c
+@@ -62,6 +62,10 @@
+ {
+ 	lockdep_assert_held(&dp->dp_lock);
+ 
++	/* NULL while firmware recovery rebuilds the datapath */
++	if (!dp->rhead_peer_addr)
++		return NULL;
++
+ 	return rhashtable_lookup_fast(dp->rhead_peer_addr, addr,
+ 				      dp->rhash_peer_addr_param);
+ }
+@@ -251,7 +255,9 @@
+ 		goto err_free;
+ 	}
+ 
++	spin_lock_bh(&dp->dp_lock);
+ 	dp->rhead_peer_addr = rhash_addr_tbl;
++	spin_unlock_bh(&dp->dp_lock);
+ 
+ 	return 0;
+ 
+@@ -274,14 +280,23 @@
+ 
+ void ath12k_dp_link_peer_rhash_tbl_destroy(struct ath12k_dp *dp)
+ {
++	struct rhashtable *tbl;
++
+ 	guard(mutex)(&dp->link_peer_rhash_tbl_lock);
+ 
+-	if (!dp->rhead_peer_addr)
++	/* Readers use the table only under dp_lock, so once the pointer is
++	 * cleared under it nobody can still be inside the old table.
++	 */
++	spin_lock_bh(&dp->dp_lock);
++	tbl = dp->rhead_peer_addr;
++	dp->rhead_peer_addr = NULL;
++	spin_unlock_bh(&dp->dp_lock);
++
++	if (!tbl)
+ 		return;
+ 
+-	rhashtable_destroy(dp->rhead_peer_addr);
+-	kfree(dp->rhead_peer_addr);
+-	dp->rhead_peer_addr = NULL;
++	rhashtable_destroy(tbl);
++	kfree(tbl);
+ }
+ 
+ static int ath12k_dp_link_peer_rhash_insert(struct ath12k_dp *dp,
+@@ -291,6 +306,9 @@
+ 
+ 	lockdep_assert_held(&dp->dp_lock);
+ 
++	if (!dp->rhead_peer_addr)
++		return -ENODEV;
++
+ 	tmp = rhashtable_lookup_get_insert_fast(dp->rhead_peer_addr, &peer->rhash_addr,
+ 						dp->rhash_peer_addr_param);
+ 	if (!tmp)
+@@ -308,6 +326,9 @@
+ 
+ 	lockdep_assert_held(&dp->dp_lock);
+ 
++	if (!dp->rhead_peer_addr)
++		return 0;
++
+ 	ret = rhashtable_remove_fast(dp->rhead_peer_addr, &peer->rhash_addr,
+ 				     dp->rhash_peer_addr_param);
+ 	if (ret && ret != -ENOENT)
+--- a/drivers/net/wireless/ath/ath12k/wifi7/dp.c
++++ b/drivers/net/wireless/ath/ath12k/wifi7/dp.c
+@@ -172,6 +172,10 @@
+ 
+ 	dp->ops = &ath12k_wifi7_dp_arch_ops;
+ 
++	spin_lock_init(&dp->dp_lock);
++	INIT_LIST_HEAD(&dp->peers);
++	mutex_init(&dp->link_peer_rhash_tbl_lock);
++
+ 	return dp;
+ }
+ 
