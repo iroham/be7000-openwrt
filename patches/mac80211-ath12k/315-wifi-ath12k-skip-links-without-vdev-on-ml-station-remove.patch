@@ -1,0 +1,56 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: wifi: ath12k: skip links without a vdev when removing an ML station
+
+A firmware crash while hostapd rebuilds an MLD AP can leave a link
+whose vdev is gone, for example when WMI_VDEV_CREATE fails with the
+firmware down, so arvif->ar is NULL. ath12k_mac_op_sta_state() and
+ath12k_peer_mlo_link_peers_delete() already skip such links, but
+ath12k_mac_ml_station_remove() then calls
+ath12k_mac_station_post_remove() for them and the kernel panics on a
+NULL read when hostapd stops the AP and mac80211 flushes the stations.
+
+Do the per radio part only for links that still have a radio. For the
+others drop the link station from the address tables of all radios of
+the hw, as it may still be listed there, and free it as before.
+
+--- a/drivers/net/wireless/ath/ath12k/mac.c
++++ b/drivers/net/wireless/ath/ath12k/mac.c
+@@ -7287,6 +7287,7 @@
+ 	unsigned long links;
+ 	struct ath12k *ar;
+ 	u8 link_id;
++	int i;
+ 
+ 	lockdep_assert_wiphy(ah->hw->wiphy);
+ 
+@@ -7301,12 +7302,25 @@
+ 			continue;
+ 
+ 		ar = arvif->ar;
++		if (ar) {
++			ath12k_mac_station_post_remove(ar, arvif, arsta);
+ 
+-		ath12k_mac_station_post_remove(ar, arvif, arsta);
+-
+-		spin_lock_bh(&ar->ab->base_lock);
+-		ath12k_link_sta_rhash_delete(ar->ab, arsta);
+-		spin_unlock_bh(&ar->ab->base_lock);
++			spin_lock_bh(&ar->ab->base_lock);
++			ath12k_link_sta_rhash_delete(ar->ab, arsta);
++			spin_unlock_bh(&ar->ab->base_lock);
++		} else {
++			/* The vdev of this link is gone, for example after
++			 * a failed vdev create during a firmware crash, and
++			 * the peers were skipped for it. The link station
++			 * may still sit in a radio's table, drop it from all
++			 * of them before it is freed.
++			 */
++			for_each_ar(ah, ar, i) {
++				spin_lock_bh(&ar->ab->base_lock);
++				ath12k_link_sta_rhash_delete(ar->ab, arsta);
++				spin_unlock_bh(&ar->ab->base_lock);
++			}
++		}
+ 
+ 		ath12k_mac_free_unassign_link_sta(ah, ahsta, link_id);
+ 	}

@@ -1,0 +1,67 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: wifi: ath12k: keep CRASH_FLUSH set until the rings are rebuilt
+
+ath12k_core_reconfigure_on_crash() frees the HAL rings, allocates the
+HAL memory again and then clears ATH12K_FLAG_CRASH_FLUSH before
+ath12k_core_qmi_firmware_ready() restarts the firmware and sets up the
+CE and DP rings. That takes a second or two, and mac80211 callbacks
+run meanwhile. A survey dump from rpcd sent a WMI command through
+ath12k_ce_send() into a CE ring whose pointers still referred to the
+freed memory, and the kernel panicked in
+ath12k_hal_srng_access_begin().
+
+Clear the flag in ath12k_core_qmi_firmware_ready() right after the CE
+pipes and the DP rings are set up, before anything sends WMI commands.
+On the first boot the flag is already clear there. Also check the flag
+at the top of ath12k_ce_send(): the completion polling for pipes
+without interrupts touched the ring before the check.
+
+--- a/drivers/net/wireless/ath/ath12k/ce.c
++++ b/drivers/net/wireless/ath/ath12k/ce.c
+@@ -434,6 +434,9 @@
+ 	u8 byte_swap_data = 0;
+ 	int num_used;
+ 
++	if (test_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags))
++		return -ESHUTDOWN;
++
+ 	/* Check if some entries could be regained by handling tx completion if
+ 	 * the CE has interrupts disabled and the used entries is more than the
+ 	 * defined usage threshold.
+@@ -456,9 +459,6 @@
+ 			ath12k_ce_poll_send_completed(ab, pipe->pipe_num);
+ 	}
+ 
+-	if (test_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags))
+-		return -ESHUTDOWN;
+-
+ 	spin_lock_bh(&ab->ce.ce_lock);
+ 
+ 	write_index = pipe->src_ring->write_index;
+--- a/drivers/net/wireless/ath/ath12k/core.c
++++ b/drivers/net/wireless/ath/ath12k/core.c
+@@ -1361,6 +1361,9 @@
+ 		goto err_firmware_stop;
+ 	}
+ 
++	/* CE and DP rings are valid again, WMI and data may go out */
++	clear_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags);
++
+ 	mutex_lock(&ag->mutex);
+ 	mutex_lock(&ab->core_lock);
+ 
+@@ -1434,8 +1437,12 @@
+ 	if (ret)
+ 		return ret;
+ 
+-	clear_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags);
+-
++	/* CRASH_FLUSH stays set until ath12k_core_qmi_firmware_ready() has
++	 * set up the CE and DP rings again. mac80211 callbacks still run
++	 * here without the wiphy being quiesced, and with the flag cleared
++	 * they would send WMI commands into rings that point at the freed
++	 * memory of the old ones.
++	 */
+ 	ret = ath12k_core_qmi_firmware_ready(ab);
+ 	if (ret)
+ 		goto err_hal_srng_deinit;

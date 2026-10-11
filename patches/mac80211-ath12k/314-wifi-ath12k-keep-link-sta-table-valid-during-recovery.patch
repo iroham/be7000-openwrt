@@ -1,0 +1,96 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: wifi: ath12k: keep the link station table valid during recovery
+
+ath12k_core_reconfigure_on_crash() starts with destroying
+ab->rhead_sta_addr and only ath12k_core_start() creates it again. If
+the firmware does not come back, for example when it never sends the
+unified ready event, the table stays NULL for good. hostapd then
+removes the stations, ath12k_mac_op_sta_state() looks the link
+station up and the kernel panics on a NULL read with base_lock held.
+
+All users hold base_lock. Publish and clear the pointer under it, free
+the old table after dropping the lock, and treat a missing table as
+empty in lookup, insert and remove. When the reconfiguration fails,
+set ATH12K_FLAG_CRASH_FLUSH again so WMI commands and data stop at the
+half torn down rings instead of waiting on a dead firmware.
+
+--- a/drivers/net/wireless/ath/ath12k/core.c
++++ b/drivers/net/wireless/ath/ath12k/core.c
+@@ -1682,6 +1682,10 @@
+ 	ret = ath12k_core_reconfigure_on_crash(ab);
+ 	if (ret) {
+ 		ath12k_err(ab, "failed to reconfigure driver on crash recovery\n");
++		/* The rings are half torn down, keep WMI and data from
++		 * reaching them until the next reset.
++		 */
++		set_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags);
+ 		return;
+ 	}
+ 
+--- a/drivers/net/wireless/ath/ath12k/peer.c
++++ b/drivers/net/wireless/ath/ath12k/peer.c
+@@ -383,6 +383,9 @@
+ 
+ 	lockdep_assert_held(&ab->base_lock);
+ 
++	if (!ab->rhead_sta_addr)
++		return -ENODEV;
++
+ 	tmp = rhashtable_lookup_get_insert_fast(ab->rhead_sta_addr, &arsta->rhash_addr,
+ 						ab->rhash_sta_addr_param);
+ 	if (!tmp)
+@@ -400,6 +403,9 @@
+ 
+ 	lockdep_assert_held(&ab->base_lock);
+ 
++	if (!ab->rhead_sta_addr)
++		return 0;
++
+ 	ret = rhashtable_remove_fast(ab->rhead_sta_addr, &arsta->rhash_addr,
+ 				     ab->rhash_sta_addr_param);
+ 	if (ret && ret != -ENOENT)
+@@ -466,7 +472,9 @@
+ 		goto err_free;
+ 	}
+ 
++	spin_lock_bh(&ab->base_lock);
+ 	ab->rhead_sta_addr = rhash_addr_tbl;
++	spin_unlock_bh(&ab->base_lock);
+ 
+ 	return 0;
+ 
+@@ -478,12 +486,19 @@
+ 
+ void ath12k_link_sta_rhash_tbl_destroy(struct ath12k_base *ab)
+ {
+-	if (!ab->rhead_sta_addr)
+-		return;
++	struct rhashtable *tbl;
+ 
+-	rhashtable_destroy(ab->rhead_sta_addr);
+-	kfree(ab->rhead_sta_addr);
++	/* Users hold base_lock, clear the pointer under it before freeing */
++	spin_lock_bh(&ab->base_lock);
++	tbl = ab->rhead_sta_addr;
+ 	ab->rhead_sta_addr = NULL;
++	spin_unlock_bh(&ab->base_lock);
++
++	if (!tbl)
++		return;
++
++	rhashtable_destroy(tbl);
++	kfree(tbl);
+ }
+ 
+ struct ath12k_link_sta *ath12k_link_sta_find_by_addr(struct ath12k_base *ab,
+@@ -491,6 +506,10 @@
+ {
+ 	lockdep_assert_held(&ab->base_lock);
+ 
++	/* NULL while firmware recovery rebuilds the driver state */
++	if (!ab->rhead_sta_addr)
++		return NULL;
++
+ 	return rhashtable_lookup_fast(ab->rhead_sta_addr, addr,
+ 				      ab->rhash_sta_addr_param);
+ }
