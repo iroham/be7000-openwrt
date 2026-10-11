@@ -13,7 +13,7 @@ This covers the MiWRT firmware's app service, the MiWRT iPhone app, and the noti
 
 Everything the app shows comes from your router and is stored on your router: the list of devices, their names and traffic totals, alerts, schedules, Wi-Fi settings. The app keeps on the phone only what it needs to reach the router: the router's address, the phone's own access key, the router's certificate fingerprint, and a key for decrypting notifications. These are stored in the iPhone's Keychain and are not included in backups.
 
-The router's administrator password is typed into the app at pairing and, with the app and firmware released after 1.4.7.1, never leaves the phone: the app proves to the router that it knows it. Older versions send it to the router once, over an encrypted connection. It is not stored on the phone in either case. Making a settings backup asks for it again and sends it to the router over the already verified connection.
+The router's administrator password is typed into the app at pairing and, with firmware 1.4.7.2 and the app that goes with it, never leaves the phone: the app proves to the router that it knows it. Older versions send it to the router once, over an encrypted connection. It is not stored on the phone in either case. Making a settings backup asks for it again and sends it to the router over the already verified connection.
 
 ## Notifications
 
