@@ -5,7 +5,7 @@ import { popen } from 'fs';
 const BIN = '/usr/libexec/be7000-addons';
 
 function validId(id) {
-	return id == 'hybrid-failover' || id == 'zapret-manager';
+	return id == 'hybrid-failover' || id == 'zapret-manager' || id == 'roamd';
 }
 
 function run(args) {

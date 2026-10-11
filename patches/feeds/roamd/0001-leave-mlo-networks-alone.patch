@@ -1,0 +1,26 @@
+From: Timofey Maykov <itnitro@gmail.com>
+Subject: [PATCH] roamd: leave MLO networks alone
+
+A multi-link network spans several radios and hostapd builds its RSN from
+the MLO security setup (sae-compat with RSN overrides). With 802.11r/k/v
+added on top, the QCN9274 firmware of the Xiaomi BE7000 crashed and the
+router rebooted. Skip wifi-ifaces with mlo=1 when provisioning.
+---
+diff --git a/package/roamd/src/provision.c b/package/roamd/src/provision.c
+index 4a39b40..3d6a5d8 100644
+--- a/package/roamd/src/provision.c
++++ b/package/roamd/src/provision.c
+@@ -120,6 +120,13 @@ static void iface_provision(struct uci_session *u, struct uci_section *s)
+ 	if (roam_uci_bool(disabled))
+ 		return;
+ 
++	/* A multi-link (MLO) network spans several radios. hostapd builds its
++	 * RSN from the MLO security setup (sae-compat with RSN overrides), and
++	 * 802.11r/k/v added on top of it made the QCN9274 firmware crash on
++	 * Xiaomi BE7000. Leave such networks as they are. */
++	if (roam_uci_bool(uci_lookup_option_string(u->ctx, s, "mlo")))
++		return;
++
+ 	net = mesh_network_by_ssid(ssid);
+ 	roaming = !net || net->roaming;
+ 

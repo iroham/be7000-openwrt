@@ -31,7 +31,8 @@ return view.extend({
 	load: function() {
 		return Promise.all([
 			L.resolveDefault(callStatus('hybrid-failover'), {}),
-			L.resolveDefault(callStatus('zapret-manager'), {})
+			L.resolveDefault(callStatus('zapret-manager'), {}),
+			L.resolveDefault(callStatus('roamd'), {})
 		]);
 	},
 
@@ -135,6 +136,17 @@ return view.extend({
 			!zmInstalled ? _('Установить') : zmInstalled == zmFeed ? _('Переустановить') : _('Обновить до %s').format(zmFeed);
 		var zmLog = E('pre', { 'class': 'ba-log', 'style': 'display:none' });
 
+		var rd = data[2] || {};
+		var rdInstalled = rd.installed || '';
+		var rdFeed = rd.feed || '';
+		var rdBadges = [ E('span', { 'class': 'ba-badge ' + (rdInstalled ? '' : 'soft') },
+			rdInstalled ? _('установлен %s').format(rdInstalled) : _('не установлен')) ];
+		if (rdInstalled && rd.service)
+			rdBadges.push(E('span', { 'class': 'ba-badge' }, _('работает')));
+		var rdLabel = !rdFeed ? (rdInstalled ? _('Установлен') : _('Пока недоступен')) :
+			!rdInstalled ? _('Установить') : rdInstalled == rdFeed ? _('Переустановить') : _('Обновить до %s').format(rdFeed);
+		var rdLog = E('pre', { 'class': 'ba-log', 'style': 'display:none' });
+
 		return E([], [
 			E('style', {}, CSS),
 			E('h2', {}, _('Дополнения')),
@@ -168,6 +180,46 @@ return view.extend({
 				E('div', { 'class': 'ba-note' }, [
 					_('Исходный проект'), ' ',
 					E('a', { 'href': 'https://github.com/StressOzz/Zapret-Manager', 'target': '_blank', 'rel': 'noopener' }, 'StressOzz/Zapret-Manager')
+				])
+			]),
+
+			E('div', { 'class': 'ba-card' }, [
+				E('h3', {}, [ 'roamd' ].concat(rdBadges)),
+				E('p', { 'class': 'ba-lead' }, _('Бесшовный роуминг Wi-Fi. Уводит клиентов с 2,4 ГГц на 5 ГГц, когда они рядом с роутером, и помогает им быстро переходить между точками доступа одной сети.')),
+
+				E('h4', {}, _('Что умеет')),
+				E('ul', {}, [
+					E('li', {}, _('Сам включает в настройках Wi-Fi 802.11k (соседние точки), 802.11v (переход по подсказке роутера) и 802.11r (быстрый переход без повторного входа).')),
+					E('li', {}, _('Переводит клиента в другой диапазон только тогда, когда связь от этого точно не станет хуже.')),
+					E('li', {}, _('Собирает из нескольких роутеров OpenWrt одну сеть Wi-Fi: настраивает их как точки доступа и показывает общую таблицу клиентов.'))
+				]),
+
+				E('h4', {}, _('Особенности на Beam WRT')),
+				E('ul', {}, [
+					E('li', {}, _('Сеть MLO roamd не меняет. 802.11r на ней приводил к сбою прошивки модуля 5 ГГц и перезагрузке роутера, поэтому в сборке для Beam WRT такие сети пропускаются.')),
+					E('li', {}, _('BE7000 может управлять сетью из нескольких роутеров. Подключить его узлом к сети, которой управляет другой роутер, пока нельзя: контроллер ставит пакеты из фида roamd, а там нет сборки под процессор BE7000.')),
+					E('li', {}, _('Обновления roamd приходят из фида Beam WRT вместе с остальными пакетами, а не через встроенную проверку обновлений.'))
+				]),
+
+				E('h4', {}, _('Что произойдёт при установке')),
+				E('ul', {}, [
+					E('li', {}, _('Поставятся служба roamd, страница Сеть, Роуминг Wi-Fi и её перевод.')),
+					E('li', {}, _('Служба сразу запустится и пропишет 802.11k/v/r в настройки Wi-Fi. Wi-Fi при этом перезапустится на несколько секунд.'))
+				]),
+
+				E('div', { 'class': 'ba-act' }, [
+					E('button', {
+						'class': 'cbi-button cbi-button-action important',
+						'disabled': rd.running || !rdFeed ? true : null,
+						'click': ui.createHandlerFn(this, 'installSimple', 'roamd', rdLog)
+					}, rdLabel),
+					rdInstalled ? E('a', { 'class': 'cbi-button cbi-button-neutral', 'href': L.url('admin/network/roamd') }, _('Открыть roamd')) : ''
+				]),
+				!rdFeed ? E('div', { 'class': 'ba-note' }, _('Пакет пока не найден в фиде. Сначала нужно опубликовать новую сборку фида.')) : '',
+				rdLog,
+				E('div', { 'class': 'ba-note' }, [
+					_('Исходный проект'), ' ',
+					E('a', { 'href': 'https://github.com/Ground-Zerro/roamd', 'target': '_blank', 'rel': 'noopener' }, 'Ground-Zerro/roamd')
 				])
 			]),
 
