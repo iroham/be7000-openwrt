@@ -15,7 +15,7 @@ const HOSTS = DIR + '/hosts.json';
 const CODES = '/tmp/miwrt/power-codes.json';
 const CODE_LIFE = 1800;
 const RUNDIR = '/tmp/miwrt';
-const ACTIONS = { status: true, sleep: true, restart: true, hibernate: true, shutdown: true };
+const ACTIONS = { status: true, sleep: true, restart: true, hibernate: true, shutdown: true, wake: true };
 const PLUG_VERSIONS = [ '3.5', '3.4', '3.3' ];
 
 function public_key() {
@@ -55,6 +55,7 @@ function mac_script(from, pub, code) {
 # MiWRT remote power for this Mac.
 # Lets your MiWRT router (${from}) put this Mac to sleep or restart it, and nothing else:
 #  - Remote Login (SSH) is switched on. If it was off before, it accepts keys only, no passwords.
+#  - The requests it accepts: status, sleep, wake (lights the screen), restart, shut down.
 #  - The router's key is accepted only from ${from} and can only run /usr/local/bin/miwrt-power.
 #  - One sudo rule lets your account run "shutdown -r now" and "shutdown -h now" without a password.
 #  - On the charger, the Mac is told to wake for network access and not to drop into the deep
@@ -74,6 +75,7 @@ cat > /usr/local/bin/miwrt-power <<'EOS'
 case "$SSH_ORIGINAL_COMMAND" in
 	status) echo "ok macOS $(sw_vers -productVersion)" ;;
 	sleep) echo ok; nohup sh -c 'sleep 1; pmset sleepnow' >/dev/null 2>&1 & ;;
+	wake) echo ok; nohup caffeinate -u -t 10 >/dev/null 2>&1 & ;;
 	restart) echo ok; nohup sh -c 'sleep 1; sudo -n /sbin/shutdown -r now' >/dev/null 2>&1 & ;;
 	shutdown) echo ok; nohup sh -c 'sleep 1; sudo -n /sbin/shutdown -h now' >/dev/null 2>&1 & ;;
 	*) echo "not allowed"; exit 1 ;;
@@ -481,7 +483,13 @@ export function action(mac, what) {
 	if (!ACTIONS[what]) return { error: 'unknown request' };
 	// a Windows laptop with a plug hibernates instead of sleeping: the plug can bring it back from that
 	if (what == 'sleep' && h.os == 'windows' && (h.plug || h.deep)) what = 'hibernate';
+	// Wake: a sleeping laptop often stays on Wi-Fi and looks online, so "is it awake" is settled by asking it.
+	// The wake-up signal goes out first, then the laptop is asked until it answers; a Mac is then told to
+	// light its screen (a Mac set up before that request existed just refuses it, and is awake all the same).
+	let waking = what == 'wake';
+	if (waking) what = 'status';
 	let d = device(mac);
+	if (waking) system(d?.ip ? [ '/usr/sbin/miwrt-wol', mac, d.ip ] : [ '/usr/sbin/miwrt-wol', mac ]);
 	if (!d?.ip || !match(d.ip, /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/)) return { error: 'The router does not know this device\'s address.' };
 	if (!match(h.user, USER_RE)) return { error: 'The saved account name is not usable. Set remote power up again.' };
 	mkdir(DIR + '/.ssh', 0700);
@@ -520,6 +528,11 @@ export function action(mac, what) {
 				let hosts = hub.load(HOSTS, {});
 				if (hosts[mac] && !hosts[mac].hostkey) { hosts[mac].hostkey = k; hub.save_private(HOSTS, hosts); }
 			});
+		}
+		if (waking) {
+			if (h.os == 'mac') { what = 'wake'; ask(6); }
+			hub.add_alert('device', 'Woken', d.name, 'info');
+			return { ok: true, detail: 'It is awake and answering.', woke };
 		}
 		if (what != 'status') hub.add_alert('device', ({ sleep: 'Put to sleep', hibernate: 'Hibernated', restart: 'Restarted', shutdown: 'Shut down' })[what], d.name, 'info');
 		return { ok: true, detail, woke };

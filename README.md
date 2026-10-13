@@ -174,6 +174,7 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health`, `POST /pair/start`, `POST
   - A settings backup (`POST /v1/router/backup`) needs the administrator password as well as the access key: it holds the Wi-Fi passwords and the router's own keys.
   - The relay keeps a fingerprint per phone and accepts that phone's notifications only with the random value the phone gave its router (`sender` at registration, `auth` towards the relay).
   - Fresh installs: the Wi-Fi password is the unit's serial number from its label, without the slash, instead of one password shared by every router. Only a unit whose serial cannot be read falls back to the old one.
+  - Laptop wake (in the source after 1.4.7.2): `POST /v1/devices/<mac>/power` takes `wake`. The router sends the wake-up signal, asks the laptop until it answers, and tells a Mac to light its screen. A sleeping laptop often stays on Wi-Fi and looks online, so the app offers Wake whether or not the device shows as online.
   - The Hybrid Failover feed is rebuilt only when started by hand: that build runs the upstream project's script within reach of the feed signing key.
 - Android: the same split would apply to Firebase Cloud Messaging (a service-account key instead of the Apple key). There is no Android app yet, so the router has no FCM sender yet.
 
