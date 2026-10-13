@@ -4,7 +4,7 @@ OpenWrt firmware for the Xiaomi BE7000 (board RC06, Qualcomm IPQ9554), tuned to 
 
 MiWRT is built on [Beam WRT](https://github.com/timofey-maykov/be7000-openwrt) by timofey-maykov, which in turn stands on the kravasuper port of OpenWrt to this router. Everything Beam WRT does, MiWRT does: native boot from flash (no kexec), the stock firmware kept in the second slot, two-slot updates with automatic fallback, Wi-Fi 7 on 5 GHz, the 2.5 Gbit/s ports, USB 3, NFC, the split 5 GHz modes and the PPE offload work. The original documentation is kept in [docs/upstream](docs/upstream/README.en.md).
 
-Released version: **1.4.7.2**, based on Beam WRT 1.4.7 (OpenWrt main d958caf, kernel 6.18.52). What came from Beam WRT since 1.4.0 is listed [below](#beam-wrt-141-to-147). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.7.2.md).
+Released version: **1.4.7.3**, based on Beam WRT 1.4.7 (OpenWrt main d958caf, kernel 6.18.52). What came from Beam WRT since 1.4.0 is listed [below](#beam-wrt-141-to-147). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.7.3.md).
 
 ## Contents
 
@@ -174,7 +174,7 @@ Base: `https://<router>/cgi-bin/miwrt`. `GET /health`, `POST /pair/start`, `POST
   - A settings backup (`POST /v1/router/backup`) needs the administrator password as well as the access key: it holds the Wi-Fi passwords and the router's own keys.
   - The relay keeps a fingerprint per phone and accepts that phone's notifications only with the random value the phone gave its router (`sender` at registration, `auth` towards the relay).
   - Fresh installs: the Wi-Fi password is the unit's serial number from its label, without the slash, instead of one password shared by every router. Only a unit whose serial cannot be read falls back to the old one.
-  - Laptop wake (in the source after 1.4.7.2): `POST /v1/devices/<mac>/power` takes `wake`. The router sends the wake-up signal, asks the laptop until it answers, and tells a Mac to light its screen. A sleeping laptop often stays on Wi-Fi and looks online, so the app offers Wake whether or not the device shows as online.
+  - Laptop wake (from 1.4.7.3): `POST /v1/devices/<mac>/power` takes `wake`. The router sends the wake-up signal, asks the laptop until it answers, and tells a Mac to light its screen. A sleeping laptop often stays on Wi-Fi and looks online, so the app offers Wake whether or not the device shows as online.
   - The Hybrid Failover feed is rebuilt only when started by hand: that build runs the upstream project's script within reach of the feed signing key.
 - Android: the same split would apply to Firebase Cloud Messaging (a service-account key instead of the Apple key). There is no Android app yet, so the router has no FCM sender yet.
 
