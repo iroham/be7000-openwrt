@@ -6,7 +6,8 @@
 #   log                  the log of the last install
 #
 # Hybrid Failover has its own rolling feed. Zapret Manager and every native
-# package it uses are built by the main Beam WRT feed.
+# package it uses are built by the main Beam WRT feed. roamd comes from its own
+# Beam WRT feed, built from upstream with our patches (patches/feeds/roamd).
 
 LOG=/tmp/be7000-addons.log
 PID=/tmp/be7000-addons.pid
@@ -97,6 +98,37 @@ install_hf() {
 	echo started
 }
 
+status_roamd() {
+	local inst feed
+	inst=$(ver_installed roamd)
+	feed=$(ver_feed roamd)
+	printf '{"id":"roamd","installed":"%s","feed":"%s","running":%s,"service":%s,"mlo":%s}\n' \
+		"$inst" "$feed" \
+		$(running && echo true || echo false) \
+		$(pidof roamd >/dev/null 2>&1 && echo true || echo false) \
+		$(uci -q show wireless | grep -q "\.mlo='1'" && echo true || echo false)
+}
+
+# roamd and its LuCI page with the Russian translation. The package enables
+# and starts its service on install, and the daemon then writes the 802.11k/v/r
+# options into the wireless config (MLO networks are left alone, see patch 0001).
+install_roamd() {
+	running && { echo "an install is already running"; return 1; }
+	(
+		echo "apk update"
+		apk update 2>&1 | tail -3
+		echo "apk add roamd luci-app-roamd luci-i18n-roamd-ru"
+		apk add roamd luci-app-roamd luci-i18n-roamd-ru 2>&1
+		rc=$?
+		rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache 2>/dev/null
+		/etc/init.d/rpcd reload >/dev/null 2>&1 || /etc/init.d/rpcd restart >/dev/null 2>&1
+		[ $rc = 0 ] && echo "=== done" || echo "=== failed, apk exit code $rc"
+		rm -f $PID
+	) > $LOG 2>&1 < /dev/null &
+	echo $! > $PID
+	echo started
+}
+
 install_zm() {
 	running && { echo "an install is already running"; return 1; }
 	# package is there but the panel was never created: the installer step
@@ -144,6 +176,7 @@ status)
 	case "$2" in
 	hybrid-failover) status_hf ;;
 	zapret-manager) status_zm ;;
+	roamd) status_roamd ;;
 	*) echo '{"error":"unknown add-on"}' ;;
 	esac
 	;;
@@ -151,6 +184,7 @@ install)
 	case "$2" in
 	hybrid-failover) install_hf "$3" ;;
 	zapret-manager) install_zm ;;
+	roamd) install_roamd ;;
 	*) echo "unknown add-on"; exit 1 ;;
 	esac
 	;;

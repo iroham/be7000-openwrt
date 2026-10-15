@@ -1,0 +1,7 @@
+#!/bin/sh
+# apk runs this before and after every transaction. After one, check whether
+# it installed a protocol netifd does not know yet (see be7000-netifd).
+[ "$1" = post-commit ] || exit 0
+[ -n "$IPKG_INSTROOT" ] && exit 0
+[ -x /usr/libexec/be7000-netifd ] && /usr/libexec/be7000-netifd check
+exit 0

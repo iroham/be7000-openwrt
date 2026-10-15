@@ -1,0 +1,90 @@
+#!/bin/sh
+# netifd reads its protocol handlers (/lib/netifd/proto/*.sh) once, when it
+# starts. A protocol installed later (gre, xl2tpd, 6in4 ...) is unknown to it
+# until the network is restarted, and an interface of that protocol silently
+# stays down. The apk commit hook runs "check" after every install; LuCI shows
+# a button that runs "restart".
+#
+#   be7000-netifd check     write the unknown protocols to $PENDING (or clear it)
+#   be7000-netifd status    {"pending":["gre",...]}
+#   be7000-netifd restart   restart the network in the background
+
+PENDING=/var/run/be7000-netifd-pending
+
+known() {
+	ucode -e 'let c = require("ubus").connect(); let h = c ? c.call("network", "get_proto_handlers") : null; print(join("\n", keys(h ?? {})), "\n");' 2>/dev/null
+}
+
+# When netifd started, in seconds since the epoch: process start time in clock
+# ticks since boot (/proc/PID/stat field 22) plus the boot time.
+netifd_started() {
+	local pid=$(pidof netifd | awk '{ print $1 }')
+	[ -n "$pid" ] || return 1
+	awk -v hz="$(getconf CLK_TCK 2>/dev/null || echo 100)" '
+		FILENAME == "/proc/stat" && $1 == "btime" { bt = $2 }
+		FILENAME != "/proc/stat" { sub(/^.*\) /, ""); st = $20 }
+		END { if (bt && st) printf "%d\n", bt + st / hz }
+	' /proc/stat /proc/$pid/stat
+}
+
+# Protocols netifd cannot know: handler scripts and pppd plugins that showed
+# up after it started. A script that was there at start is already loaded (or
+# deliberately skipped, like pppoa without its plugin), so it is not counted.
+fresh() {
+	ucode -e '
+		import { stat, glob, readfile } from "fs";
+		let since = +ARGV[0], out = {};
+		for (let f in [ ...glob("/lib/netifd/proto/*.sh"), ...glob("/usr/lib/pppd/*/*.so") ]) {
+			// ctime, not mtime: apk keeps the build time as mtime
+			let st = stat(f);
+			if (!st || st.ctime <= since)
+				continue;
+			if (match(f, /\.sh$/)) {
+				for (let m in match(readfile(f) ?? "", /add_protocol[ \t]+([A-Za-z0-9_]+)/g))
+					out[m[1]] = true;
+			}
+			else {
+				let p = replace(f, /^.*\/|\.so$/g, "");
+				if (p in [ "pptp", "pppoatm", "pppol2tp" ])
+					out[p] = true;
+			}
+		}
+		print(join("\n", sort(keys(out))), "\n");
+	' "$1" 2>/dev/null | grep -v '^$'
+}
+
+check() {
+	local since k missing
+	since=$(netifd_started) || { rm -f $PENDING; return 0; }
+	k=$(known)
+	# netifd not answering (boot, restart in progress): say nothing
+	[ -n "$k" ] || { rm -f $PENDING; return 0; }
+	missing=$(fresh "$since" | grep -vxF "$k")
+	if [ -n "$missing" ]; then
+		echo "$missing" > $PENDING
+		echo "netifd does not know the new protocol(s) yet: $(echo $missing)."
+		echo "Restart the network (/etc/init.d/network restart) or reboot before using them."
+	else
+		rm -f $PENDING
+	fi
+}
+
+case "$1" in
+check)
+	check
+	;;
+status)
+	printf '{"pending":['
+	[ -s $PENDING ] && awk '{ printf "%s\"%s\"", (NR > 1 ? "," : ""), $0 }' $PENDING
+	printf ']}\n'
+	;;
+restart)
+	rm -f $PENDING
+	( sleep 2; /etc/init.d/network restart ) </dev/null >/dev/null 2>&1 &
+	echo "network restart scheduled"
+	;;
+*)
+	echo "usage: $0 check|status|restart" >&2
+	exit 1
+	;;
+esac

@@ -2,6 +2,13 @@
 
 [Русский](CHANGELOG.md) · [English](CHANGELOG.en.md)
 
+**1.4.8**，2026 年 10 月 11 日。
+- 如果 5 GHz 模块固件恰好在 hostapd 重新配置有客户端连接的 MLO 网络时崩溃（例如修改 Wi-Fi 设置之后），ath12k 驱动会访问已经释放的表，内核崩溃，路由器重启。现在固件会重新启动，路由器继续正常工作。
+- 安装带有新协议的软件包（GRE、L2TP、6in4 等）后，在重启网络之前该协议的接口无法启动：网络只在启动时识别协议。现在 LuCI 顶部栏会显示“重启网络”按钮并附说明，apk 安装后也会给出同样的提示。
+- 服务 → 附加组件 页面新增 roamd，即无缝 Wi-Fi 漫游：把客户端从 2.4 GHz 引导到 5 GHz、802.11k/v/r，以及由多台 OpenWrt 路由器组成的网络。它在 Beam WRT 软件源中编译，并做了两处修改。它不会改动 MLO 网络，因为在其上启用 802.11r 会导致 5 GHz 模块固件崩溃并使路由器重启。更新来自软件源，而不是它自带的检查。
+- 发布压缩包中新增 install-from-openwrt.sh，用于从使用原厂引导程序的其他 OpenWrt 迁移到 Beam WRT。如果另一个槽位里是原厂固件，它会把启动切换过去，不擦除任何东西；如果是其他内容，则直接把 Beam WRT 写入该槽位。说明见 1-install-zh.txt 末尾。
+- 说明文档和 槽位 页面现在注明：从原厂固件切回所用的 nvram 命令需在原厂固件中执行。Beam WRT 没有 nvram，在 Beam WRT 中由 槽位 页面切换槽位。
+
 **1.4.7**，2026 年 10 月 9 日。
 - 在 LuCI 的网络、接口页面创建的 AmneziaWG 接口无法启动。amneziawg-tools 软件包里缺少 netifd 启动这类接口所用的脚本，因此该协议被视为未知协议。现在该脚本和 amneziawg_watchdog 已包含在软件包中。Hybrid Failover 不受影响，它自己启动 AWG。
 - 软件源中新增了 GRE、L2TP、PPTP、IPIP、VXLAN、6in4、6rd、6to4、DS-Lite、MAP、464XLAT、relayd、bonding、SSTP、OpenConnect、vpnc 和 OpenFortiVPN 的内核模块和 LuCI 软件包，以及 MBIM 和 NCM 调制解调器的 LuCI。此前软件源里缺少这些软件包，无法创建这类接口。它们不在固件镜像中，可在 LuCI 的系统、软件包页面或用 apk 安装。内核模块是为 1.4.7 的内核编译的，因此需要更新固件。

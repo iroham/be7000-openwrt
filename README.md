@@ -4,7 +4,7 @@ OpenWrt firmware for the Xiaomi BE7000 (board RC06, Qualcomm IPQ9554), tuned to 
 
 MiWRT is built on [Beam WRT](https://github.com/timofey-maykov/be7000-openwrt) by timofey-maykov, which in turn stands on the kravasuper port of OpenWrt to this router. Everything Beam WRT does, MiWRT does: native boot from flash (no kexec), the stock firmware kept in the second slot, two-slot updates with automatic fallback, Wi-Fi 7 on 5 GHz, the 2.5 Gbit/s ports, USB 3, NFC, the split 5 GHz modes and the PPE offload work. The original documentation is kept in [docs/upstream](docs/upstream/README.en.md).
 
-Released version: **1.4.7.4**, based on Beam WRT 1.4.7 (OpenWrt main d958caf, kernel 6.18.52). What came from Beam WRT since 1.4.0 is listed [below](#beam-wrt-141-to-147). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.7.4.md).
+Released version: **1.4.8.1**, based on Beam WRT 1.4.8 (OpenWrt main d958caf, kernel 6.18.52). What came from Beam WRT since 1.4.0 is listed [below](#beam-wrt-141-to-148). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.8.1.md).
 
 ## Contents
 
@@ -47,9 +47,9 @@ Returning from the two-radio 5 GHz mode to one radio left the upper radio's chan
 
 `curl` with HTTP/2 (the notification sender needs it), `sqm-scripts` and its LuCI page (cake), `nlbwmon` and its page (per-device traffic accounting), `banip` and its page (IP block lists), `umdns` (mDNS) and `tcpdump-mini`. They survive every sysupgrade without depending on the feed.
 
-### Beam WRT 1.4.1 to 1.4.7
+### Beam WRT 1.4.1 to 1.4.8
 
-MiWRT 1.4.7.1 carries everything Beam WRT released up to 1.4.7. It adds to what MiWRT 1.4.0.3 did and changes none of it: the app service, the radio settings and the packages in the image are the same.
+MiWRT 1.4.7.1 carries everything Beam WRT released up to 1.4.7, and MiWRT 1.4.8.1 adds Beam WRT 1.4.8. It adds to what MiWRT 1.4.0.3 did and changes none of it: the app service, the radio settings and the packages in the image are the same.
 
 | From Beam WRT | What it brings | In the image |
 |---|---|---|
@@ -65,11 +65,16 @@ MiWRT 1.4.7.1 carries everything Beam WRT released up to 1.4.7. It adds to what 
 | 1.4.7 | AmneziaWG interfaces made in LuCI come up; GRE, L2TP, PPTP, IPIP, VXLAN, 6in4, 6rd, 6to4, DS-Lite, MAP, 464XLAT, relayd, bonding, SSTP, OpenConnect, vpnc, OpenFortiVPN and MBIM/NCM modem pages are in the feed | optional packages |
 | 1.4.7 | The build no longer stops on the archive hash of the 2.4 GHz radio firmware package | build only |
 
+| 1.4.8 | The 5 GHz driver (ath12k) no longer crashes the kernel when the radio's firmware is restarted after a crash: four driver patches keep its tables valid during recovery. The headline case is an MLO reconfiguration; most of the fix is in the general recovery path | yes |
+| 1.4.8 | After installing a package that adds a network protocol, LuCI offers a network restart (the network learns its protocols only when it starts) | yes |
+| 1.4.8 | roamd (moving clients between bands and routers, 802.11k/v/r) in Services, Add-ons, built in our feed, leaves MLO networks alone and takes updates from the feed | optional package |
+| 1.4.8 | `install-from-openwrt.sh` in the release archive, for moving to MiWRT from another OpenWrt with the factory bootloader | release archive |
+
 The third-party sources behind the optional packages are pinned to exact commits in `feeds-extra.conf`. At the time of the merge three of the four pins were the newest commit of their repository; NetShift had moved on and stays on the commit Beam WRT built and tested.
 
 Nothing in these releases changes the Wi-Fi drivers, hostapd, the kernel or dnsmasq.
 
-### A checked slot write during upgrades (from 1.4.7.4)
+### A checked slot write during upgrades (from 1.4.8.1)
 
 An upgrade erases the running slot and then writes the new image into it. On 15 October 2026 an upgrade from 1.4.7.1 to 1.4.7.3 stopped after the erase: the slot was left formatted with no volumes, the bootloader had nothing to start and fell back to the factory firmware in the other slot. Nothing recorded why. MiWRT now ships its own `/lib/upgrade/platform.sh` (based on the port's, in `overlay-files`) in which the write is checked for the `kernel` and `ubi_rootfs` volumes, tried a second time if it fails, and every step is logged to `/etc/miwrt/last-upgrade.log` on the settings volume, which survives the upgrade. If both tries fail, the boot is pointed at the factory slot at once. Getting back from the factory firmware is described in `docs/instruction/3-rollback-and-problems-en.txt`.
 

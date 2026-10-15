@@ -1,0 +1,15 @@
+{
+	"luci-app-be7000-netifd": {
+		"description": "Network restart after a new interface protocol was installed",
+		"read": {
+			"ubus": {
+				"be7000-netifd": [ "status" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"be7000-netifd": [ "restart" ]
+			}
+		}
+	}
+}

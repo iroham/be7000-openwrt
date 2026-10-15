@@ -632,6 +632,7 @@ kbd {
 
 .nb-update svg { width: 16px; height: 16px; }
 .nb-update:hover { background: color-mix(in srgb, var(--nb-accent) 22%, transparent); }
+button.nb-update { cursor: pointer; font-family: inherit; }
 
 @media (max-width: 600px) {
 	.nb-update span { display: none; }

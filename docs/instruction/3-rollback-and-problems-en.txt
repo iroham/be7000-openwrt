@@ -31,6 +31,8 @@ nvram set flag_ota_reboot=0
 nvram commit
 reboot
 
+These commands run in the factory firmware, which has nvram. MiWRT itself has no nvram, there the slot is switched on the System, Slots page.
+
 Without SSH, install MiWRT again as in 1-install-en.txt. Your MiWRT settings are kept.
 
 

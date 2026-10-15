@@ -1,0 +1,29 @@
+'use strict';
+
+import { popen } from 'fs';
+
+const BIN = '/usr/libexec/be7000-netifd';
+
+function run(args) {
+	let fd = popen(`${BIN} ${args} 2>&1`, 'r');
+	let out = fd ? trim(fd.read('all') ?? '') : '';
+	let rc = fd ? fd.close() : -1;
+	return { rc, out };
+}
+
+return {
+	'be7000-netifd': {
+		status: {
+			call: function() {
+				let r = run('status');
+				try { return json(r.out); } catch (e) { return { pending: [] }; }
+			}
+		},
+		restart: {
+			call: function() {
+				let r = run('restart');
+				return { ok: r.rc == 0, output: r.out };
+			}
+		}
+	}
+};

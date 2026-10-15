@@ -77,3 +77,13 @@ Like stock (set_5g_split), in the two-radio mode the script flips the RF lines. 
 
 With two radios iwinfo gives each radio only its own channels (tree 008), before that LuCI offered the lower radio the upper one's channels and the AP did not start.
 
+## 5 GHz firmware crash
+
+When the QCN9274 firmware crashes, ath12k restarts it and builds the datapath again. If hostapd was removing an MLO interface with connected clients or LuCI was asking for channel statistics at that moment, the kernel crashed and the router rebooted.
+
+| Patch (mac80211, ath12k) | What it does |
+|------|-----------|
+| 312 | the peer address table is no longer freed under a reader during firmware recovery, and a lookup in a missing table finds nothing instead of reading address zero |
+| 313 | CRASH_FLUSH is cleared only after the CE and DP rings are set up again, otherwise WMI commands sent during recovery went into rings pointing at freed memory |
+| 314 | the same for the link station address table, and after a failed recovery WMI commands and data are refused at once instead of going into half torn down rings |
+| 315 | removing an MLO station skips links that were left without a vdev by a firmware crash, before the kernel read address zero on such a link |

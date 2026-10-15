@@ -2,6 +2,13 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.4.8**, October 11, 2026.
+- If the 5 GHz module firmware crashed while hostapd was reconfiguring the MLO network with clients connected, for example after a Wi-Fi settings change, the ath12k driver used tables that had already been freed, the kernel crashed and the router rebooted. Now the firmware restarts and the router keeps running.
+- After installing a package with a new protocol (GRE, L2TP, 6in4 and others), its interface did not come up until the network was restarted: the network learns its protocols only when it starts. LuCI now shows a Restart network button in the top bar with an explanation, and apk prints the same after the install.
+- The Services, Add-ons page now has roamd, seamless Wi-Fi roaming: moving clients from 2.4 to 5 GHz, 802.11k/v/r and a network of several OpenWrt routers. It is built in the Beam WRT feed with two changes. It leaves the MLO network alone, because 802.11r on it crashed the 5 GHz module firmware and rebooted the router. Updates come from the feed rather than its built-in check.
+- The release archive has install-from-openwrt.sh for moving to Beam WRT from another OpenWrt with the factory bootloader. If the other slot holds the factory firmware, it switches the boot to it and erases nothing. If it holds something else, it writes Beam WRT there right away. See the end of 1-install-en.txt.
+- The instruction and the Slots page now say that the nvram commands for coming back from stock run in the factory firmware. Beam WRT has no nvram, there the Slots page switches the slot.
+
 **1.4.7**, October 9, 2026.
 - An AmneziaWG interface created in LuCI on the Network, Interfaces page did not come up. The amneziawg-tools package lacked the script netifd uses to bring such an interface up, so the protocol was unknown. The script and amneziawg_watchdog are part of the package now. Hybrid Failover was not affected, it brings AWG up on its own.
 - The feed now has the kernel modules and LuCI packages for GRE, L2TP, PPTP, IPIP, VXLAN, 6in4, 6rd, 6to4, DS-Lite, MAP, 464XLAT, relayd, bonding, SSTP, OpenConnect, vpnc and OpenFortiVPN, plus LuCI for MBIM and NCM modems. Before, such interfaces could not be created because the packages were missing from the feed. They are not in the image, install them in LuCI on the System, Software page or with apk. The kernel modules are built for the 1.4.7 kernel, so they need the firmware update.
