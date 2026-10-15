@@ -4,7 +4,7 @@ OpenWrt firmware for the Xiaomi BE7000 (board RC06, Qualcomm IPQ9554), tuned to 
 
 MiWRT is built on [Beam WRT](https://github.com/timofey-maykov/be7000-openwrt) by timofey-maykov, which in turn stands on the kravasuper port of OpenWrt to this router. Everything Beam WRT does, MiWRT does: native boot from flash (no kexec), the stock firmware kept in the second slot, two-slot updates with automatic fallback, Wi-Fi 7 on 5 GHz, the 2.5 Gbit/s ports, USB 3, NFC, the split 5 GHz modes and the PPE offload work. The original documentation is kept in [docs/upstream](docs/upstream/README.en.md).
 
-Released version: **1.4.7.3**, based on Beam WRT 1.4.7 (OpenWrt main d958caf, kernel 6.18.52). What came from Beam WRT since 1.4.0 is listed [below](#beam-wrt-141-to-147). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.7.3.md).
+Released version: **1.4.7.4**, based on Beam WRT 1.4.7 (OpenWrt main d958caf, kernel 6.18.52). What came from Beam WRT since 1.4.0 is listed [below](#beam-wrt-141-to-147). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.7.4.md).
 
 ## Contents
 
@@ -69,7 +69,7 @@ The third-party sources behind the optional packages are pinned to exact commits
 
 Nothing in these releases changes the Wi-Fi drivers, hostapd, the kernel or dnsmasq.
 
-### A checked slot write during upgrades (in the source after 1.4.7.3)
+### A checked slot write during upgrades (from 1.4.7.4)
 
 An upgrade erases the running slot and then writes the new image into it. On 15 October 2026 an upgrade from 1.4.7.1 to 1.4.7.3 stopped after the erase: the slot was left formatted with no volumes, the bootloader had nothing to start and fell back to the factory firmware in the other slot. Nothing recorded why. MiWRT now ships its own `/lib/upgrade/platform.sh` (based on the port's, in `overlay-files`) in which the write is checked for the `kernel` and `ubi_rootfs` volumes, tried a second time if it fails, and every step is logged to `/etc/miwrt/last-upgrade.log` on the settings volume, which survives the upgrade. If both tries fail, the boot is pointed at the factory slot at once. Getting back from the factory firmware is described in `docs/instruction/3-rollback-and-problems-en.txt`.
 
