@@ -69,6 +69,12 @@ The third-party sources behind the optional packages are pinned to exact commits
 
 Nothing in these releases changes the Wi-Fi drivers, hostapd, the kernel or dnsmasq.
 
+### A checked slot write during upgrades (in the source after 1.4.7.3)
+
+An upgrade erases the running slot and then writes the new image into it. On 15 October 2026 an upgrade from 1.4.7.1 to 1.4.7.3 stopped after the erase: the slot was left formatted with no volumes, the bootloader had nothing to start and fell back to the factory firmware in the other slot. Nothing recorded why. MiWRT now ships its own `/lib/upgrade/platform.sh` (based on the port's, in `overlay-files`) in which the write is checked for the `kernel` and `ubi_rootfs` volumes, tried a second time if it fails, and every step is logged to `/etc/miwrt/last-upgrade.log` on the settings volume, which survives the upgrade. If both tries fail, the boot is pointed at the factory slot at once. Getting back from the factory firmware is described in `docs/instruction/3-rollback-and-problems-en.txt`.
+
+When merging from Beam WRT, compare this file with the port's `platform.sh` and carry over any change made there.
+
 ### Name and look
 
 The system calls itself MiWRT in LuCI, the console banner and `/etc/openwrt_release`; the default hostname is `MiWRT`. The web interface carries the MiWRT mark (a roof line that turns into a signal) and indigo accent colours. Image file names stay `openwrt-qualcommbe-ipq95xx-xiaomi_be7000-…`, which the installer and the update page look up by name.

@@ -524,7 +524,7 @@ export function shaping_set(b) {
 export function firmware_install() {
 	let f = firmware(true);
 	if (!f.update_available) return 'The router already runs the latest version.';
-	hub.add_alert('router', 'Firmware update started', `Installing ${f.latest_name ?? f.latest}. The router restarts when it is done; the old version stays in the second slot.`, 'warning');
+	hub.add_alert('router', 'Firmware update started', `Installing ${f.latest_name ?? f.latest}. It replaces the MiWRT the router runs now; settings are kept and the router restarts when it is done.`, 'warning');
 	system('(sleep 3; be7000-update apply --yes) >/tmp/miwrt/update.log 2>&1 &');
 	return null;
 };
