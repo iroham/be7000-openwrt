@@ -8,7 +8,7 @@ set -u
 
 DIR=$1
 DEVICE=openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100
-BOARD=xiaomi,redmi-router-ac2100
+BOARD=xiaomi_redmi-router-ac2100     # the profile name, as sysupgrade's CONTROL file carries it
 KERNEL_MAX=$((4 * 1024 * 1024))     # the kernel partition is 4 MiB
 fail=0
 bad() { echo "FAIL: $*" >&2; fail=1; }
@@ -16,10 +16,11 @@ ok() { echo "ok: $*"; }
 
 cd "$DIR" || { echo "no such directory: $DIR" >&2; exit 1; }
 
-# only this device, never the Mi Router AC2100 (different flash layout, bricks)
+# only this device, never the Mi Router AC2100 (different flash layout, bricks).
+# OpenWrt names that one xiaomi_mi-router-ac2100; ours is xiaomi_redmi-router-ac2100.
 for f in *; do
 	case "$f" in
-	*mi-router-ac2100*|*mi_router*) bad "an image for another router is present: $f" ;;
+	*xiaomi_mi-router*|*mi_router*) bad "an image for another router is present: $f" ;;
 	esac
 done
 
