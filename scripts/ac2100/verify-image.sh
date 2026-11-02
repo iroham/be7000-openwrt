@@ -24,7 +24,7 @@ for f in *; do
 	esac
 done
 
-for f in "$DEVICE-squashfs-sysupgrade.bin" "$DEVICE-squashfs-kernel1.bin" "$DEVICE-squashfs-rootfs0.bin" "$DEVICE.manifest" sha256sums; do
+for f in "$DEVICE-squashfs-sysupgrade.bin" "$DEVICE-squashfs-kernel1.bin" "$DEVICE-squashfs-rootfs0.bin" "$DEVICE.manifest" sha256sums.txt; do
 	[ -s "$f" ] && ok "present: $f ($(wc -c < "$f") bytes)" || bad "missing or empty: $f"
 done
 
@@ -53,9 +53,12 @@ if [ -s "$DEVICE.manifest" ]; then
 	done
 fi
 
-# checksums over the shipped files
-if [ -s sha256sums ]; then
-	sha256sum -c --quiet sha256sums && ok "sha256sums verify" || bad "sha256sums do not verify"
+# checksums over the shipped files, and their signature where one was made
+if [ -s sha256sums.txt ]; then
+	sha256sum -c --quiet sha256sums.txt && ok "sha256sums.txt verifies" || bad "sha256sums.txt does not verify"
+fi
+if [ -s sha256sums.txt.sig ]; then
+	[ -s "${PUBKEY:-/nonexistent}" ] && { openssl dgst -sha256 -verify "$PUBKEY" -signature sha256sums.txt.sig sha256sums.txt >/dev/null 2>&1 && ok "signature verifies with $PUBKEY" || bad "signature does not verify"; }
 fi
 
 [ "$fail" = 0 ] && echo "verify-image: all checks passed" || { echo "verify-image: FAILED" >&2; exit 1; }

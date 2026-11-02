@@ -13,4 +13,4 @@ Nothing here is read by the BE7000 build, and nothing in `overlay-files` is chan
 | `etc/init.d/miwrt-wifi-defaults`, `etc/rc.d/S99miwrt-wifi-defaults` | on a fresh install: both radios on, SSID `MiWRT`, the serial number as the password, country GB, no group-key renewal on 5 GHz |
 | `etc/sysupgrade.conf` | what an update keeps besides the defaults |
 
-The release file `/etc/miwrt-release` is written by the assemble script, not kept here.
+The release file `/etc/miwrt-release` (version, tag, device, tag prefix, `PRERELEASE_OK=1` while in testing) is written by the assemble script, not kept here; the workflow adds `/etc/apk/keys/public-key.pem`, the MiWRT signing key, when the secret is available.

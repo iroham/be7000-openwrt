@@ -1,0 +1,81 @@
+MiWRT 1.0.0 for the Xiaomi Redmi Router AC2100: installing from the stock firmware
+
+STATUS: TESTING. This image has not yet been flashed on a router by the MiWRT
+project. Read docs/plans/redmi-ac2100-hardware-test.md before you start; the
+steps here were written from documentation and memory and must be compared
+with the OpenWrt wiki page for the Redmi Router AC2100 before the first flash.
+Where this text and the wiki differ, the wiki wins.
+
+Which router
+  Xiaomi Redmi Router AC2100, board RM2100, six antennas, model name RM2100 in
+  the stock web interface. NOT the Xiaomi Mi Router AC2100 (R2100, four
+  antennas plus a different case): that one has a different flash layout and
+  these files will brick it.
+
+What you need
+  - The two files from the release: openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100-squashfs-kernel1.bin
+    and openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100-squashfs-rootfs0.bin,
+    and sha256sums.txt to check them.
+  - A computer on the router's LAN with a cable, and SSH or telnet access to
+    the stock firmware (next section).
+  - A way back: the stock firmware is not kept. Going back means the recovery
+    procedure in 3-recovery-and-problems-en.txt, which needs a TFTP server or
+    the Breed bootloader. Make sure you can do that before you flash.
+
+Step 1. Get a shell on the stock firmware
+  The stock firmware has no SSH. Versions up to 2.0.23 can be opened through a
+  known weakness in the web interface; newer stock versions have to be
+  downgraded first to one of those through the stock web interface (Settings,
+  Status, manual update with the official older firmware). The exact method
+  and the tool to use are on the OpenWrt wiki page and change over time; use
+  what the wiki says today.
+  When you have a shell, confirm the model before anything else:
+      cat /proc/cpuinfo | head -3           # MT7621
+      nvram get model                       # RM2100 (or check the label)
+      cat /proc/mtd                         # kernel0, kernel1, rootfs0, rootfs1, overlay ...
+
+Step 2. Copy the files to the router
+  From your computer, into the router's /tmp (it is RAM, with room for both files):
+      scp openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100-squashfs-kernel1.bin root@192.168.31.1:/tmp/kernel1.bin
+      scp openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100-squashfs-rootfs0.bin root@192.168.31.1:/tmp/rootfs0.bin
+  On the router, check the checksums against sha256sums.txt:
+      sha256sum /tmp/kernel1.bin /tmp/rootfs0.bin
+
+Step 3. Point the bootloader at the OpenWrt pair and write the files
+  OpenWrt lives in the kernel1 partition and a UBI area that starts where the
+  stock rootfs0 was. The boot flags below tell the stock bootloader to start
+  from that pair and not to fall back. VERIFY THESE AGAINST THE WIKI; the
+  names are from the stock bootloader, the values are what OpenWrt documents.
+      nvram set flag_try_sys1_failed=0
+      nvram set flag_try_sys2_failed=0
+      nvram set flag_boot_success=1
+      nvram set flag_last_success=1
+      nvram set flag_boot_rootfs=1
+      nvram commit
+      mtd write /tmp/kernel1.bin kernel1
+      mtd -r write /tmp/rootfs0.bin rootfs0
+  The last command reboots the router. The first boot takes two to three
+  minutes: UBI is formatted, the settings volume is created, and about half a
+  minute later the Wi-Fi defaults are applied.
+
+Step 4. First contact
+  - By cable: the router is 192.168.1.1, user root, no password. Set one under
+    System, Administration (the app pairs with that password).
+  - By Wi-Fi: both bands come up as "MiWRT" with this router's serial number
+    (the one on the label) as the password. If the serial could not be read
+    the password is miwrt-ac2100; the system log says which. Change it.
+  - The console greeting and System, Overview show "MiWRT 1.0.0 ... (Redmi
+    AC2100, OpenWrt 25.12.6)"; third-party scripts see OpenWrt 25.12.6.
+
+Step 5. Run the hardware report and keep it
+      sh /path/to/hw-report.sh > /tmp/report.txt
+  (hw-report.sh is in the release archive; copy it to the router with scp.)
+  The test protocol in docs/plans/redmi-ac2100-hardware-test.md says what to
+  look at in it.
+
+Coming from another OpenWrt instead of from stock
+  An OpenWrt 21.02 or newer on this router upgrades with the sysupgrade image
+  (2-update-en.txt). OpenWrt 19.07 or older used swconfig; this image uses
+  DSA, so settings cannot be carried over: flash with
+      sysupgrade -F -n openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100-squashfs-sysupgrade.bin
+  and set the router up again.

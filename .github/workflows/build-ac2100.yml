@@ -6,8 +6,11 @@ name: ac2100 image
 # About ten minutes. Separate from build.yml on purpose: nothing here touches
 # the BE7000 image.
 #
-# Phase 1 (docs/plans/redmi-ac2100.md): the image is built, verified and kept
-# as a workflow artifact. Nothing is released.
+# Every run builds, verifies and keeps the image as a workflow artifact. A
+# push of an ac2100-v* tag also signs the checksum list with the MiWRT key,
+# publishes a GitHub pre-release (every AC2100 release stays a pre-release
+# until the hardware phase in docs/plans/redmi-ac2100.md is through) and
+# mirrors the image on GitHub Pages for miwrt-update.
 
 on:
   workflow_dispatch:
@@ -24,6 +27,7 @@ on:
       - "overlay-ac2100/**"
       - "scripts/ac2100/**"
       - ".github/workflows/build-ac2100.yml"
+    tags: [ "ac2100-v*" ]
 
 concurrency:
   group: ac2100-image-${{ github.ref }}
@@ -58,11 +62,18 @@ jobs:
           curl -fsSL -o sha256sums "$base/sha256sums"
           grep " \*$ib\$" sha256sums | sha256sum -c -
           have=$(sha256sum "$ib" | cut -d' ' -f1)
-          if [ -n "$IB_SHA256" ]; then
-            [ "$have" = "$IB_SHA256" ] || { echo "::error::ImageBuilder sha256 is $have, expected $IB_SHA256"; exit 1; }
+          # the archive hash seen on the first build of each release; a new
+          # release gets its line after its first run has been looked at
+          case "$OPENWRT" in
+            25.12.6) pin=4c8b3874b686077372839bc246d5f40e822a0082747dfbb181940e158089c2d5 ;;
+            *) pin= ;;
+          esac
+          want=${IB_SHA256:-$pin}
+          if [ -n "$want" ]; then
+            [ "$have" = "$want" ] || { echo "::error::ImageBuilder sha256 is $have, expected $want"; exit 1; }
             echo "ImageBuilder archive matches the pinned hash"
           else
-            echo "::notice::ImageBuilder $ib sha256 $have (pin it with the imagebuilder_sha256 input)"
+            echo "::notice::ImageBuilder $ib sha256 $have (pin it in the workflow once reviewed)"
           fi
           echo "imagebuilder sha256 $have  $ib"
           echo "IB_HASH=$have" >> "$GITHUB_ENV"
@@ -76,8 +87,32 @@ jobs:
           TAG="${{ github.ref_name }}"
           case "$TAG" in ac2100-v*) VER="${TAG#ac2100-v}"; VER="${VER%%-*}" ;; *) VER=dev; TAG= ;; esac
           scripts/ac2100/assemble-files.sh ib/files "$VER" "$TAG" "${{ github.run_id }}" "$OPENWRT"
+          echo "VER=$VER" >> "$GITHUB_ENV"
           echo "--- /etc/miwrt-release"; cat ib/files/etc/miwrt-release
           echo "--- files"; (cd ib/files && find . -type f -o -type l | sort)
+
+      # The key the BE7000 feed and releases are signed with. Its public half
+      # goes into the image so miwrt-update can check a release signature and
+      # apk can trust a MiWRT feed later; the private half signs the checksum
+      # list of a release below. A fork without the secret builds an unsigned
+      # image that cannot self-update.
+      - name: Signing key
+        env:
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
+        run: |
+          set -eu
+          if [ -z "$APK_SIGNING_KEY" ]; then
+            echo "::warning::APK_SIGNING_KEY secret is not set: unsigned build, no release possible"
+            echo "SIGNED=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          umask 077
+          printf '%s\n' "$APK_SIGNING_KEY" > "$RUNNER_TEMP/private-key.pem"
+          mkdir -p ib/files/etc/apk/keys
+          openssl ec -in "$RUNNER_TEMP/private-key.pem" -pubout -out ib/files/etc/apk/keys/public-key.pem 2>/dev/null
+          chmod 644 ib/files/etc/apk/keys/public-key.pem
+          echo "public key sha256: $(sha256sum ib/files/etc/apk/keys/public-key.pem | cut -c1-16)"
+          echo "SIGNED=1" >> "$GITHUB_ENV"
 
       - name: Build the image
         run: |
@@ -114,7 +149,13 @@ jobs:
             echo "run=${{ github.run_id }}"
           } > out/build-metadata.txt
           cat out/build-metadata.txt
-          (cd out && sha256sum openwrt-* > sha256sums)
+          (cd out && sha256sum openwrt-* > sha256sums.txt)
+          if [ "${SIGNED:-0}" = 1 ]; then
+            # the list is signed with the key every image carries, so a router can
+            # tell that an update really comes from this build
+            openssl dgst -sha256 -sign "$RUNNER_TEMP/private-key.pem" -out out/sha256sums.txt.sig out/sha256sums.txt
+            openssl dgst -sha256 -verify ib/files/etc/apk/keys/public-key.pem -signature out/sha256sums.txt.sig out/sha256sums.txt
+          fi
           ls -la out
 
       - name: Verify the image
@@ -149,6 +190,73 @@ jobs:
             echo "$(wc -l < "$DEVICE.manifest") packages"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package the release
+        if: startsWith(github.ref, 'refs/tags/ac2100-v')
+        run: |
+          set -eu
+          [ "${SIGNED:-0}" = 1 ] || { echo "::error::a release needs the signing key"; exit 1; }
+          ZIP="miwrt-ac2100-v$VER.zip"
+          mkdir -p out/zip
+          cp out/"$DEVICE"-squashfs-kernel1.bin out/"$DEVICE"-squashfs-rootfs0.bin out/"$DEVICE"-squashfs-sysupgrade.bin \
+             out/sha256sums.txt out/sha256sums.txt.sig out/build-metadata.txt \
+             docs/instruction/ac2100/*.txt scripts/ac2100/hw-report.sh out/zip/
+          sed -i "1s/^MiWRT [0-9][0-9.]*/MiWRT $VER/" out/zip/*.txt
+          (cd out/zip && zip -q -X "../$ZIP" ./*)
+          rm -r out/zip
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+          sha256sum "out/$ZIP"
+
+      - name: Publish the pre-release
+        if: startsWith(github.ref, 'refs/tags/ac2100-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          cd out
+          notes=../docs/release-notes/${{ github.ref_name }}.md
+          if [ -f "$notes" ]; then
+            printf '\n\nSHA-256 of %s\n%s\n' "$ZIP" "$(sha256sum "$ZIP" | cut -d' ' -f1)" >> "$notes"
+            args=(--notes-file "$notes")
+          else
+            args=(--generate-notes)
+          fi
+          assets=("$ZIP" "$DEVICE-squashfs-kernel1.bin" "$DEVICE-squashfs-rootfs0.bin" "$DEVICE-squashfs-sysupgrade.bin" \
+                  "$DEVICE.manifest" build-metadata.txt sha256sums.txt sha256sums.txt.sig)
+          if gh release view "${{ github.ref_name }}" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "${{ github.ref_name }}" -R "${{ github.repository }}" --clobber "${assets[@]}"
+          else
+            gh release create "${{ github.ref_name }}" -R "${{ github.repository }}" --prerelease \
+              --title "MiWRT $VER for the Redmi AC2100" "${args[@]}" "${assets[@]}"
+          fi
+
+      # miwrt-update tries firmware/<tag>/ on GitHub Pages before github.com.
+      # Same layout as the BE7000 mirror in build.yml; the three newest
+      # AC2100 tags are kept, the BE7000 ones are not touched.
+      - name: Mirror the image on GitHub Pages
+        if: startsWith(github.ref, 'refs/tags/ac2100-v')
+        run: |
+          set -eu
+          git clone --filter=blob:none --no-checkout --depth 1 --branch gh-pages \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mirror
+          cd mirror
+          git sparse-checkout set --no-cone /firmware/
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          tag="${{ github.ref_name }}"
+          for i in 1 2 3 4 5; do
+            git fetch -q --filter=blob:none --depth 1 origin gh-pages
+            git checkout -q -B gh-pages FETCH_HEAD
+            mkdir -p "firmware/$tag"
+            cp "../out/$DEVICE-squashfs-sysupgrade.bin" ../out/sha256sums.txt ../out/sha256sums.txt.sig "firmware/$tag/"
+            ls -d firmware/ac2100-v* | sort -V | head -n -3 | xargs -r git rm -rq
+            git add -A firmware
+            git diff --cached --quiet && exit 0
+            git commit -q -m "firmware: $tag image mirror"
+            git push -q origin gh-pages && exit 0
+            sleep $((i * 10))
+          done
+          exit 1
 
       - uses: actions/upload-artifact@v4
         with:

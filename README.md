@@ -216,7 +216,7 @@ Never write to the bootloader partitions `0:APPSBL` and `0:APPSBL_1`.
 
 ## Other routers
 
-A MiWRT image for the Xiaomi Redmi Router AC2100 is being prepared: the `ac2100 image` workflow builds it with the official OpenWrt ImageBuilder from `overlay-ac2100/` and the shared MiWRT files, and nothing in the BE7000 build changes for it. It is not released and has not been flashed on a router yet; the plan and its gates are in [docs/plans/redmi-ac2100.md](docs/plans/redmi-ac2100.md).
+A MiWRT image for the Xiaomi Redmi Router AC2100 is in testing: the `ac2100 image` workflow builds it with the official OpenWrt ImageBuilder from `overlay-ac2100/` and the shared MiWRT files, and nothing in the BE7000 build changes for it. Tags `ac2100-v*` publish signed pre-releases; the install, update and recovery texts are in [docs/instruction/ac2100](docs/instruction/ac2100/), the plan and its gates in [docs/plans/redmi-ac2100.md](docs/plans/redmi-ac2100.md) and the hardware test protocol in [docs/plans/redmi-ac2100-hardware-test.md](docs/plans/redmi-ac2100-hardware-test.md). No router has been flashed by the project yet; the texts say what to verify first.
 
 ## Building
 
