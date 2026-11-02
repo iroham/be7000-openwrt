@@ -1,0 +1,52 @@
+MiWRT 1.0.0 for the Xiaomi Redmi Router AC2100: recovery and problems
+
+STATUS: TESTING. No recovery path below has been exercised by the MiWRT
+project yet. Compare with the OpenWrt wiki page for the Redmi Router AC2100
+and with the Breed documentation before relying on any of it.
+
+The router does not come up after flashing
+  - Wait three minutes on the first boot; UBI formatting takes time.
+  - Status LED amber and no network after five minutes: the kernel did not
+    start. The most likely causes are a kernel1.bin written to the wrong
+    partition or boot flags not set. Recovery is below.
+
+Serial console
+  ttyS1 inside the case, 115200 8n1, 3.3 V. It shows the bootloader and the
+  kernel messages and is the surest way to see what is wrong. The stock
+  environment has it enabled.
+
+Recovery with the stock bootloader (TFTP)
+  The stock U-Boot can load a firmware over TFTP when the reset button is held
+  while the power is connected. The expected file name, the server address
+  (usually 192.168.31.100) and what the bootloader accepts (a stock image or
+  an OpenWrt kernel1/rootfs0 pair) are on the wiki; this has not been checked
+  here.
+
+Recovery with Breed
+  Breed is a replacement bootloader for MT7621 routers with a web recovery
+  page and a backup of the stock bootloader. A Breed build for the RM2100
+  exists; installing it is a separate decision with its own risks and is not
+  part of MiWRT. If you run Breed, its web page restores any image.
+
+Going back to the stock firmware
+  The stock firmware is not kept on the flash. Going back means flashing a
+  stock image through one of the recovery paths above, with the stock
+  partition layout. The MiWRT project has no tested procedure for this yet.
+
+Wi-Fi is up but slow for one device
+  The 5 GHz chip (MT7615) has known per-client slowness with some devices on
+  the open-source driver. Try a 2.4 GHz connection for that device and note
+  the device model in the test log.
+
+The router resets under load
+  Known open issues on this SoC: a transmit-queue watchdog in the Ethernet
+  driver, and resets when capturing packets on a PPPoE WAN with hardware
+  offloading on. Hardware offloading is off by default in MiWRT for that
+  reason; if you turned it on, turn it off and watch again. Keep the output
+  of hw-report.sh from before and after.
+
+Factory reset
+  Hold the reset button for ten seconds with the router running, or
+      firstboot && reboot
+  over SSH. The settings volume is wiped and the Wi-Fi defaults are applied
+  again on the next boot.

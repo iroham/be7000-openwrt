@@ -54,6 +54,8 @@ DEVICE=$(installed_field DEVICE)
 DEVICE=${DEVICE:-openwrt-qualcommbe-ipq95xx-xiaomi_be7000}
 TAG_PREFIX=$(installed_field TAG_PREFIX)
 TAG_PREFIX=${TAG_PREFIX:-v}
+# a router in a testing programme takes pre-releases too (PRERELEASE_OK=1 in the release file)
+PRERELEASE_OK=$(installed_field PRERELEASE_OK)
 TAG_PREFIX_RE=$(printf '%s' "$TAG_PREFIX" | sed 's/[][\.*^$+?(){}|/]/\\&/g')
 
 json_escape() {
@@ -119,7 +121,7 @@ do_check() {
 		img_url=$(jsonfilter -i "$release" -e '@.assets[*].browser_download_url' 2>/dev/null | grep -- "/$DEVICE-squashfs-sysupgrade\.bin$" | head -1)
 		sums_url=$(jsonfilter -i "$release" -e '@.assets[*].browser_download_url' 2>/dev/null | grep -- '/sha256sums\.txt$' | head -1)
 		if printf '%s\n' "$tag" | grep -Eq "^$TAG_PREFIX_RE[0-9]+\.[0-9]+(\.[0-9]+)?([.-][0-9A-Za-z][0-9A-Za-z.-]*)?\$" &&
-			[ "$draft" != true ] && [ "$prerelease" != true ] &&
+			[ "$draft" != true ] && { [ "$prerelease" != true ] || [ "$PRERELEASE_OK" = 1 ]; } &&
 			[ -n "$img_url" ] && [ -n "$sums_url" ]; then
 			break
 		fi

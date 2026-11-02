@@ -1,6 +1,6 @@
 # Plan: MiWRT for the Xiaomi Redmi Router AC2100
 
-Status: Phases 0 and 1 (section 10) are implemented in pull request 1: the updater and API changes, and the `ac2100 image` workflow with `overlay-ac2100/` and `scripts/ac2100/`. Phases 2 to 4 are not started; no AC2100 image has been flashed. Written 2 November 2026 against MiWRT 1.5.4.1 (pull request 1), OpenWrt 25.12 and the analysis in jacek4yang/redmi-ac2100-openwrt (MIT, no device flashed there yet).
+Status: Phases 0 and 1 (section 10) are done and merged; the `ac2100 image` workflow built and verified an image (run 41494479657, ImageBuilder 25.12.6, 192 packages). Phase 2 is prepared but needs a router: the signed pre-release path for `ac2100-v*` tags, the public key in the image, the install, update and recovery texts in `docs/instruction/ac2100/`, the test protocol in `redmi-ac2100-hardware-test.md` and `scripts/ac2100/hw-report.sh`. No AC2100 image has been flashed. Written 2 November 2026 against MiWRT 1.5.4.1 (pull request 1), OpenWrt 25.12 and the analysis in jacek4yang/redmi-ac2100-openwrt (MIT, no device flashed there yet).
 
 ## 1. Decision in one paragraph
 
@@ -83,6 +83,7 @@ Packages the service needs, all present in the official 25.12 mipsel_24kc feed: 
 1. It knows its own image name from `/etc/be7000-release` (to be renamed `/etc/miwrt-release`, with the old path kept as a symlink), written by CI: `DEVICE=openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100` or the BE7000 name. It picks the release asset whose name starts with that device name, never "the first sysupgrade.bin".
 2. It knows its tag prefix (`v` or `ac2100-v`) and ignores releases with another prefix.
 3. The Pages mirror path becomes `firmware/<tag>/`, which already differs per tag, so nothing changes there.
+4. A release file line `PRERELEASE_OK=1` lets a router in the test programme take pre-releases; the AC2100 image carries it until the hardware phase is through, the BE7000 image does not.
 
 Rollout order matters: ship the device-aware updater to BE7000 users in a regular `v` release first, before the first AC2100 release exists. Even if an AC2100 asset ever landed in a `v` release by mistake, routers with the new updater would skip it, and routers with the old one are protected by the tag prefix.
 

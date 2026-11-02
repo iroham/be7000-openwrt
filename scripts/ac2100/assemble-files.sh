@@ -83,6 +83,8 @@ mkdir -p "$OUT/etc"
 	echo "TAG_PREFIX=$TAG_PREFIX"
 	echo "MODEL=$MODEL"
 	echo "BASE=OpenWrt $OPENWRT"
+	# every AC2100 release is a pre-release until the hardware phase is through
+	echo "PRERELEASE_OK=1"
 } > "$OUT/etc/miwrt-release"
 
 # the shared scripts expect to be executable and the app's state directory to be private

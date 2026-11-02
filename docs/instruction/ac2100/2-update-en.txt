@@ -1,0 +1,34 @@
+MiWRT 1.0.0 for the Xiaomi Redmi Router AC2100: updating
+
+Updating from one MiWRT version to the next is a normal OpenWrt sysupgrade.
+Settings are kept. There is only one firmware slot on this router: the
+running system is replaced, there is no second copy to fall back to, so
+read 3-recovery-and-problems-en.txt once before the first update.
+
+From the web interface
+  System, Build update checks GitHub for a newer MiWRT for this router and
+  installs it with one button. It takes only releases made for the Redmi
+  AC2100 (their tags start with ac2100-v) and checks that the checksum list
+  carries the signature of the key this image was built with. While MiWRT
+  for this router is in testing, pre-releases are offered too.
+
+From the command line
+      miwrt-update check
+      miwrt-update apply
+
+By hand
+  System, Backup / Flash firmware, with
+  openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100-squashfs-sysupgrade.bin
+  from the release, or over SSH:
+      sysupgrade -v /tmp/openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100-squashfs-sysupgrade.bin
+  Check the file against sha256sums.txt first.
+
+What an update keeps
+  Everything under /etc/config, the app's data in /etc/miwrt, which services
+  are enabled, and the marker that says the Wi-Fi defaults were already
+  applied (so an update never resets your Wi-Fi). Packages you added with apk
+  are not kept; reinstall them after the update.
+
+Packages
+  Packages come from the official OpenWrt 25.12 feeds for mipsel_24kc, which
+  match this image. "apk update && apk add <name>" works as on any OpenWrt.
