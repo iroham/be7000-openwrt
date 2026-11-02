@@ -233,7 +233,7 @@ export function guest_expire() {
 
 export function firmware(check) {
 	let out = {};
-	try { out = json(hub.run(`be7000-update ${check ? 'check' : 'status'} --json 2>/dev/null`)); } catch (e) {}
+	try { out = json(hub.run(`miwrt-update ${check ? 'check' : 'status'} --json 2>/dev/null`)); } catch (e) {}
 	let board = connect().call('system', 'board') ?? {};
 	// release.version is the OpenWrt release third-party scripts check (25.12.6
 	// since Beam WRT 1.5.1); the MiWRT version is the first word of the
@@ -529,7 +529,7 @@ export function firmware_install() {
 	let f = firmware(true);
 	if (!f.update_available) return 'The router already runs the latest version.';
 	hub.add_alert('router', 'Firmware update started', `Installing ${f.latest_name ?? f.latest}. It replaces the MiWRT the router runs now; settings are kept and the router restarts when it is done.`, 'warning');
-	system('(sleep 3; be7000-update apply --yes) >/tmp/miwrt/update.log 2>&1 &');
+	system('(sleep 3; miwrt-update apply --yes) >/tmp/miwrt/update.log 2>&1 &');
 	return null;
 };
 

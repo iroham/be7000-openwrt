@@ -2,7 +2,7 @@
 
 import { popen, access, readfile } from 'fs';
 
-const BIN = '/usr/sbin/be7000-update';
+const BIN = '/usr/sbin/miwrt-update';
 const LOG = '/tmp/be7000-update.log';
 
 function shellquote(s) {
@@ -11,7 +11,7 @@ function shellquote(s) {
 
 function run(args) {
 	if (access(BIN) != true)
-		return { ok: false, output: 'be7000-update not found' };
+		return { ok: false, output: 'miwrt-update not found' };
 	let cmd = `${shellquote(BIN)} ${join(' ', map(args, shellquote))}`;
 	let fd = popen(`(${cmd}) 2>&1; echo __EXIT:$?`, 'r');
 	let all = fd ? fd.read('all') : '';

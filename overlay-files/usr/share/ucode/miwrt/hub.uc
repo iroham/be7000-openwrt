@@ -239,14 +239,18 @@ function collect(conn) {
 	s.nets = networks(conn);
 
 	s.wifi = [];
+	s.radio_down = [];
 	let wl = conn.call('network.wireless', 'status') ?? {};
-	for (let radio, r in wl)
+	for (let radio, r in wl) {
+		// enabled, not in the middle of a reload, and still not up
+		if (!r.disabled && !r.pending && !r.up) push(s.radio_down, radio);
 		for (let i in (r.interfaces ?? [])) {
 			if (!i.ifname) continue;
 			let info = conn.call('iwinfo', 'info', { device: i.ifname }) ?? {};
 			let assoc = conn.call('iwinfo', 'assoclist', { device: i.ifname })?.results ?? [];
 			push(s.wifi, { ifname: i.ifname, info, assoc });
 		}
+	}
 
 	// who sits on which cable port
 	s.wired = {};
@@ -277,15 +281,21 @@ function collect(conn) {
 	for (let r in (lsdir('/sys/class/remoteproc') ?? []))
 		s.rproc[read_trim(`/sys/class/remoteproc/${r}/name`)] = read_trim(`/sys/class/remoteproc/${r}/state`);
 
-	s.temp = 0;
+	s.temp = null;   // stays null on a board without a sensor
 	for (let z in (lsdir('/sys/class/thermal') ?? [])) {
 		if (!match(z, /^thermal_zone/)) continue;
 		let t = +read_trim(`/sys/class/thermal/${z}/temp`) / 1000;
-		if (t > s.temp) s.temp = t;
+		if (s.temp == null || t > s.temp) s.temp = t;
 	}
 
 	let wdev = s.wan.l3_device ?? s.wan.device;
 	s.wan_bytes = wdev ? { rx: +read_trim(`/sys/class/net/${wdev}/statistics/rx_bytes`), tx: +read_trim(`/sys/class/net/${wdev}/statistics/tx_bytes`) } : null;
+	// link speed of the WAN port in Mbit/s, where the kernel knows it (not on a PPP device)
+	s.wan_speed = null;
+	for (let d in [ s.wan.device, s.wan.l3_device ]) {
+		let sp = d ? +read_trim(`/sys/class/net/${d}/speed`) : 0;
+		if (sp > 0) { s.wan_speed = sp; break; }
+	}
 	return s;
 }
 
@@ -547,11 +557,15 @@ function build_status(s, rt, devices) {
 		router: { reachable: true, age: 0, model: s.board.model, firmware: s.board.release?.description, hostname: s.board.hostname,
 			uptime: s.info.uptime, load: map(s.info.load ?? [], x => x / 65536.0),
 			memory_used_pct: mem.total ? int(100 - 100 * (mem.available ?? 0) / mem.total) : null,
-			temperature: int(s.temp), leds: stat(ETC + '/leds-off') ? 'off' : 'on', can_control: true, updated: s.ts,
+			temperature: s.temp == null ? null : int(s.temp), leds: stat(ETC + '/leds-off') ? 'off' : 'on', can_control: true, updated: s.ts,
 			watchdog: load(SETTINGS, {}).watchdog !== false },
+		// what this router has; the app shows only these parts
+		capabilities: { slots: !!stat('/usr/libexec/be7000-slots'), split5g: !!stat('/usr/sbin/be7000-5g-split'),
+			usb: !!stat('/sys/bus/usb/devices'), temperature: s.temp != null, wifi_cores: length(s.rproc) > 0,
+			sqm: !!stat('/etc/init.d/sqm'), banip: !!stat('/etc/init.d/banip'), wan_speed_mbit: s.wan_speed },
 		internet: { up: !!s.wan.up, ipv4: (s.wan['ipv4-address'] ?? [ {} ])[0]?.address, ipv6: !!s.wan6.up, uptime: s.wan.uptime,
 			down_bps: rt.rates?.down ?? 0, up_bps: rt.rates?.up ?? 0 },
-		wifi: { radios, cores: s.rproc },
+		wifi: { radios, cores: s.rproc, down: s.radio_down },
 		dns: { ok: rt.dns_ok },
 		devices: { online: length(filter(devices, d => d.online)), known: length(devices), paused: length(filter(devices, d => d.blocked)),
 			pending: length(filter(devices, d => d.pending)) },
@@ -654,6 +668,19 @@ function tick_unlocked() {
 			                : add_alert('radio', 'Wi-Fi radio recovered', `Wi-Fi core ${name} is running again.`, 'info');
 		rt.rproc[name] = st;
 	}
+	// a radio that is enabled but not running, as netifd sees it: works on every
+	// Wi-Fi driver, not only on boards with remote Wi-Fi cores. Two passes in a
+	// row (about a minute) before the alert, and not while the boot settles.
+	if ((s.info.uptime ?? 0) >= 180) {
+		let down = {};
+		for (let r in s.radio_down) {
+			down[r] = (rt.radio_down?.[r] ?? 0) + 1;
+			if (down[r] == 2) add_alert('radio', 'Wi-Fi radio is down', `Radio ${r} is switched on but not running. Its devices are offline until it comes back.`, 'critical', `radio-off-${r}`);
+		}
+		for (let r, n in (rt.radio_down ?? {}))
+			if (!(r in down) && n >= 2) add_alert('radio', 'Wi-Fi radio is back', `Radio ${r} is running again.`, 'info');
+		rt.radio_down = down;
+	}
 	watchdog(s, rt);
 	log_alerts(rt, load(DEVICES, {}));
 
@@ -674,7 +701,7 @@ function tick_unlocked() {
 	// one sample every five minutes for the health charts (memory only, 48 hours)
 	if (s.ts - (rt.hist_ts ?? 0) >= 300) {
 		let mem = s.info.memory ?? {}, h = load(HISTORY, []);
-		push(h, { ts: s.ts, temp: int(s.temp), mem: mem.total ? int(100 - 100 * (mem.available ?? 0) / mem.total) : null,
+		push(h, { ts: s.ts, temp: s.temp == null ? null : int(s.temp), mem: mem.total ? int(100 - 100 * (mem.available ?? 0) / mem.total) : null,
 			down: rt.rates?.down ?? 0, up: rt.rates?.up ?? 0, clients: length(filter(devices, d => d.online)), wan: !!s.wan.up });
 		save(HISTORY, slice(h, max(0, length(h) - 576)));
 		rt.hist_ts = s.ts;

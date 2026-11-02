@@ -308,6 +308,10 @@ jobs:
             echo "BUILD=${{ github.run_id }}"
             echo "KERNEL=$VERMAGIC"
             echo "FEED=$FEED_BASE"
+            # which image in a release is this router's, and which tags are its
+            # releases: miwrt-update never offers a firmware for another model
+            echo "DEVICE=$DEVICE"
+            echo "TAG_PREFIX=v"
           } > files/etc/be7000-release
           cat files/etc/be7000-release
 

@@ -1,6 +1,6 @@
 # Plan: MiWRT for the Xiaomi Redmi Router AC2100
 
-Status: proposal, nothing implemented. Written 2 November 2026 against MiWRT 1.5.4.1 (pull request 1), OpenWrt 25.12 and the analysis in jacek4yang/redmi-ac2100-openwrt (MIT, no device flashed there yet).
+Status: proposal; Phase 0 (section 10) is implemented in pull request 1, the rest is not started. Written 2 November 2026 against MiWRT 1.5.4.1 (pull request 1), OpenWrt 25.12 and the analysis in jacek4yang/redmi-ac2100-openwrt (MIT, no device flashed there yet).
 
 ## 1. Decision in one paragraph
 
