@@ -2,6 +2,40 @@
 
 [Русская версия](CHANGELOG.md) · [中文](CHANGELOG.zh.md)
 
+**1.5.4**, October 30, 2026.
+- Fixed factory reset when `/overlay` lives on the joined volume or a USB drive. The data is now reset before `/overlay` is mounted instead of from the running system.
+- A reset resumes after a power loss. Until it is complete, the storage scripts cannot restore the old extroot entry, switch slots, or start another operation on the volume.
+- The partitions are not formatted. Other files on the shared partition, the slot backup and the storage markers are kept.
+
+**1.5.3**, October 30, 2026.
+- Fixed updating when the second slot is used for packages. After an update the joined volume stayed intact and attached, but the named `fstab.slotstorage` entry could be absent, so the router started on the current slot's small `rootfs_data`. On the first boot of the new version, preinit checks and restores the entry when needed before `mount_root` runs. `fstab` is also in the explicit keep list for later updates.
+- If the entry cannot be checked or restored, the joined volume is detached and the router safely continues booting on `rootfs_data`.
+
+**1.5.2**, October 29, 2026.
+- After an update the flash drive comes up right away again. In 1.5.1 the router reboots once by itself after an update, and the new protection took that reboot for a failure and started the system without USB. Packages from the drive showed up only after one more reboot.
+- Release 1.5.1 was withdrawn, everything from it is in 1.5.2.
+
+**1.5.1**, October 29, 2026.
+- When a flash drive with extroot starts dying, the router no longer ends up on the stock firmware. Before, every boot with such a drive broke off, and after six tries the bootloader switched to stock. Now, if the previous boot did not finish, the router starts without USB on its built-in storage and stays reachable.
+- Install scripts of third-party packages no longer complain about the version. To them the firmware is now OpenWrt 25.12.6, while Beam WRT and its number show in the description, the banner and LuCI.
+- The update page downloads the image in the background, shows how much is in, and takes the image from a mirror on GitHub Pages. Before, on a slow link to GitHub the dialog spun forever.
+- roamd: a BE7000 node with Beam WRT gets roamd from the controller, there is no need to install it on the node by hand.
+- The SSH login banner shows the version and the thanks again.
+
+**1.5.0**, October 23, 2026.
+- Fixed a bug that sometimes kept routers from the latest batches from booting after an install or a reboot, with the indicator staying orange.
+- On the System, Slots page the second slot can be given over to packages. It is joined with the settings partition, and packages get about 57 MB instead of 20. Before that the router saves a copy of the slot, which brings the slot back.
+- A reset to factory settings now also works when the settings live outside the firmware's own partition.
+- The router boots about 8 seconds faster.
+- Zapret Manager is updated to 3.97-r2, Steer modules can be added from the panel again.
+- The CPU voltage no longer goes below the stock level.
+
+**1.4.9**, October 21, 2026.
+- The firmware installs and runs on routers from the latest batches, where it did not boot before. Routers that already run it see no change.
+- Steer installs from Zapret Manager. Zapret Manager is updated to 3.97.
+- roamd: a BE7000 can join as a node a network that another BE7000 on Beam WRT manages. A node is reset to factory settings when it joins.
+- The feed has a Status, Modem page for USB modems: signal, cell, bands, mode selection and an AT command console. Install it with apk add luci-app-beam-modem.
+
 **1.4.8**, October 11, 2026.
 - If the 5 GHz module firmware crashed while hostapd was reconfiguring the MLO network with clients connected, for example after a Wi-Fi settings change, the ath12k driver used tables that had already been freed, the kernel crashed and the router rebooted. Now the firmware restarts and the router keeps running.
 - After installing a package with a new protocol (GRE, L2TP, 6in4 and others), its interface did not come up until the network was restarted: the network learns its protocols only when it starts. LuCI now shows a Restart network button in the top bar with an explanation, and apk prints the same after the install.

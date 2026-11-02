@@ -1,0 +1,16 @@
+#!/bin/sh
+# MiWRT and its version in the fields people read (the description LuCI's
+# Overview, the banner and the app show), the OpenWrt release left in the
+# fields third-party install scripts check (DISTRIB_RELEASE, VERSION_ID).
+# The same rule the BE7000 image follows since Beam WRT 1.5.1.
+rel=/etc/miwrt-release
+[ -r "$rel" ] || exit 0
+ver=$(sed -n 's/^VERSION=//p' "$rel" | head -1)
+model=$(sed -n 's/^MODEL=//p' "$rel" | head -1)
+[ -n "$ver" ] || exit 0
+rev=$(sed -n "s/^DISTRIB_REVISION='\(.*\)'\$/\1/p" /etc/openwrt_release)
+base=$(sed -n "s/^DISTRIB_RELEASE='\(.*\)'\$/\1/p" /etc/openwrt_release)
+desc="MiWRT $ver $rev (${model:+$model, }OpenWrt $base)"
+sed -i "s|^DISTRIB_DESCRIPTION=.*|DISTRIB_DESCRIPTION='$desc'|" /etc/openwrt_release
+[ -w /usr/lib/os-release ] && sed -i "s|^PRETTY_NAME=.*|PRETTY_NAME=\"$desc\"|" /usr/lib/os-release
+exit 0

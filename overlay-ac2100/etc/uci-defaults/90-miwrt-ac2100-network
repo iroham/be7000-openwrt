@@ -1,0 +1,22 @@
+#!/bin/sh
+# Network defaults for the MT7621, applied once; a value already set is kept.
+#
+# Software flow offloading: established flows skip the per-packet firewall
+# work, the fast path this CPU needs for gigabit routing. Packets still pass
+# the queueing disciplines, so traffic shaping (SQM, the app's speed limit)
+# keeps working.
+#
+# Hardware offloading (the MT7621 packet engine) is left off: offloaded flows
+# bypass the CPU entirely, so shaping and per-device accounting miss them, and
+# it has open upstream issues on this SoC (offload degrading after long
+# uptime, resets with packet capture on PPPoE). Turn it on under Network,
+# Firewall when raw throughput matters more than those.
+#
+# Packet steering is pinned off, the OpenWrt default and the stock firmware's
+# choice; an open MT7621 transmit-queue issue makes the conservative setting
+# the right default.
+[ -n "$(uci -q get firewall.@defaults[0].flow_offloading)" ] || uci set firewall.@defaults[0].flow_offloading='1'
+[ -n "$(uci -q get network.globals.packet_steering)" ] || uci set network.globals.packet_steering='0'
+uci commit firewall
+uci commit network
+exit 0

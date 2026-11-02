@@ -118,7 +118,17 @@ be7000_do_upgrade() {
 		fi
 		be7000_log "write failed (try $try): $(tail -n 6 /tmp/be7000-upgrade.out | tr '\n' ' ')"
 		if [ "$try" -ge 2 ]; then
-			local other=$((1 - target_slot))
+			local other=$((1 - target_slot)) other_part=rootfs_1
+			[ "$other" = 0 ] && other_part=rootfs
+			# Since Beam WRT 1.5.0 the other slot may hold /overlay instead of
+			# the factory firmware (System, Slots). Nothing boots from there,
+			# so in that case the boot variables are left as they are.
+			case "$(fw_printenv -n be7000_slot_storage 2>/dev/null)" in
+			"$other_part+"*)
+				be7000_log "giving up; slot $other holds /overlay, not the factory firmware, boot variables left as they are"
+				be7000_save_log
+				return 1 ;;
+			esac
 			fw_setenv flag_boot_rootfs "$other"
 			fw_setenv flag_last_success "$other"
 			fw_setenv flag_ota_reboot 0

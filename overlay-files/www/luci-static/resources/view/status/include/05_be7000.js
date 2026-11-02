@@ -118,9 +118,11 @@ return baseclass.extend({
 
 	render: function(board) {
 		var tx = TEXT[lang()];
-		var ver = (L.isObject(board.release) ? board.release.version : '') || '';
+		// release.version is the OpenWrt release third-party scripts check,
+		// ours is in the description: "MiWRT 1.5.4.1 r20260929-d958caf"
+		var ver = (L.isObject(board.release) ? board.release.description : '') || '';
 
-		ver = ver.replace(/^(BE7000|Beam WRT|MiWRT)\s+/, '');
+		ver = ver.replace(/^(BE7000|Beam WRT|MiWRT|OpenWrt)\s+/, '').split(' ')[0];
 
 		if (!document.getElementById('be7k-css'))
 			document.head.appendChild(E('style', { 'id': 'be7k-css' }, CSS));

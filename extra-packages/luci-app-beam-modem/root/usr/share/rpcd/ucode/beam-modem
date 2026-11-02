@@ -1,0 +1,310 @@
+'use strict';
+
+// Status, Modem: everything ModemManager knows about the first modem, and
+// the mode and band settings. Only mmcli is used, the AT ports stay with
+// ModemManager.
+
+import { popen, access, readfile, writefile } from 'fs';
+
+const MMCLI = '/usr/bin/mmcli --timeout=15';
+
+function run(args) {
+	let fd = popen(`${MMCLI} ${args} 2>&1`, 'r');
+	let out = fd ? (fd.read('all') ?? '') : '';
+	let rc = fd ? fd.close() : -1;
+	return { rc, out: trim(out) };
+}
+
+function mm(args) {
+	let r = run(`${args} -J`);
+	if (r.rc != 0)
+		return null;
+	try { return json(r.out); } catch (e) { return null; }
+}
+
+function tail(path) {
+	let m = match(path ?? '', /\/([0-9]+)$/);
+	return m ? m[1] : null;
+}
+
+function first_modem() {
+	let l = mm('-L');
+	let list = l?.['modem-list'] ?? [];
+	return length(list) ? tail(list[0]) : null;
+}
+
+// "cell type: lte, serving: yes, earfcn: 1300, rsrp: -95.000000"
+function cell(s) {
+	let c = {};
+	for (let part in split(s, ', ')) {
+		let i = index(part, ': ');
+		if (i > 0)
+			c[replace(substr(part, 0, i), ' ', '_')] = substr(part, i + 2);
+	}
+	return c;
+}
+
+// Modems that do not report cells through ModemManager (many MBIM ones)
+// still answer Qualcomm NAS requests. qmicli talks to them through the
+// same proxy as ModemManager, so the two do not get in each other's way.
+const QMICLI = '/usr/bin/qmicli';
+
+function hex(v) {
+	return v == null ? null : sprintf('%X', +v);
+}
+
+function qmi(port, mbim, req) {
+	let fd = popen(`${QMICLI} -p -d /dev/${port}${mbim ? ' --device-open-mbim' : ''} ${req} 2>/dev/null`, 'r');
+	let out = fd ? (fd.read('all') ?? '') : '';
+	let rc = fd ? fd.close() : -1;
+	return rc == 0 ? out : null;
+}
+
+function bw(v) {
+	return v && v != 'invalid' && v != 'unknown' ? replace(v, '-', '.') : null;
+}
+
+// --nas-get-cell-location-info: the serving LTE cell, its neighbours on the
+// same channel and the cells on other channels
+function qmi_cells(txt) {
+	let cells = [], sec = null, srv = {}, freq = null, cur = null, ta = null, m;
+	for (let l in split(txt, '\n')) {
+		if (l == 'Intrafrequency LTE Info') { sec = 'intra'; continue; }
+		if (l == 'Interfrequency LTE Info') { sec = 'inter'; continue; }
+		if ((m = match(l, /^LTE Timing Advance: '([0-9]+)'/))) { ta = m[1]; continue; }
+		if (match(l, /^[^\t]/)) { sec = null; continue; }
+		if (sec == 'intra') {
+			if ((m = match(l, /^\tPLMN: '([0-9]+)'/))) srv.plmn = m[1];
+			else if ((m = match(l, /^\tTracking Area Code: '([0-9]+)'/))) srv.tac = m[1];
+			else if ((m = match(l, /^\tGlobal Cell ID: '([0-9]+)'/))) srv.gci = m[1];
+			else if ((m = match(l, /^\tEUTRA Absolute RF Channel Number: '([0-9]+)'/))) srv.earfcn = m[1];
+			else if ((m = match(l, /^\tServing Cell ID: '([0-9]+)'/))) srv.pci = m[1];
+			else if (match(l, /^\tCell \[/)) push(cells, cur = { cell_type: 'lte', serving: 'no', earfcn: srv.earfcn });
+		}
+		else if (sec == 'inter') {
+			if ((m = match(l, /^\t\tEUTRA Absolute RF Channel Number: '([0-9]+)'/))) freq = m[1];
+			else if (match(l, /^\t\tCell \[/)) push(cells, cur = { cell_type: 'lte', serving: 'no', earfcn: freq });
+		}
+		if (!sec || !cur)
+			continue;
+		if ((m = match(l, /^\t+Physical Cell ID: '([0-9]+)'/))) cur.physical_ci = m[1];
+		else if ((m = match(l, /^\t+RSRQ: '([-0-9.]+)'/))) cur.rsrq = m[1];
+		else if ((m = match(l, /^\t+RSRP: '([-0-9.]+)'/))) cur.rsrp = m[1];
+		else if ((m = match(l, /^\t+RSSI: '([-0-9.]+)'/))) cur.rssi = m[1];
+	}
+	let serving = null;
+	for (let c in cells)
+		if (!serving && c.earfcn == srv.earfcn && c.physical_ci == srv.pci)
+			serving = c;
+	if (!serving && srv.earfcn != null)
+		unshift(cells, serving = { cell_type: 'lte', earfcn: srv.earfcn, physical_ci: srv.pci });
+	if (serving) {
+		serving.serving = 'yes';
+		serving.operator_id = srv.plmn;
+		serving.tac = hex(srv.tac);
+		serving.ci = hex(srv.gci);
+		serving.timing_advance = ta;
+	}
+	return cells;
+}
+
+// --nas-get-lte-cphy-ca-info: the primary and the secondary carriers
+function qmi_ca(txt) {
+	let ca = [], cur = null, m;
+	for (let l in split(txt, '\n')) {
+		if (l == 'Primary Cell Info') push(ca, cur = { primary: true });
+		else if (match(l, /^Secondary Cell( [0-9]+)? Info/)) push(ca, cur = { primary: false });
+		else if (match(l, /^[^\t]/)) cur = null;
+		else if (cur) {
+			if ((m = match(l, /^\tPhysical Cell ID: '([0-9]+)'/))) cur.pci = m[1];
+			else if ((m = match(l, /^\tRX Channel: '([0-9]+)'/))) cur.earfcn = m[1];
+			else if ((m = match(l, /^\tDL Bandwidth: '([^']*)'/))) cur.bandwidth = bw(m[1]);
+			else if ((m = match(l, /^\tLTE Band: '([^']*)'/))) cur.band = m[1];
+			else if ((m = match(l, /^\tState: '([^']*)'/))) cur.state = m[1];
+		}
+	}
+	return filter(ca, c => c.earfcn != null);
+}
+
+// --nas-get-rf-band-info: the channel width of the current LTE carrier
+function qmi_bw(txt) {
+	let sec = null, iface = null, m;
+	for (let l in split(txt, '\n')) {
+		if (match(l, /^Bandwidth:/)) { sec = 'bw'; continue; }
+		if (match(l, /^[^\t]/)) { sec = null; continue; }
+		if (sec != 'bw') continue;
+		if ((m = match(l, /Radio Interface: +'([^']*)'/))) iface = m[1];
+		else if ((m = match(l, /Bandwidth: +'([^']*)'/)) && iface == 'lte') return bw(m[1]);
+	}
+	return null;
+}
+
+// the AT console, see /usr/libexec/beam-modem-console
+const CONSOLE = '/usr/libexec/beam-modem-console';
+const CDIR = '/var/run/beam-modem-console';
+const WAIT = { short: [ 3, 10 ], medium: [ 10, 40 ], long: [ 120, 200 ] };
+
+function console(args) {
+	let fd = popen(`${CONSOLE} ${args} 2>&1`, 'r');
+	let out = fd ? trim(fd.read('all') ?? '') : '';
+	let rc = fd ? fd.close() : -1;
+	return { rc, out };
+}
+
+function valid(s, re) {
+	return type(s) == 'string' && length(s) > 0 && length(s) < 400 && match(s, re);
+}
+
+return {
+	'beam-modem': {
+		status: {
+			call: function() {
+				if (!access('/usr/bin/mmcli', 'x'))
+					return { error: 'no-mmcli' };
+				let id = first_modem();
+				if (id == null)
+					return { error: 'no-modem' };
+
+				let res = { id: +id };
+				res.modem = mm(`-m ${id}`)?.modem;
+				if (!res.modem)
+					return { error: 'no-modem' };
+
+				let g = res.modem.generic ?? {};
+				let st = g.state ?? '';
+				let ready = !(st in [ 'failed', 'unknown', 'initializing', 'locked', 'disabled', 'disabling' ]);
+
+				if (ready) {
+					let sig = mm(`-m ${id} --signal-get`)?.modem?.signal;
+					// detailed values come only after a refresh rate is set
+					if (sig && +(sig.refresh?.rate ?? 0) == 0) {
+						run(`-m ${id} --signal-setup=5`);
+						sig = mm(`-m ${id} --signal-get`)?.modem?.signal;
+					}
+					res.signal = sig;
+
+					let ci = mm(`-m ${id} --get-cell-info`)?.modem?.generic?.['cell-info'];
+					if (type(ci) == 'array' && length(ci)) {
+						res.cells = map(ci, cell);
+						res.cells_from = 'mm';
+					}
+
+					// the control port: "cdc-wdm0 (mbim)" or "cdc-wdm0 (qmi)"
+					let port = null, mbim = false;
+					for (let p in g.ports ?? []) {
+						let pm = match(p, /^(cdc-wdm[0-9]+) \((mbim|qmi)\)$/);
+						if (pm) { port = pm[1]; mbim = pm[2] == 'mbim'; break; }
+					}
+					res.qmicli = access(QMICLI, 'x') ? true : false;
+					if (port && res.qmicli) {
+						if (!res.cells) {
+							let t = qmi(port, mbim, '--nas-get-cell-location-info');
+							let c = t ? qmi_cells(t) : [];
+							if (length(c)) {
+								res.cells = c;
+								res.cells_from = 'qmi';
+							}
+						}
+						let t = qmi(port, mbim, '--nas-get-lte-cphy-ca-info');
+						if (t)
+							res.ca = qmi_ca(t);
+						t = qmi(port, mbim, '--nas-get-rf-band-info');
+						if (t)
+							res.bandwidth = qmi_bw(t);
+					}
+				}
+
+				let sim = tail(g.sim);
+				if (sim != null)
+					res.sim = mm(`-i ${sim}`)?.sim;
+
+				let b = tail((g.bearers ?? [])[0]);
+				if (b != null)
+					res.bearer = mm(`-b ${b}`)?.bearer;
+
+				return res;
+			}
+		},
+
+		console_status: {
+			call: function() {
+				let r = console('status');
+				let st;
+				try { st = json(r.out); } catch (e) { return { error: r.out }; }
+				st.socat = access('/usr/bin/socat', 'x') ? true : false;
+				st.cmd = trim(readfile(`${CDIR}/cmd`) ?? '');
+				st.out = readfile(`${CDIR}/out`) ?? '';
+				st.done = access(`${CDIR}/done`) ? true : false;
+				return st;
+			}
+		},
+
+		console_start: {
+			call: function() {
+				let r = console('start');
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+
+		console_stop: {
+			call: function() {
+				let r = console('stop');
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+
+		console_send: {
+			args: { port: 'port', cmd: 'cmd', wait: 'wait' },
+			call: function(req) {
+				let port = req.args?.port, cmd = trim(req.args?.cmd ?? ''), w = WAIT[req.args?.wait] ?? WAIT.short;
+				if (!valid(port, /^tty[A-Z]+[0-9]+$/))
+					return { ok: false, output: 'bad port' };
+				if (!length(cmd) || length(cmd) > 512 || match(cmd, /[[:cntrl:]]/))
+					return { ok: false, output: 'bad command' };
+				let f = '/tmp/beam-modem-console.cmd';
+				writefile(f, cmd);
+				let r = console(`send ${port} ${w[0]} ${w[1]} ${f}`);
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+
+		set_modes: {
+			args: { allowed: 'allowed', preferred: 'preferred' },
+			call: function(req) {
+				let id = first_modem();
+				let a = req.args?.allowed, p = req.args?.preferred;
+				if (id == null)
+					return { ok: false, output: 'no modem' };
+				if (!valid(a, /^[a-z0-9|]+$/) || (p && !valid(p, /^[a-z0-9]+$/)))
+					return { ok: false, output: 'bad mode' };
+				let r = run(`-m ${id} --set-allowed-modes='${a}'` + (p && p != 'none' ? ` --set-preferred-mode='${p}'` : ''));
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+
+		set_bands: {
+			args: { bands: 'bands' },
+			call: function(req) {
+				let id = first_modem();
+				let b = req.args?.bands;
+				if (id == null)
+					return { ok: false, output: 'no modem' };
+				if (!valid(b, /^[a-z0-9|-]+$/))
+					return { ok: false, output: 'bad bands' };
+				let r = run(`-m ${id} --set-current-bands='${b}'`);
+				return { ok: r.rc == 0, output: r.out };
+			}
+		},
+
+		enable: {
+			args: { on: true },
+			call: function(req) {
+				let id = first_modem();
+				if (id == null)
+					return { ok: false, output: 'no modem' };
+				let r = run(`-m ${id} ${req.args?.on ? '-e' : '-d'}`);
+				return { ok: r.rc == 0, output: r.out };
+			}
+		}
+	}
+};
