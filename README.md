@@ -4,7 +4,7 @@ OpenWrt firmware for the Xiaomi BE7000 (board RC06, Qualcomm IPQ9554), tuned to 
 
 MiWRT is built on [Beam WRT](https://github.com/timofey-maykov/be7000-openwrt) by timofey-maykov, which in turn stands on the kravasuper port of OpenWrt to this router. Everything Beam WRT does, MiWRT does: native boot from flash (no kexec), the stock firmware kept in the second slot, two-slot updates with automatic fallback, Wi-Fi 7 on 5 GHz, the 2.5 Gbit/s ports, USB 3, NFC, the split 5 GHz modes and the PPE offload work. The original documentation is kept in [docs/upstream](docs/upstream/README.en.md).
 
-Released version: **1.4.8.1**, based on Beam WRT 1.4.8 (OpenWrt main d958caf, kernel 6.18.52). What came from Beam WRT since 1.4.0 is listed [below](#beam-wrt-141-to-148). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.4.8.1.md).
+Released version: **1.5.4.1**, based on Beam WRT 1.5.4 (OpenWrt main d958caf, kernel 6.18.52). What came from Beam WRT since 1.4.0 is listed [below](#beam-wrt-141-to-154). Images are in [Releases](https://github.com/iroham/be7000-openwrt/releases), checksums in `sha256sums.txt`. What changed: [release notes](docs/release-notes/v1.5.4.1.md).
 
 ## Contents
 
@@ -47,9 +47,9 @@ Returning from the two-radio 5 GHz mode to one radio left the upper radio's chan
 
 `curl` with HTTP/2 (the notification sender needs it), `sqm-scripts` and its LuCI page (cake), `nlbwmon` and its page (per-device traffic accounting), `banip` and its page (IP block lists), `umdns` (mDNS) and `tcpdump-mini`. They survive every sysupgrade without depending on the feed.
 
-### Beam WRT 1.4.1 to 1.4.8
+### Beam WRT 1.4.1 to 1.5.4
 
-MiWRT 1.4.7.1 carries everything Beam WRT released up to 1.4.7, and MiWRT 1.4.8.1 adds Beam WRT 1.4.8. It adds to what MiWRT 1.4.0.3 did and changes none of it: the app service, the radio settings and the packages in the image are the same.
+MiWRT 1.4.7.1 carries everything Beam WRT released up to 1.4.7, MiWRT 1.4.8.1 adds Beam WRT 1.4.8, and MiWRT 1.5.4.1 adds Beam WRT 1.4.9 to 1.5.4. It adds to what MiWRT 1.4.0.3 did and changes none of it: the app service, the radio settings and the packages in the image are the same.
 
 | From Beam WRT | What it brings | In the image |
 |---|---|---|
@@ -69,6 +69,15 @@ MiWRT 1.4.7.1 carries everything Beam WRT released up to 1.4.7, and MiWRT 1.4.8.
 | 1.4.8 | After installing a package that adds a network protocol, LuCI offers a network restart (the network learns its protocols only when it starts) | yes |
 | 1.4.8 | roamd (moving clients between bands and routers, 802.11k/v/r) in Services, Add-ons, built in our feed, leaves MLO networks alone and takes updates from the feed | optional package |
 | 1.4.8 | `install-from-openwrt.sh` in the release archive, for moving to MiWRT from another OpenWrt with the factory bootloader | release archive |
+| 1.4.9, 1.5.0 | Boots on the newest BE7000 boards, which carry an ESMT flash chip with 64 bytes of spare area per page: the flash driver picks the error-correction strength per flash part as the stock kernel does and no longer keeps a freed context around (patches 0908, 0909); the flash ID and ECC strength are logged at boot. Boards that already run keep 8-bit ECC and their data | yes |
+| 1.4.9, 1.5.1 | roamd: a BE7000 can join as a node under a controller running MiWRT or Beam WRT, and the controller brings roamd to the node from its own feed. The node is reset to factory settings when it joins and MLO is switched off on it | optional package |
+| 1.4.9, 1.5.0 | Zapret Manager 3.97-r2 with Steer modules from a signed `steer` feed, and an `extra` feed of LuCI packages that need no compiler, both built in this repository with the MiWRT key. The first package there is `luci-app-beam-modem`, a Status, Modem page for USB modems (signal, cell, bands, mode, AT console). The third-party warning above applies to Steer as well | optional packages |
+| 1.5.0, 1.5.3 | System, Slots: the second slot can be given over to packages. The spare slot and the data partition are glued into one `/overlay` by the new `kmod-be7000-mtdconcat` module, about 57 MB for packages instead of 20. The page saves a byte-for-byte copy of the slot first and can write it back later; an update keeps the joined volume (preinit repairs the `fstab` entry if needed). While the slot holds `/overlay` there is no factory firmware to fall back to; MiWRT's checked slot write knows this and never points the boot there | yes |
+| 1.5.0, 1.5.4 | Factory reset works when `/overlay` is on the data partition, a USB disk or the spare slot: it runs in preinit before `/overlay` is mounted, resumes after a power loss and replaces only `upper` and `work` | yes |
+| 1.5.0 | Boot is about 8 seconds faster (lvm2 no longer scans the raw flash partitions); the CPU rail is held at 875 mV or above, as on stock (patch 016) | yes |
+| 1.5.1, 1.5.2 | A dying extroot USB stick no longer sends the router to the factory firmware: when the previous boot did not finish, the router starts without USB on its built-in storage. The planned reboot after an update is not mistaken for such a failure | yes |
+| 1.5.1 | The firmware reports itself to scripts as OpenWrt 25.12.6 (`DISTRIB_RELEASE`, `VERSION_ID`), so third-party install scripts no longer refuse the version; "MiWRT 1.5.4.1" stays in the description, and the banner, Overview and the app read it from there (patch 017) | yes |
+| 1.5.1 | System, Build update downloads the image in the background with a progress counter, from a mirror on this repository's GitHub Pages first and github.com second (the release workflow keeps the three newest images there). MiWRT's checks stay for both sources: the files must be this project's release files and `sha256sums.txt` must carry the signature of the key the image was built with | yes |
 
 The third-party sources behind the optional packages are pinned to exact commits in `feeds-extra.conf`. At the time of the merge three of the four pins were the newest commit of their repository; NetShift had moved on and stays on the commit Beam WRT built and tested.
 
@@ -76,7 +85,7 @@ Nothing in these releases changes the Wi-Fi drivers, hostapd, the kernel or dnsm
 
 ### A checked slot write during upgrades (from 1.4.8.1)
 
-An upgrade erases the running slot and then writes the new image into it. On 15 October 2026 an upgrade from 1.4.7.1 to 1.4.7.3 stopped after the erase: the slot was left formatted with no volumes, the bootloader had nothing to start and fell back to the factory firmware in the other slot. Nothing recorded why. MiWRT now ships its own `/lib/upgrade/platform.sh` (based on the port's, in `overlay-files`) in which the write is checked for the `kernel` and `ubi_rootfs` volumes, tried a second time if it fails, and every step is logged to `/etc/miwrt/last-upgrade.log` on the settings volume, which survives the upgrade. If both tries fail, the boot is pointed at the factory slot at once. Getting back from the factory firmware is described in `docs/instruction/3-rollback-and-problems-en.txt`.
+An upgrade erases the running slot and then writes the new image into it. On 15 October 2026 an upgrade from 1.4.7.1 to 1.4.7.3 stopped after the erase: the slot was left formatted with no volumes, the bootloader had nothing to start and fell back to the factory firmware in the other slot. Nothing recorded why. MiWRT now ships its own `/lib/upgrade/platform.sh` (based on the port's, in `overlay-files`) in which the write is checked for the `kernel` and `ubi_rootfs` volumes, tried a second time if it fails, and every step is logged to `/etc/miwrt/last-upgrade.log` on the settings volume, which survives the upgrade. If both tries fail, the boot is pointed at the factory slot at once. Getting back from the factory firmware is described in `docs/instruction/3-rollback-and-problems-en.txt`. Since Beam WRT 1.5.0 the other slot may hold `/overlay` instead of the factory firmware (System, Slots); nothing boots from there, so in that case the boot variables are left as they are and the log says so.
 
 When merging from Beam WRT, compare this file with the port's `platform.sh` and carry over any change made there.
 

@@ -28,6 +28,7 @@
 | 0905 | qcom-ppe，EDMA 接收每一轮都取下一个缓冲区。以前丢掉一帧以后，循环会拿到一个已经释放的缓冲区 |
 | 0906 | qcom-ppe，多字宽的 PPE 表按整行写入，只写一个字的话硬件会丢掉这次写入 |
 | 0907 | qcom-ppe，PPE 里的端口桥接由模块参数 bridge_offload 打开，默认关闭 |
+| 0908 | spi-qpic-snand：ECC 强度根据闪存型号从与原厂固件相同的表中选取（GigaDevice GD5F1GQ5REYIG 为 8 位，ESMT F50D1G41LB 为 4 位，另有 15 个型号），而不是取自 DTS。此前在配备 ESMT 闪存的较新主板上固件根本无法启动 |
 
 ## OpenWrt 源码树的改动
 

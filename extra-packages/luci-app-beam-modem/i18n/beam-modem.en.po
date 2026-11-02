@@ -1,0 +1,515 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+msgid "Б"
+msgstr "B"
+
+msgid "КБ"
+msgstr "KB"
+
+msgid "МБ"
+msgstr "MB"
+
+msgid "ГБ"
+msgstr "GB"
+
+msgid "ТБ"
+msgstr "TB"
+
+msgid " д "
+msgstr " d "
+
+msgid " ч "
+msgstr " h "
+
+msgid " мин"
+msgstr " min"
+
+msgid "плохо"
+msgstr "poor"
+
+msgid "средне"
+msgstr "fair"
+
+msgid "хорошо"
+msgstr "good"
+
+msgid "отлично"
+msgstr "excellent"
+
+msgid "ошибка"
+msgstr "failed"
+
+msgid "неизвестно"
+msgstr "unknown"
+
+msgid "запускается"
+msgstr "starting"
+
+msgid "заблокирован, нужен PIN"
+msgstr "locked, PIN needed"
+
+msgid "выключен"
+msgstr "disabled"
+
+msgid "выключается"
+msgstr "disabling"
+
+msgid "включается"
+msgstr "enabling"
+
+msgid "включён, сети нет"
+msgstr "enabled, no network"
+
+msgid "ищет сеть"
+msgstr "searching"
+
+msgid "в сети, не подключён"
+msgstr "registered, not connected"
+
+msgid "отключается"
+msgstr "disconnecting"
+
+msgid "подключается"
+msgstr "connecting"
+
+msgid "подключён"
+msgstr "connected"
+
+msgid "включено"
+msgstr "on"
+
+msgid "выключено (режим низкого потребления)"
+msgstr "off (low power mode)"
+
+msgid "выключено"
+msgstr "off"
+
+msgid "не зарегистрирован"
+msgstr "not registered"
+
+msgid "домашняя сеть"
+msgstr "home network"
+
+msgid "поиск сети"
+msgstr "searching"
+
+msgid "в регистрации отказано"
+msgstr "registration denied"
+
+msgid "роуминг"
+msgstr "roaming"
+
+msgid "домашняя сеть, только SMS"
+msgstr "home network, SMS only"
+
+msgid "роуминг, только SMS"
+msgstr "roaming, SMS only"
+
+msgid "только экстренные вызовы"
+msgstr "emergency calls only"
+
+msgid "нужен PIN"
+msgstr "PIN needed"
+
+msgid "нужен PUK"
+msgstr "PUK needed"
+
+msgid "нужен PIN2"
+msgstr "PIN2 needed"
+
+msgid "нужен PUK2"
+msgstr "PUK2 needed"
+
+msgid "активна"
+msgstr "active"
+
+msgid "не активна"
+msgstr "inactive"
+
+msgid "не настроена"
+msgstr "not configured"
+
+msgid "любой"
+msgstr "any"
+
+msgid "нет"
+msgstr "no"
+
+msgid "%s, предпочтительно %s"
+msgstr "%s, %s preferred"
+
+msgid "Не удалось применить"
+msgstr "Could not apply"
+
+msgid "Применено. Модему может понадобиться до минуты, чтобы снова найти сеть."
+msgstr "Applied. The modem may need up to a minute to find the network again."
+
+msgid "ModemManager не установлен. Поставьте пакет modemmanager."
+msgstr "ModemManager is not installed. Install the modemmanager package."
+
+msgid "ModemManager не видит модем."
+msgstr "ModemManager does not see a modem."
+
+msgid "Проверьте, что модем определился (dmesg, ls /dev/cdc-wdm* /dev/ttyUSB*). Если драйверы загрузились, а модема нет, перезапустите ModemManager командой /etc/init.d/modemmanager restart или перезагрузите роутер."
+msgstr "Check that the modem was detected (dmesg, ls /dev/cdc-wdm* /dev/ttyUSB*). If the drivers are loaded but there is no modem, restart ModemManager with /etc/init.d/modemmanager restart or reboot the router."
+
+msgid "Нет ответа от службы beam-modem. Перезапустите rpcd: /etc/init.d/rpcd restart."
+msgstr "No answer from the beam-modem service. Restart rpcd: /etc/init.d/rpcd restart."
+
+msgid "Радио модема выключено (режим низкого потребления). Так бывает, если модем выключен в ModemManager или ему нужна разблокировка FCC."
+msgstr "The modem radio is off (low power mode). This happens when the modem is disabled in ModemManager or needs an FCC unlock."
+
+msgid "Включить модем"
+msgstr "Enable the modem"
+
+msgid "Диапазон"
+msgstr "Band"
+
+msgid " МГц"
+msgstr " MHz"
+
+msgid "Частота приёма"
+msgstr "Downlink frequency"
+
+msgid "Ширина канала"
+msgstr "Bandwidth"
+
+msgid "ID соты"
+msgstr "Cell ID"
+
+msgid " (eNB %d, сектор %d)"
+msgstr " (eNB %d, sector %d)"
+
+msgid "Оператор соты"
+msgstr "Cell operator"
+
+msgid "Сеть"
+msgstr "Network"
+
+msgid "Состояние"
+msgstr "State"
+
+msgid "Технология"
+msgstr "Technology"
+
+msgid "Регистрация"
+msgstr "Registration"
+
+msgid "Код оператора"
+msgstr "Operator code"
+
+msgid "Уровень сигнала"
+msgstr "Signal quality"
+
+msgid "Радио"
+msgstr "Radio"
+
+msgid "Режим"
+msgstr "Mode"
+
+msgid "Сигнал"
+msgstr "Signal"
+
+msgid "дБм"
+msgstr "dBm"
+
+msgid "дБ"
+msgstr "dB"
+
+msgid "RSRP, от −120 до −60"
+msgstr "RSRP, −120 to −60"
+
+msgid "SINR, от −10 до 30"
+msgstr "SINR, −10 to 30"
+
+msgid "за 10 минут"
+msgstr "last 10 minutes"
+
+msgid "Сота"
+msgstr "Cell"
+
+msgid "Модем не сообщает данные о соте ни через ModemManager, ни напрямую."
+msgstr "The modem reports no cell data, neither through ModemManager nor directly."
+
+msgid "Через ModemManager модем данные о соте не сообщает. Поставьте пакет qmi-utils, тогда страница спросит модем напрямую: apk add qmi-utils"
+msgstr "The modem reports no cell data through ModemManager. Install the qmi-utils package and the page will ask the modem directly: apk add qmi-utils"
+
+msgid "Подключение"
+msgstr "Connection"
+
+msgid "Подключено"
+msgstr "Connected"
+
+msgid "да"
+msgstr "yes"
+
+msgid "Интерфейс"
+msgstr "Interface"
+
+msgid "Адрес"
+msgstr "Address"
+
+msgid "Шлюз"
+msgstr "Gateway"
+
+msgid "Время подключения"
+msgstr "Connected for"
+
+msgid "Принято"
+msgstr "Received"
+
+msgid "Отправлено"
+msgstr "Sent"
+
+msgid "Подключения нет. Его создаёт интерфейс с протоколом ModemManager на странице Сеть, Интерфейсы."
+msgstr "No connection. It is made by an interface with the ModemManager protocol on the Network, Interfaces page."
+
+msgid "Модем и SIM"
+msgstr "Modem and SIM"
+
+msgid "Модель"
+msgstr "Model"
+
+msgid "Прошивка"
+msgstr "Firmware"
+
+msgid "Драйверы"
+msgstr "Drivers"
+
+msgid "Порт"
+msgstr "Port"
+
+msgid "Оператор SIM"
+msgstr "SIM operator"
+
+msgid "Номер"
+msgstr "Number"
+
+msgid "Блокировка"
+msgstr "Lock"
+
+msgid "попыток: %s"
+msgstr "attempts: %s"
+
+msgid "Агрегация несущих"
+msgstr "Carrier aggregation"
+
+msgid "(%d несущих)"
+msgstr "(%d carriers)"
+
+msgid "Несущая"
+msgstr "Carrier"
+
+msgid "Частота"
+msgstr "Frequency"
+
+msgid "Ширина"
+msgstr "Width"
+
+msgid "основная"
+msgstr "primary"
+
+msgid "Соты рядом"
+msgstr "Nearby cells"
+
+msgid "Тип"
+msgstr "Type"
+
+msgid ", текущая"
+msgstr ", serving"
+
+msgid "Данные о сотах получены напрямую от модема (QMI)."
+msgstr "Cell data comes directly from the modem (QMI)."
+
+msgid "Данные о сотах получены от ModemManager."
+msgstr "Cell data comes from ModemManager."
+
+msgid "Настройки модема"
+msgstr "Modem settings"
+
+msgid "Изменения применяются сразу и сохраняются в модеме. На время переключения связь пропадает."
+msgstr "Changes apply at once and are stored in the modem. The connection drops while it switches."
+
+msgid "Режим сети"
+msgstr "Network mode"
+
+msgid "Применить режим"
+msgstr "Apply mode"
+
+msgid "Диапазоны"
+msgstr "Bands"
+
+msgid "Все"
+msgstr "All"
+
+msgid "Только LTE"
+msgstr "LTE only"
+
+msgid "Снять все"
+msgstr "Clear all"
+
+msgid "Выберите хотя бы один диапазон."
+msgstr "Select at least one band."
+
+msgid "Применить диапазоны"
+msgstr "Apply bands"
+
+msgid "Модем"
+msgstr "Modem"
+
+msgid "Данные ModemManager о модеме, обновляются каждые 5 секунд."
+msgstr "What ModemManager knows about the modem, refreshed every 5 seconds."
+
+msgid "модель и прошивка"
+msgstr "model and firmware"
+
+msgid "версия прошивки"
+msgstr "firmware version"
+
+msgid "состояние SIM"
+msgstr "SIM state"
+
+msgid "режим радио"
+msgstr "radio mode"
+
+msgid "уровень сигнала"
+msgstr "signal level"
+
+msgid "оператор"
+msgstr "operator"
+
+msgid "регистрация LTE"
+msgstr "LTE registration"
+
+msgid "профили APN"
+msgstr "APN profiles"
+
+msgid "поиск сетей, до 3 минут"
+msgstr "network scan, up to 3 minutes"
+
+msgid "Поддерживает ли модем привязку к соте"
+msgstr "Does the modem support cell lock"
+
+msgid "заводской режим"
+msgstr "factory test mode"
+
+msgid "Нет ответа от службы beam-modem"
+msgstr "No answer from the beam-modem service"
+
+msgid "Перезапустите rpcd: /etc/init.d/rpcd restart"
+msgstr "Restart rpcd: /etc/init.d/rpcd restart"
+
+msgid "Возвращаю ModemManager и подключение…"
+msgstr "Bringing ModemManager and the connection back…"
+
+msgid "Это занимает до минуты."
+msgstr "This takes up to a minute."
+
+msgid "Сеанс открыт, ModemManager остановлен"
+msgstr "Session open, ModemManager stopped"
+
+msgid "Связь через модем отключена. Сеанс закончится сам через %s без команд."
+msgstr "The modem connection is off. The session ends by itself after %s without commands."
+
+msgid "Завершить сеанс"
+msgstr "End session"
+
+msgid "ModemManager работает, AT-порты заняты им"
+msgstr "ModemManager is running and holds the AT ports"
+
+msgid "ModemManager не запущен"
+msgstr "ModemManager is not running"
+
+msgid "Сеанс остановит ModemManager. На время сеанса связь через модем пропадёт, потом подключение восстановится само."
+msgstr "A session stops ModemManager. The modem connection is down during the session and comes back by itself afterwards."
+
+msgid "Начать сеанс"
+msgstr "Start session"
+
+msgid " (AT)"
+msgstr " (AT)"
+
+msgid "нет портов"
+msgstr "no ports"
+
+msgid "AT-команда. Enter отправляет, ↑ ↓ листают историю"
+msgstr "AT command. Enter sends, ↑ ↓ browse the history"
+
+msgid "Нет портов модема"
+msgstr "No modem ports"
+
+msgid "Сначала начните сеанс"
+msgstr "Start a session first"
+
+msgid "ждём ответ…"
+msgstr "waiting for the answer…"
+
+msgid "нет ответа: порт молчит, попробуйте другой порт или режим ожидания подольше"
+msgstr "no answer: the port is silent, try another port or a longer wait"
+
+msgid "Останавливаю ModemManager…"
+msgstr "Stopping ModemManager…"
+
+msgid "Сеанс открыт. Можно вводить команды."
+msgstr "Session open. You can type commands."
+
+msgid "Не удалось начать сеанс"
+msgstr "Could not start the session"
+
+msgid "Сеанс закрыт. ModemManager запускается, подключение вернётся само."
+msgstr "Session closed. ModemManager is starting, the connection comes back by itself."
+
+msgid "Команда слишком длинная или содержит управляющие символы."
+msgstr "The command is too long or contains control characters."
+
+msgid "не отправлено"
+msgstr "not sent"
+
+msgid "Здесь появятся команды и ответы модема."
+msgstr "Commands and modem answers appear here."
+
+msgid "ответ до 10 с"
+msgstr "answer within 10 s"
+
+msgid "до 40 с"
+msgstr "up to 40 s"
+
+msgid "до 3 минут, поиск сетей"
+msgstr "up to 3 minutes, network scan"
+
+msgid "Отправить"
+msgstr "Send"
+
+msgid "Вставить в строку ввода"
+msgstr "Put into the input line"
+
+msgid "AT-команды"
+msgstr "AT commands"
+
+msgid "Прямой доступ к модему. На время сеанса ModemManager останавливается, чтобы освободить порты, после сеанса запускается снова и сам поднимает подключение."
+msgstr "Direct access to the modem. During a session ModemManager is stopped to free the ports; afterwards it starts again and brings the connection back up."
+
+msgid "Нужен пакет socat: apk add socat"
+msgstr "The socat package is needed: apk add socat"
+
+msgid "Ожидание"
+msgstr "Wait"
+
+msgid "Скопировано"
+msgstr "Copied"
+
+msgid "Копировать"
+msgstr "Copy"
+
+msgid "Очистить"
+msgstr "Clear"
+
+msgid "Команды уходят в модем как есть. Команды, которые меняют настройки модема (AT+QCFG, AT!, AT$NV и подобные), могут сделать модем неработоспособным, отправляйте их, только если точно знаете, что они делают."
+msgstr "Commands go to the modem as they are. Commands that change modem settings (AT+QCFG, AT!, AT$NV and the like) can leave the modem unusable, send them only if you know exactly what they do."
+
+msgid "Обзор"
+msgstr "Overview"
+

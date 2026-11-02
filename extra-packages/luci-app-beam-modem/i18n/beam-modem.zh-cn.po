@@ -1,0 +1,515 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh-cn\n"
+
+msgid "Б"
+msgstr "B"
+
+msgid "КБ"
+msgstr "KB"
+
+msgid "МБ"
+msgstr "MB"
+
+msgid "ГБ"
+msgstr "GB"
+
+msgid "ТБ"
+msgstr "TB"
+
+msgid " д "
+msgstr " 天 "
+
+msgid " ч "
+msgstr " 小时 "
+
+msgid " мин"
+msgstr " 分钟"
+
+msgid "плохо"
+msgstr "差"
+
+msgid "средне"
+msgstr "一般"
+
+msgid "хорошо"
+msgstr "良好"
+
+msgid "отлично"
+msgstr "极好"
+
+msgid "ошибка"
+msgstr "故障"
+
+msgid "неизвестно"
+msgstr "未知"
+
+msgid "запускается"
+msgstr "正在启动"
+
+msgid "заблокирован, нужен PIN"
+msgstr "已锁定，需要 PIN"
+
+msgid "выключен"
+msgstr "已禁用"
+
+msgid "выключается"
+msgstr "正在禁用"
+
+msgid "включается"
+msgstr "正在启用"
+
+msgid "включён, сети нет"
+msgstr "已启用，无网络"
+
+msgid "ищет сеть"
+msgstr "正在搜索网络"
+
+msgid "в сети, не подключён"
+msgstr "已注册，未连接"
+
+msgid "отключается"
+msgstr "正在断开"
+
+msgid "подключается"
+msgstr "正在连接"
+
+msgid "подключён"
+msgstr "已连接"
+
+msgid "включено"
+msgstr "开启"
+
+msgid "выключено (режим низкого потребления)"
+msgstr "关闭（低功耗模式）"
+
+msgid "выключено"
+msgstr "关闭"
+
+msgid "не зарегистрирован"
+msgstr "未注册"
+
+msgid "домашняя сеть"
+msgstr "本地网络"
+
+msgid "поиск сети"
+msgstr "正在搜索"
+
+msgid "в регистрации отказано"
+msgstr "注册被拒绝"
+
+msgid "роуминг"
+msgstr "漫游"
+
+msgid "домашняя сеть, только SMS"
+msgstr "本地网络，仅短信"
+
+msgid "роуминг, только SMS"
+msgstr "漫游，仅短信"
+
+msgid "только экстренные вызовы"
+msgstr "仅紧急呼叫"
+
+msgid "нужен PIN"
+msgstr "需要 PIN"
+
+msgid "нужен PUK"
+msgstr "需要 PUK"
+
+msgid "нужен PIN2"
+msgstr "需要 PIN2"
+
+msgid "нужен PUK2"
+msgstr "需要 PUK2"
+
+msgid "активна"
+msgstr "已激活"
+
+msgid "не активна"
+msgstr "未激活"
+
+msgid "не настроена"
+msgstr "未配置"
+
+msgid "любой"
+msgstr "任意"
+
+msgid "нет"
+msgstr "否"
+
+msgid "%s, предпочтительно %s"
+msgstr "%s，首选 %s"
+
+msgid "Не удалось применить"
+msgstr "无法应用"
+
+msgid "Применено. Модему может понадобиться до минуты, чтобы снова найти сеть."
+msgstr "已应用。调制解调器可能需要最多一分钟重新找到网络。"
+
+msgid "ModemManager не установлен. Поставьте пакет modemmanager."
+msgstr "未安装 ModemManager。请安装 modemmanager 软件包。"
+
+msgid "ModemManager не видит модем."
+msgstr "ModemManager 未发现调制解调器。"
+
+msgid "Проверьте, что модем определился (dmesg, ls /dev/cdc-wdm* /dev/ttyUSB*). Если драйверы загрузились, а модема нет, перезапустите ModemManager командой /etc/init.d/modemmanager restart или перезагрузите роутер."
+msgstr "请检查调制解调器是否已被识别（dmesg、ls /dev/cdc-wdm* /dev/ttyUSB*）。如果驱动已加载但没有调制解调器，请用 /etc/init.d/modemmanager restart 重启 ModemManager，或重启路由器。"
+
+msgid "Нет ответа от службы beam-modem. Перезапустите rpcd: /etc/init.d/rpcd restart."
+msgstr "beam-modem 服务无响应。请重启 rpcd：/etc/init.d/rpcd restart。"
+
+msgid "Радио модема выключено (режим низкого потребления). Так бывает, если модем выключен в ModemManager или ему нужна разблокировка FCC."
+msgstr "调制解调器射频已关闭（低功耗模式）。这通常是因为调制解调器在 ModemManager 中被禁用，或需要 FCC 解锁。"
+
+msgid "Включить модем"
+msgstr "启用调制解调器"
+
+msgid "Диапазон"
+msgstr "频段"
+
+msgid " МГц"
+msgstr " MHz"
+
+msgid "Частота приёма"
+msgstr "下行频率"
+
+msgid "Ширина канала"
+msgstr "带宽"
+
+msgid "ID соты"
+msgstr "小区 ID"
+
+msgid " (eNB %d, сектор %d)"
+msgstr "（eNB %d，扇区 %d）"
+
+msgid "Оператор соты"
+msgstr "小区运营商"
+
+msgid "Сеть"
+msgstr "网络"
+
+msgid "Состояние"
+msgstr "状态"
+
+msgid "Технология"
+msgstr "技术"
+
+msgid "Регистрация"
+msgstr "注册"
+
+msgid "Код оператора"
+msgstr "运营商代码"
+
+msgid "Уровень сигнала"
+msgstr "信号质量"
+
+msgid "Радио"
+msgstr "射频"
+
+msgid "Режим"
+msgstr "模式"
+
+msgid "Сигнал"
+msgstr "信号"
+
+msgid "дБм"
+msgstr "dBm"
+
+msgid "дБ"
+msgstr "dB"
+
+msgid "RSRP, от −120 до −60"
+msgstr "RSRP，−120 至 −60"
+
+msgid "SINR, от −10 до 30"
+msgstr "SINR，−10 至 30"
+
+msgid "за 10 минут"
+msgstr "最近 10 分钟"
+
+msgid "Сота"
+msgstr "小区"
+
+msgid "Модем не сообщает данные о соте ни через ModemManager, ни напрямую."
+msgstr "调制解调器既未通过 ModemManager 也未直接提供小区数据。"
+
+msgid "Через ModemManager модем данные о соте не сообщает. Поставьте пакет qmi-utils, тогда страница спросит модем напрямую: apk add qmi-utils"
+msgstr "调制解调器未通过 ModemManager 提供小区数据。安装 qmi-utils 软件包后，本页面会直接向调制解调器查询：apk add qmi-utils"
+
+msgid "Подключение"
+msgstr "连接"
+
+msgid "Подключено"
+msgstr "已连接"
+
+msgid "да"
+msgstr "是"
+
+msgid "Интерфейс"
+msgstr "接口"
+
+msgid "Адрес"
+msgstr "地址"
+
+msgid "Шлюз"
+msgstr "网关"
+
+msgid "Время подключения"
+msgstr "连接时长"
+
+msgid "Принято"
+msgstr "已接收"
+
+msgid "Отправлено"
+msgstr "已发送"
+
+msgid "Подключения нет. Его создаёт интерфейс с протоколом ModemManager на странице Сеть, Интерфейсы."
+msgstr "没有连接。连接由 网络 → 接口 页面中使用 ModemManager 协议的接口建立。"
+
+msgid "Модем и SIM"
+msgstr "调制解调器和 SIM"
+
+msgid "Модель"
+msgstr "型号"
+
+msgid "Прошивка"
+msgstr "固件"
+
+msgid "Драйверы"
+msgstr "驱动"
+
+msgid "Порт"
+msgstr "端口"
+
+msgid "Оператор SIM"
+msgstr "SIM 运营商"
+
+msgid "Номер"
+msgstr "号码"
+
+msgid "Блокировка"
+msgstr "锁定"
+
+msgid "попыток: %s"
+msgstr "剩余次数：%s"
+
+msgid "Агрегация несущих"
+msgstr "载波聚合"
+
+msgid "(%d несущих)"
+msgstr "（%d 个载波）"
+
+msgid "Несущая"
+msgstr "载波"
+
+msgid "Частота"
+msgstr "频率"
+
+msgid "Ширина"
+msgstr "带宽"
+
+msgid "основная"
+msgstr "主载波"
+
+msgid "Соты рядом"
+msgstr "附近小区"
+
+msgid "Тип"
+msgstr "类型"
+
+msgid ", текущая"
+msgstr "，当前"
+
+msgid "Данные о сотах получены напрямую от модема (QMI)."
+msgstr "小区数据直接来自调制解调器（QMI）。"
+
+msgid "Данные о сотах получены от ModemManager."
+msgstr "小区数据来自 ModemManager。"
+
+msgid "Настройки модема"
+msgstr "调制解调器设置"
+
+msgid "Изменения применяются сразу и сохраняются в модеме. На время переключения связь пропадает."
+msgstr "更改立即生效并保存在调制解调器中。切换期间连接会中断。"
+
+msgid "Режим сети"
+msgstr "网络模式"
+
+msgid "Применить режим"
+msgstr "应用模式"
+
+msgid "Диапазоны"
+msgstr "频段"
+
+msgid "Все"
+msgstr "全部"
+
+msgid "Только LTE"
+msgstr "仅 LTE"
+
+msgid "Снять все"
+msgstr "全部取消"
+
+msgid "Выберите хотя бы один диапазон."
+msgstr "请至少选择一个频段。"
+
+msgid "Применить диапазоны"
+msgstr "应用频段"
+
+msgid "Модем"
+msgstr "调制解调器"
+
+msgid "Данные ModemManager о модеме, обновляются каждые 5 секунд."
+msgstr "ModemManager 提供的调制解调器信息，每 5 秒刷新一次。"
+
+msgid "модель и прошивка"
+msgstr "型号和固件"
+
+msgid "версия прошивки"
+msgstr "固件版本"
+
+msgid "состояние SIM"
+msgstr "SIM 状态"
+
+msgid "режим радио"
+msgstr "射频模式"
+
+msgid "уровень сигнала"
+msgstr "信号强度"
+
+msgid "оператор"
+msgstr "运营商"
+
+msgid "регистрация LTE"
+msgstr "LTE 注册"
+
+msgid "профили APN"
+msgstr "APN 配置"
+
+msgid "поиск сетей, до 3 минут"
+msgstr "搜索网络，最长 3 分钟"
+
+msgid "Поддерживает ли модем привязку к соте"
+msgstr "调制解调器是否支持锁定小区"
+
+msgid "заводской режим"
+msgstr "工厂测试模式"
+
+msgid "Нет ответа от службы beam-modem"
+msgstr "beam-modem 服务无响应"
+
+msgid "Перезапустите rpcd: /etc/init.d/rpcd restart"
+msgstr "请重启 rpcd：/etc/init.d/rpcd restart"
+
+msgid "Возвращаю ModemManager и подключение…"
+msgstr "正在恢复 ModemManager 和连接…"
+
+msgid "Это занимает до минуты."
+msgstr "最多需要一分钟。"
+
+msgid "Сеанс открыт, ModemManager остановлен"
+msgstr "会话已开启，ModemManager 已停止"
+
+msgid "Связь через модем отключена. Сеанс закончится сам через %s без команд."
+msgstr "调制解调器连接已断开。若 %s 内没有命令，会话将自动结束。"
+
+msgid "Завершить сеанс"
+msgstr "结束会话"
+
+msgid "ModemManager работает, AT-порты заняты им"
+msgstr "ModemManager 正在运行并占用 AT 端口"
+
+msgid "ModemManager не запущен"
+msgstr "ModemManager 未运行"
+
+msgid "Сеанс остановит ModemManager. На время сеанса связь через модем пропадёт, потом подключение восстановится само."
+msgstr "会话会停止 ModemManager。会话期间调制解调器连接中断，结束后自动恢复。"
+
+msgid "Начать сеанс"
+msgstr "开始会话"
+
+msgid " (AT)"
+msgstr "（AT）"
+
+msgid "нет портов"
+msgstr "无端口"
+
+msgid "AT-команда. Enter отправляет, ↑ ↓ листают историю"
+msgstr "AT 命令。回车发送，↑ ↓ 浏览历史"
+
+msgid "Нет портов модема"
+msgstr "没有调制解调器端口"
+
+msgid "Сначала начните сеанс"
+msgstr "请先开始会话"
+
+msgid "ждём ответ…"
+msgstr "等待响应…"
+
+msgid "нет ответа: порт молчит, попробуйте другой порт или режим ожидания подольше"
+msgstr "无响应：端口没有回应，请尝试其他端口或更长的等待时间"
+
+msgid "Останавливаю ModemManager…"
+msgstr "正在停止 ModemManager…"
+
+msgid "Сеанс открыт. Можно вводить команды."
+msgstr "会话已开启，可以输入命令。"
+
+msgid "Не удалось начать сеанс"
+msgstr "无法开始会话"
+
+msgid "Сеанс закрыт. ModemManager запускается, подключение вернётся само."
+msgstr "会话已关闭。ModemManager 正在启动，连接将自动恢复。"
+
+msgid "Команда слишком длинная или содержит управляющие символы."
+msgstr "命令过长或包含控制字符。"
+
+msgid "не отправлено"
+msgstr "未发送"
+
+msgid "Здесь появятся команды и ответы модема."
+msgstr "命令和调制解调器的响应将显示在这里。"
+
+msgid "ответ до 10 с"
+msgstr "响应最长 10 秒"
+
+msgid "до 40 с"
+msgstr "最长 40 秒"
+
+msgid "до 3 минут, поиск сетей"
+msgstr "最长 3 分钟，搜索网络"
+
+msgid "Отправить"
+msgstr "发送"
+
+msgid "Вставить в строку ввода"
+msgstr "填入输入框"
+
+msgid "AT-команды"
+msgstr "AT 命令"
+
+msgid "Прямой доступ к модему. На время сеанса ModemManager останавливается, чтобы освободить порты, после сеанса запускается снова и сам поднимает подключение."
+msgstr "直接访问调制解调器。会话期间 ModemManager 会停止以释放端口，会话结束后重新启动并自动恢复连接。"
+
+msgid "Нужен пакет socat: apk add socat"
+msgstr "需要 socat 软件包：apk add socat"
+
+msgid "Ожидание"
+msgstr "等待"
+
+msgid "Скопировано"
+msgstr "已复制"
+
+msgid "Копировать"
+msgstr "复制"
+
+msgid "Очистить"
+msgstr "清空"
+
+msgid "Команды уходят в модем как есть. Команды, которые меняют настройки модема (AT+QCFG, AT!, AT$NV и подобные), могут сделать модем неработоспособным, отправляйте их, только если точно знаете, что они делают."
+msgstr "命令会原样发送给调制解调器。更改调制解调器设置的命令（AT+QCFG、AT!、AT$NV 等）可能导致调制解调器无法使用，只有在确切了解其作用时才发送。"
+
+msgid "Обзор"
+msgstr "概览"
+

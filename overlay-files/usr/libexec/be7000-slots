@@ -5,6 +5,22 @@
 #   be7000-slots info <0|1>      what the other slot holds (read-only look)
 #   be7000-slots switch <0|1>    make that slot the one that boots, for good
 #
+# The spare slot can also be given up as extra room for /overlay (see the
+# storage-* and backup/restore commands further down). That never touches the
+# running slot, and it starts with a verified backup of what the spare slot
+# holds.
+#
+#   be7000-slots storage-status
+#   be7000-slots storage-name     the mtd given over to /overlay, if any
+#   be7000-slots backup [dir]
+#   be7000-slots backup-check <file> [--file-only]
+#   be7000-slots restore <file> --yes
+#   be7000-slots storage-enable (--backup <file> | --empty) --yes
+#   be7000-slots storage-disable --yes
+#   be7000-slots storage-cancel        drop a move that waits for the reboot
+#   be7000-slots job-start <command> [args]   run one of the long commands in
+#   be7000-slots job-status                   the background and poll it
+#
 # Slot 0 is mtd "rootfs", slot 1 "rootfs_1". The stock bootloader boots
 # flag_last_success; each system confirms itself at the end of its boot
 # (stock boot_check and our be7000-bootconfirm both set flag_last_success
@@ -13,6 +29,8 @@
 # never attached or written here.
 
 JSON=1
+
+. /lib/functions/be7000-factory-reset-guard.sh
 
 mtd_of() { [ "$1" = 0 ] && echo rootfs || echo rootfs_1; }
 
@@ -70,6 +88,11 @@ cmd_info() {
 	cur="$(current)" || { echo '{"error":"no ubi.mtd=rootfs* on the command line"}'; return 1; }
 	case "$slot" in 0|1) ;; *) echo '{"error":"slot is 0 or 1"}'; return 1 ;; esac
 	[ "$slot" = "$cur" ] && { echo '{"error":"that is the running slot"}'; return 1; }
+	# given over to /overlay: attached as ubi2 for good, nothing to boot there
+	case "$(fw_printenv -n be7000_slot_storage 2>/dev/null)" in "$(mtd_of $slot)+"*) {
+		printf '{"slot":%s,"kind":"storage"}\n' "$slot"
+		return 0
+	} ;; esac
 	mtdn="$(grep "\"$(mtd_of $slot)\"" /proc/mtd | cut -d: -f1 | sed 's/mtd//')"
 	[ -n "$mtdn" ] || { echo '{"error":"no such mtd"}'; return 1; }
 	for n in /sys/class/ubi/ubi[0-9]*; do
@@ -100,6 +123,9 @@ cmd_info() {
 		fi
 		rmdir $mnt 2>/dev/null
 		ubiblock --remove /dev/$vol >/dev/null 2>&1
+	elif [ ! -e /sys/class/ubi/ubi9_0 ] && [ -z "$(ls -d /sys/class/ubi/ubi9_* 2>/dev/null)" ]; then
+		# a UBI with no volumes, as the spare slot is left after storage
+		kind=empty
 	else
 		kind=unknown
 	fi
@@ -124,6 +150,10 @@ stock_settings_flag() {
 
 cmd_switch() {
 	local slot="$1" cur kind info why
+	be7000_factory_reset_pending && {
+		echo "factory reset is pending; slot switching is deferred" >&2
+		return 1
+	}
 	cur="$(current)" || { echo "no ubi.mtd=rootfs* on the command line" >&2; return 1; }
 	case "$slot" in 0|1) ;; *) echo "slot is 0 or 1" >&2; return 1 ;; esac
 	[ "$slot" = "$cur" ] && { echo "slot $slot is already running" >&2; return 1; }
@@ -157,9 +187,435 @@ cmd_switch() {
 	echo "slot $slot ($kind) boots from now on"
 }
 
+
+# ---------------------------------------------------------------------------
+# Spare slot as storage
+#
+# The spare slot (40 MiB) and the data partition, mtd "overlay" (28 MiB), are
+# glued into one MTD device by the be7000-mtdconcat kernel module, and one
+# UBI device with one UBIFS volume, "be7000_storage", spans both: about 61 MB
+# for /overlay instead of about 23 MB. The stock settings that shared the
+# data partition are gone with it.
+#
+# Nothing is moved here while the system runs: the data partition cannot be
+# detached while /overlay is mounted from it. These commands check, back up
+# and set the bootloader variable be7000_slot_storage_op;
+# /lib/preinit/77_be7000_slot_storage does the move on the next boot, and
+# sets be7000_slot_storage to "<slot mtd>+overlay" while the mode is on.
+# fstab (in the slot's own rootfs_data, which fstools reads) points /overlay
+# at /dev/ubi2_0.
+#
+# What was in the spare slot (usually the factory firmware) is saved to a
+# file first, byte for byte, and the file is checked against the flash before
+# anything is erased. restore writes it back once the slot is free again.
+
+STORAGE_VOL=be7000_storage
+ENVVAR=be7000_slot_storage
+OPVAR=be7000_slot_storage_op
+BKDIR=/tmp/be7000-slot-backup
+JOBDIR=/tmp/be7000-slots-job
+# what fits: the glued volume, and the data partition alone on the way back
+FIT_GLUED_KB=56000
+FIT_CFG_KB=21000
+
+die() { printf '{"error":"%s"}\n' "$(jstr "$*")"; return 1; }
+
+# progress for the Slots page when running as a background job
+step() {
+	echo "[$1] $2" >&2
+	[ -n "$JOB" ] || return 0
+	mkdir -p "$JOBDIR"
+	printf '{"state":"running","step":"%s","msg":"%s","pct":%s,"cmd":"%s"}\n' "$1" "$(jstr "$2")" "${3:-0}" "$(cat $JOBDIR/cmd 2>/dev/null)" > "$JOBDIR/status.$$" &&
+		mv "$JOBDIR/status.$$" "$JOBDIR/status"
+}
+
+other_slot() {
+	local c
+	c="$(current)" || return 1
+	echo $((1 - c))
+}
+
+mtd_num_of() { grep "\"$1\"" /proc/mtd | cut -d: -f1 | tr -dc '0-9'; }
+mtd_bytes_of() {
+	local h
+	h="$(grep "\"$1\"" /proc/mtd | awk '{print $2}')"
+	[ -n "$h" ] && echo $((0x$h))
+}
+
+# the ubi device number a given mtd is attached to, if any
+ubi_dev_of_mtd() {
+	local n
+	for n in /sys/class/ubi/ubi[0-9]*; do
+		[ -e "$n/mtd_num" ] || continue
+		[ "$(cat "$n/mtd_num")" = "$1" ] && { basename "$n"; return 0; }
+	done
+	return 1
+}
+
+avail_kb() { df -k "$1" 2>/dev/null | awk 'END { print $(NF-2) }'; }
+
+overlay_src() { awk '$2 == "/overlay" { print $1; exit }' /proc/mounts; }
+
+overlay_kind() {
+	case "$(overlay_src)" in
+	/dev/ubi2_*|ubi2:*) echo slotstorage ;;
+	/dev/ubi1_*|ubi1:*) echo bigoverlay ;;
+	/dev/ubi0_*|ubi0:*) echo inslot ;;
+	/dev/sd*|/dev/mmcblk*|/dev/nvme*) echo usb ;;
+	*) echo other ;;
+	esac
+}
+
+storage_value() { env "$ENVVAR"; }
+storage_mtd_name() { local v; v="$(storage_value)"; echo "${v%%+*}"; }
+storage_op() { env "$OPVAR"; }
+
+# --- fstab in the slot's own rootfs_data (the one fstools reads) -----------
+
+rootfs_data_dev() {
+	local n
+	for n in /sys/class/ubi/ubi*_*/name; do
+		[ -e "$n" ] || continue
+		[ "$(cat "$n")" = rootfs_data ] && { echo "/dev/$(basename "$(dirname "$n")")"; return 0; }
+	done
+	return 1
+}
+
+# Run "uci batch" (stdin) on the config of the slot's rootfs_data. When
+# /overlay is that volume, it is the live /etc/config.
+with_rootfs_data() {
+	local dev dir mnt="" rc=0
+	be7000_factory_reset_pending && { echo "factory reset is pending" >&2; return 1; }
+	dev="$(rootfs_data_dev)" || { echo "rootfs_data volume not found" >&2; return 1; }
+	if [ "$(overlay_kind)" = inslot ]; then
+		uci -q batch
+		return $?
+	fi
+	dir="$(awk -v d="$dev" '$1 == d { print $2; exit }' /proc/mounts)"
+	if [ -z "$dir" ]; then
+		mnt=/tmp/be7000-rfsdata.$$
+		mkdir -p "$mnt"
+		mount -t ubifs "$dev" "$mnt" || { rmdir "$mnt"; echo "cannot mount $dev" >&2; return 1; }
+		dir="$mnt"
+	fi
+	mkdir -p "$dir/upper/etc/config"
+	[ -f "$dir/upper/etc/config/fstab" ] || cp /rom/etc/config/fstab "$dir/upper/etc/config/fstab" 2>/dev/null || : > "$dir/upper/etc/config/fstab"
+	uci -q -c "$dir/upper/etc/config" get fstab.@global[0] >/dev/null ||
+		{ uci -q -c "$dir/upper/etc/config" add fstab global >/dev/null && uci -q -c "$dir/upper/etc/config" commit fstab; } || true
+	uci -q -c "$dir/upper/etc/config" batch || rc=1
+	sync
+	[ -n "$mnt" ] && { umount "$mnt"; rmdir "$mnt"; }
+	return $rc
+}
+
+# --- status ------------------------------------------------------------------
+
+cmd_storage_status() {
+	local cur oth name bytes kind cfg act=false cap=0 free=0 usedkb=0
+	cur="$(current)" || { echo '{"error":"no ubi.mtd=rootfs* on the command line"}'; return 1; }
+	oth=$((1 - cur))
+	name="$(mtd_of $oth)"
+	bytes="$(mtd_bytes_of "$name")"
+	kind="$(overlay_kind)"
+	[ -n "$(storage_value)" ] && cfg=true || cfg=false
+	[ "$kind" = slotstorage ] && act=true
+	free="$(avail_kb /overlay)"
+	cap="$(df -k /overlay | awk 'END { print $(NF-4) }')"
+	usedkb="$(du -sk /overlay/upper 2>/dev/null | cut -f1)"
+	printf '{"current":%s,"other":%s,"other_mtd":"%s","mtd_bytes":%s,"overlay":"%s","configured":%s,"active":%s,"pending":"%s","capacity_kb":%s,"free_kb":%s,"overlay_used_kb":%s,"fit_cfg_kb":%s,"backup_dir":"%s"}\n' \
+		"$cur" "$oth" "$name" "${bytes:-0}" "$kind" "$cfg" "$act" "$(jstr "$(storage_op)")" "${cap:-0}" "${free:-0}" "${usedkb:-0}" "$FIT_CFG_KB" "$BKDIR"
+}
+
+# --- backup ------------------------------------------------------------------
+
+raw_sha() { dd if="/dev/mtd$1" bs=131072 2>/dev/null | sha256sum | cut -d' ' -f1; }
+
+meta_get() { sed -n "s/^$2=//p" "$1.meta" 2>/dev/null | head -1; }
+
+# backup [dir]: the spare slot's flash, byte for byte, gzipped, plus a .meta
+# file with the checksum of the raw data
+cmd_backup() {
+	local oth name num bytes dir="${1:-$BKDIR}" ts f sha info kind ver
+	oth="$(other_slot)" || { die "no ubi.mtd=rootfs* on the command line"; return 1; }
+	name="$(mtd_of $oth)"
+	num="$(mtd_num_of "$name")"
+	bytes="$(mtd_bytes_of "$name")"
+	[ -n "$num" ] && [ -n "$bytes" ] || { die "no mtd $name"; return 1; }
+	[ -n "$(storage_value)" ] && { die "the spare slot is already storage, there is nothing to back up"; return 1; }
+	[ -n "$(storage_op)" ] && { die "a change of the spare slot waits for the reboot"; return 1; }
+	ubi_dev_of_mtd "$num" >/dev/null && { die "the spare slot is attached, detach it first"; return 1; }
+	mkdir -p "$dir" || { die "cannot create $dir"; return 1; }
+	[ "$(avail_kb "$dir")" -ge 46000 ] 2>/dev/null || { die "less than 45 MB free in $dir"; return 1; }
+	step look "Looking at what the spare slot holds" 5
+	info="$(cmd_info "$oth")"
+	kind="$(printf '%s' "$info" | sed -n 's/.*"kind":"\([a-z]*\)".*/\1/p')"
+	ubi_dev_of_mtd "$num" >/dev/null && { die "the spare slot stayed attached after looking at it"; return 1; }
+	ver="$(printf '%s' "$info" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')"
+	ts="$(date +%Y%m%d-%H%M%S)"
+	f="$dir/be7000-slot$oth-$name-$ts.img.gz"
+	step read "Reading the flash of slot $oth" 15
+	dd if="/dev/mtd$num" bs=131072 2>/dev/null | gzip -1 > "$f" || { rm -f "$f"; die "reading the flash failed"; return 1; }
+	step hash "Checking the copy against the flash" 70
+	sha="$(raw_sha "$num")"
+	[ "$(gunzip -c "$f" 2>/dev/null | sha256sum | cut -d' ' -f1)" = "$sha" ] || { rm -f "$f"; die "the copy does not match the flash"; return 1; }
+	[ "$(gunzip -c "$f" 2>/dev/null | wc -c)" = "$bytes" ] || { rm -f "$f"; die "the copy has the wrong size"; return 1; }
+	cat > "$f.meta" <<-EOT
+		slot=$oth
+		mtd=$name
+		bytes=$bytes
+		sha256=$sha
+		kind=$kind
+		version=$ver
+		date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+	EOT
+	sync
+	step done "Backup ready" 100
+	printf '{"file":"%s","size":%s,"sha256":"%s","slot":%s,"mtd":"%s","kind":"%s","version":"%s"}\n' \
+		"$(jstr "$f")" "$(wc -c < "$f")" "$sha" "$oth" "$name" "$kind" "$(jstr "$ver")"
+}
+
+# backup-check <file> [--file-only]: the file reads back to the checksum in its
+# .meta, and (unless --file-only) the spare slot still holds exactly that
+cmd_backup_check() {
+	local f="$1" mode="$2" oth name num bytes want got
+	[ -f "$f" ] || { die "no such file"; return 1; }
+	oth="$(other_slot)" || { die "no ubi.mtd=rootfs* on the command line"; return 1; }
+	name="$(mtd_of $oth)"
+	num="$(mtd_num_of "$name")"
+	bytes="$(mtd_bytes_of "$name")"
+	gzip -t "$f" 2>/dev/null || { die "the file is not a valid gzip"; return 1; }
+	want="$(meta_get "$f" sha256)"
+	[ -n "$want" ] || { die "no checksum next to the file (the .meta file is missing)"; return 1; }
+	[ "$(meta_get "$f" mtd)" = "$name" ] || { die "the backup is of $(meta_get "$f" mtd), the spare slot is $name"; return 1; }
+	[ "$(meta_get "$f" bytes)" = "$bytes" ] || { die "the backup has another size than the slot"; return 1; }
+	got="$(gunzip -c "$f" | sha256sum | cut -d' ' -f1)"
+	[ "$got" = "$want" ] || { die "the file does not match its checksum"; return 1; }
+	if [ "$mode" != "--file-only" ]; then
+		[ "$(raw_sha "$num")" = "$want" ] || { die "the spare slot has changed since the backup was made"; return 1; }
+	fi
+	printf '{"ok":true,"sha256":"%s","kind":"%s","version":"%s","date":"%s"}\n' "$want" "$(meta_get "$f" kind)" "$(jstr "$(meta_get "$f" version)")" "$(meta_get "$f" date)"
+}
+
+# restore <file> --yes: write a backup back into the spare slot
+cmd_restore() {
+	local f="$1" yes="$2" oth name num bytes want
+	[ "$yes" = "--yes" ] || { die "restore overwrites the spare slot, pass --yes"; return 1; }
+	oth="$(other_slot)" || { die "no ubi.mtd=rootfs* on the command line"; return 1; }
+	name="$(mtd_of $oth)"
+	num="$(mtd_num_of "$name")"
+	[ -n "$num" ] || { die "no mtd $name"; return 1; }
+	[ -n "$(storage_value)" ] && { die "the spare slot is still storage, give it back and reboot first"; return 1; }
+	[ -n "$(storage_op)" ] && { die "a change of the spare slot waits for the reboot"; return 1; }
+	ubi_dev_of_mtd "$num" >/dev/null && { die "the spare slot is attached"; return 1; }
+	step check "Checking the backup file" 5
+	cmd_backup_check "$f" --file-only >/dev/null || { cmd_backup_check "$f" --file-only; return 1; }
+	want="$(meta_get "$f" sha256)"
+	step write "Writing the backup to slot $oth" 20
+	gunzip -c "$f" | mtd write - "$name" >&2 || { die "writing failed, the spare slot is now in an unknown state, repeat the restore"; return 1; }
+	step verify "Reading it back" 80
+	[ "$(raw_sha "$num")" = "$want" ] || { die "what was written does not read back the same, repeat the restore"; return 1; }
+	logger -t be7000-slots "slot $oth restored from $f"
+	step done "Slot restored" 100
+	cmd_info "$oth"
+}
+
+# --- turn the spare slot into storage --------------------------------------
+
+fstab_slotstorage_batch() {
+	cat <<-EOT
+		set fstab.slotstorage=mount
+		set fstab.slotstorage.target='/overlay'
+		set fstab.slotstorage.device='/dev/ubi2_0'
+		set fstab.slotstorage.fstype='ubifs'
+		set fstab.slotstorage.options='rw,noatime'
+		set fstab.slotstorage.enabled='1'
+		commit fstab
+	EOT
+}
+
+fstab_bigoverlay_batch() {
+	cat <<-EOT
+		delete fstab.slotstorage
+		set fstab.bigoverlay=mount
+		set fstab.bigoverlay.target='/overlay'
+		set fstab.bigoverlay.device='/dev/ubi1_1'
+		set fstab.bigoverlay.fstype='ubifs'
+		set fstab.bigoverlay.options='rw,noatime'
+		set fstab.bigoverlay.enabled='1'
+		commit fstab
+	EOT
+}
+
+# storage-enable (--backup <file> | --empty) --yes: everything checked and
+# set for the move, which preinit does on the next boot
+cmd_storage_enable() {
+	local mode="" f="" yes="" oth name kind src usedkb
+	be7000_factory_reset_pending && { die "factory reset is pending; storage changes are deferred"; return 1; }
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		--backup) mode=backup; f="$2"; shift ;;
+		--empty) mode=empty ;;
+		--yes) yes=1 ;;
+		esac
+		shift
+	done
+	[ -n "$yes" ] || { die "this erases the spare slot and the data partition, pass --yes"; return 1; }
+	[ -n "$mode" ] || { die "give --backup <file> or --empty"; return 1; }
+	oth="$(other_slot)" || { die "no ubi.mtd=rootfs* on the command line"; return 1; }
+	name="$(mtd_of $oth)"
+	[ -n "$(mtd_num_of "$name")" ] && [ -n "$(mtd_num_of overlay)" ] || { die "no mtd $name or overlay"; return 1; }
+	[ -n "$(storage_value)" ] && { die "the spare slot is already storage"; return 1; }
+	[ -n "$(storage_op)" ] && { die "a change of the spare slot already waits for the reboot"; return 1; }
+	ubi_dev_of_mtd "$(mtd_num_of "$name")" >/dev/null && { die "the spare slot is attached"; return 1; }
+	case "$(overlay_kind)" in
+	bigoverlay) src=cfg ;;
+	inslot) src=rootfs_data ;;
+	usb) die "/overlay is on a USB disk, which has more room than this would give"; return 1 ;;
+	*) die "/overlay is on an unexpected device ($(overlay_src))"; return 1 ;;
+	esac
+	[ -e /etc/be7000-test ] && { die "not on a test image"; return 1; }
+	[ -e /rom/lib/modules/"$(uname -r)"/be7000-mtdconcat.ko ] || { die "this image has no be7000-mtdconcat module"; return 1; }
+	usedkb="$(du -sk /overlay/upper 2>/dev/null | cut -f1)"
+	[ "${usedkb:-0}" -lt "$FIT_GLUED_KB" ] || { die "/overlay holds $((usedkb / 1024)) MB, more than the new volume takes"; return 1; }
+
+	if [ "$mode" = backup ]; then
+		step check "Checking the backup against the flash" 10
+		cmd_backup_check "$f" >/dev/null || { cmd_backup_check "$f"; return 1; }
+	else
+		kind="$(cmd_info "$oth" | sed -n 's/.*"kind":"\([a-z]*\)".*/\1/p')"
+		[ "$kind" = empty ] || { die "the spare slot is not empty ($kind), make a backup first"; return 1; }
+	fi
+
+	step config "Pointing fstab at the new volume" 50
+	fstab_slotstorage_batch | with_rootfs_data || { die "could not edit fstab"; return 1; }
+	# the live settings too, so that the copy preinit makes carries them
+	[ "$(overlay_kind)" = inslot ] || fstab_slotstorage_batch | uci -q batch
+	if [ -n "$(uci -q get fstab.bigoverlay)" ]; then
+		printf "set fstab.bigoverlay.enabled='0'\ncommit fstab\n" | with_rootfs_data
+		[ "$(overlay_kind)" = inslot ] || { uci -q set fstab.bigoverlay.enabled=0; uci -q commit fstab; }
+	fi
+	[ -n "$(uci -q get bigoverlay.main)" ] && { uci -q set bigoverlay.main.enabled=0; uci -q commit bigoverlay; }
+	sync
+
+	step env "Telling the next boot to move /overlay" 90
+	fw_setenv "$OPVAR" "enable $name $src" 2>/dev/null
+	[ "$(storage_op)" = "enable $name $src" ] || { storage_undo_config; die "the bootloader environment did not take $OPVAR"; return 1; }
+	logger -t be7000-slots "slot $oth ($name) and the data partition become /overlay on the next boot"
+	step done "Done, reboot to move /overlay" 100
+	printf '{"ok":true,"slot":%s,"mtd":"%s","reboot":true}\n' "$oth" "$name"
+}
+
+# the settings made for a move that has not happened, taken back
+storage_undo_config() {
+	if [ "$(overlay_kind)" = bigoverlay ]; then
+		fstab_bigoverlay_batch | with_rootfs_data
+		fstab_bigoverlay_batch | uci -q batch
+		[ -n "$(uci -q get bigoverlay.main)" ] && { uci -q set bigoverlay.main.enabled=1; uci -q commit bigoverlay; }
+	else
+		printf "delete fstab.slotstorage\ncommit fstab\n" | with_rootfs_data
+		uci -q delete fstab.slotstorage
+		uci -q commit fstab
+	fi
+	sync
+}
+
+# storage-disable --yes: /overlay goes back to the data partition on the next
+# boot, and the spare slot is left empty
+cmd_storage_disable() {
+	local yes="$1" usedkb
+	be7000_factory_reset_pending && { die "factory reset is pending; storage changes are deferred"; return 1; }
+	[ "$yes" = "--yes" ] || { die "pass --yes"; return 1; }
+	[ -n "$(storage_value)" ] || { die "the spare slot is not storage"; return 1; }
+	[ -n "$(storage_op)" ] && { die "a change of the spare slot already waits for the reboot"; return 1; }
+	[ "$(overlay_kind)" = slotstorage ] || { die "/overlay is not on the spare slot right now, reboot first"; return 1; }
+	usedkb="$(du -sk /overlay/upper 2>/dev/null | cut -f1)"
+	[ "${usedkb:-0}" -lt "$FIT_CFG_KB" ] || { die "/overlay holds $((usedkb / 1024)) MB, the data partition alone takes about $((FIT_CFG_KB / 1024)) MB, remove packages first"; return 1; }
+	step config "Pointing fstab back at the data partition" 40
+	fstab_bigoverlay_batch | with_rootfs_data || { die "could not edit fstab"; return 1; }
+	fstab_bigoverlay_batch | uci -q batch
+	[ -n "$(uci -q get bigoverlay.main)" ] && { uci -q set bigoverlay.main.enabled=1; uci -q commit bigoverlay; }
+	sync
+	step env "Telling the next boot to move /overlay back" 90
+	fw_setenv "$OPVAR" disable 2>/dev/null
+	[ "$(storage_op)" = disable ] || {
+		fstab_slotstorage_batch | with_rootfs_data
+		fstab_slotstorage_batch | uci -q batch
+		die "the bootloader environment did not take $OPVAR"
+		return 1
+	}
+	logger -t be7000-slots "/overlay goes back to the data partition on the next boot"
+	step done "Done, reboot to move /overlay back" 100
+	printf '{"ok":true,"reboot":true}\n'
+}
+
+# storage-cancel: drop a move that waits for the reboot
+cmd_storage_cancel() {
+	be7000_factory_reset_pending && { die "factory reset is pending; storage changes are deferred"; return 1; }
+	case "$(storage_op)" in
+	enable*) storage_undo_config ;;
+	disable) fstab_slotstorage_batch | with_rootfs_data; fstab_slotstorage_batch | uci -q batch
+		[ -n "$(uci -q get bigoverlay.main)" ] && { uci -q set bigoverlay.main.enabled=0; uci -q commit bigoverlay; } ;;
+	"") die "nothing waits for the reboot"; return 1 ;;
+	esac
+	fw_setenv "$OPVAR" 2>/dev/null
+	[ -z "$(storage_op)" ] || { die "could not clear $OPVAR"; return 1; }
+	echo '{"ok":true}'
+}
+
+# --- long commands run in the background -----------------------------------
+
+cmd_job_start() {
+	local c="$1"
+	case "$c" in backup|storage-enable|storage-disable|restore) ;; *) die "unknown job"; return 1 ;; esac
+	if [ -f "$JOBDIR/pid" ] && kill -0 "$(cat "$JOBDIR/pid")" 2>/dev/null; then
+		die "another job is running"
+		return 1
+	fi
+	rm -rf "$JOBDIR"
+	mkdir -p "$JOBDIR"
+	echo "$c" > "$JOBDIR/cmd"
+	printf '{"state":"running","step":"start","msg":"","pct":0,"cmd":"%s"}\n' "$c" > "$JOBDIR/status"
+	(
+		out="$(JOB=1 "$0" "$@" 2>>"$JOBDIR/log")"
+		rc=$?
+		printf '%s\n' "$out" > "$JOBDIR/result"
+		if [ $rc = 0 ]; then
+			printf '{"state":"done","step":"done","msg":"","pct":100,"cmd":"%s"}\n' "$c" > "$JOBDIR/status"
+		else
+			printf '{"state":"failed","step":"failed","msg":"%s","pct":0,"cmd":"%s"}\n' "$(jstr "$(printf '%s' "$out" | sed -n 's/.*"error":"\([^"]*\)".*/\1/p')")" "$c" > "$JOBDIR/status"
+		fi
+	) </dev/null >/dev/null 2>&1 &
+	echo $! > "$JOBDIR/pid"
+	echo '{"started":true}'
+}
+
+cmd_job_status() {
+	local st res log
+	[ -f "$JOBDIR/status" ] || { echo '{"state":"none"}'; return 0; }
+	st="$(cat "$JOBDIR/status")"
+	case "$st" in *'"state":"running"'*)
+		kill -0 "$(cat "$JOBDIR/pid" 2>/dev/null)" 2>/dev/null ||
+			st='{"state":"failed","step":"failed","msg":"the job stopped without finishing","pct":0,"cmd":""}' ;;
+	esac
+	res="$(cat "$JOBDIR/result" 2>/dev/null)"
+	log="$(tail -n 8 "$JOBDIR/log" 2>/dev/null)"
+	case "$res" in '{'*) ;; *) res=null ;; esac
+	printf '%s,"result":%s,"log":"%s"}\n' "${st%\}}" "$res" "$(jstr "$log")"
+}
+
 case "$1" in
 status) cmd_status ;;
 info) cmd_info "$2" ;;
 switch) cmd_switch "$2" ;;
-*) echo "usage: $0 status | info <0|1> | switch <0|1>" >&2; exit 1 ;;
+storage-status) cmd_storage_status ;;
+storage-name) storage_mtd_name ;;
+backup) shift; cmd_backup "$@" ;;
+backup-check) shift; cmd_backup_check "$@" ;;
+restore) shift; cmd_restore "$@" ;;
+storage-enable) shift; cmd_storage_enable "$@" ;;
+storage-disable) shift; cmd_storage_disable "$@" ;;
+storage-cancel) cmd_storage_cancel ;;
+job-start) shift; cmd_job_start "$@" ;;
+job-status) cmd_job_status ;;
+*) echo "usage: $0 status | info <0|1> | switch <0|1> | storage-status | storage-name | backup | backup-check | restore | storage-enable | storage-disable | storage-cancel | job-start | job-status" >&2; exit 1 ;;
 esac
