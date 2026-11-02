@@ -1,0 +1,5 @@
+#!/bin/sh
+# The rc.d link ships in the image for the first boot; after an update the
+# links are rebuilt from here, so make sure the service stays enabled.
+/etc/init.d/miwrt-wifi-defaults enable
+exit 0

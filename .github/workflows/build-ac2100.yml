@@ -1,0 +1,122 @@
+name: ac2100 image
+
+# MiWRT for the Xiaomi Redmi Router AC2100, built with the official OpenWrt
+# ImageBuilder: no toolchain, no kernel patches, every package from the
+# official mipsel_24kc feeds, and the MiWRT files copied in as plain files.
+# About ten minutes. Separate from build.yml on purpose: nothing here touches
+# the BE7000 image.
+#
+# Phase 1 (docs/plans/redmi-ac2100.md): the image is built, verified and kept
+# as a workflow artifact. Nothing is released.
+
+on:
+  workflow_dispatch:
+    inputs:
+      openwrt:
+        description: "OpenWrt release the ImageBuilder comes from"
+        default: "25.12.6"
+      imagebuilder_sha256:
+        description: "Expected SHA-256 of the ImageBuilder archive (empty: trust downloads.openwrt.org's sha256sums and print the hash to pin)"
+        default: ""
+  push:
+    branches: [ miwrt ]
+    paths:
+      - "overlay-ac2100/**"
+      - "scripts/ac2100/**"
+      - ".github/workflows/build-ac2100.yml"
+
+concurrency:
+  group: ac2100-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  OPENWRT: ${{ inputs.openwrt || '25.12.6' }}
+  IB_SHA256: ${{ inputs.imagebuilder_sha256 || '' }}
+  TARGET: ramips/mt7621
+  PROFILE: xiaomi_redmi-router-ac2100
+  DEVICE: openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+            build-essential libncurses-dev zlib1g-dev gawk gettext libssl-dev xsltproc \
+            rsync wget unzip python3 python3-setuptools zstd file
+
+      - name: Download and verify the ImageBuilder
+        run: |
+          set -eu
+          base="https://downloads.openwrt.org/releases/$OPENWRT/targets/$TARGET"
+          ib="openwrt-imagebuilder-$OPENWRT-${TARGET/\//-}.Linux-x86_64.tar.zst"
+          curl -fsSL -o "$ib" "$base/$ib"
+          curl -fsSL -o sha256sums "$base/sha256sums"
+          grep " \*$ib\$" sha256sums | sha256sum -c -
+          have=$(sha256sum "$ib" | cut -d' ' -f1)
+          if [ -n "$IB_SHA256" ]; then
+            [ "$have" = "$IB_SHA256" ] || { echo "::error::ImageBuilder sha256 is $have, expected $IB_SHA256"; exit 1; }
+            echo "ImageBuilder archive matches the pinned hash"
+          else
+            echo "::notice::ImageBuilder $ib sha256 $have (pin it with the imagebuilder_sha256 input)"
+          fi
+          mkdir ib
+          tar --zstd -xf "$ib" -C ib --strip-components=1
+          ls ib
+
+      - name: Assemble the MiWRT files
+        run: |
+          set -eu
+          TAG="${{ github.ref_name }}"
+          case "$TAG" in ac2100-v*) VER="${TAG#ac2100-v}"; VER="${VER%%-*}" ;; *) VER=dev; TAG= ;; esac
+          scripts/ac2100/assemble-files.sh ib/files "$VER" "$TAG" "${{ github.run_id }}" "$OPENWRT"
+          echo "--- /etc/miwrt-release"; cat ib/files/etc/miwrt-release
+          echo "--- files"; (cd ib/files && find . -type f -o -type l | sort)
+
+      - name: Build the image
+        run: |
+          set -eu
+          pkgs=$(grep -vE '^\s*(#|$)' scripts/ac2100/packages.list | tr '\n' ' ')
+          echo "packages: $pkgs"
+          cd ib
+          make image PROFILE="$PROFILE" PACKAGES="$pkgs" FILES="$PWD/files" 2>&1 | tee ../make-image.log | grep -vE '^\s*$' | tail -n 60
+          test "${PIPESTATUS[0]}" = 0
+
+      - name: Collect the output under the device name
+        run: |
+          set -eu
+          src=ib/bin/targets/$TARGET
+          ls -la "$src"
+          mkdir -p out
+          # the ImageBuilder puts the OpenWrt version into the file names; the
+          # updater and the instructions use the plain device name, as the
+          # BE7000 release does
+          for f in "$src"/openwrt-"$OPENWRT"-*; do
+            n=$(basename "$f")
+            cp "$f" "out/openwrt-${n#openwrt-$OPENWRT-}"
+          done
+          cp "$src"/profiles.json out/ 2>/dev/null || true
+          cp make-image.log out/
+          (cd out && sha256sum openwrt-* > sha256sums)
+          ls -la out
+
+      - name: Verify the image
+        run: scripts/ac2100/verify-image.sh out
+
+      - name: Package list
+        run: |
+          echo "## Redmi AC2100 image, OpenWrt $OPENWRT" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          (cd out && ls -la openwrt-* && echo && wc -l < "$DEVICE.manifest" && echo "packages") >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: miwrt-ac2100-${{ env.OPENWRT }}-${{ github.run_id }}
+          path: out/
+          retention-days: 14
+          if-no-files-found: error

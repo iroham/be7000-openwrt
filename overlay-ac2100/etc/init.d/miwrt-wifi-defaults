@@ -1,0 +1,98 @@
+#!/bin/sh /etc/rc.common
+# Wi-Fi on a fresh install, with a password, and the radio settings every
+# MiWRT install gets.
+#
+# OpenWrt generates both networks disabled and without a password, and it
+# generates /etc/config/wireless only some 30 to 40 seconds into the first
+# boot, after the uci-defaults scripts have run. So this runs last (S99),
+# waits for both radios, and then:
+#   - sets the country on radios that have none (GB, the build's home market;
+#     without a country the radar channels on 5 GHz stay unavailable),
+#   - switches the daily group-key renewal off on 5 GHz networks that do not
+#     set it themselves, as the BE7000 image does, so both routers behave alike,
+#   - on a fresh install only: enables both radios with the SSID below and
+#     this unit's serial number as the password. The serial is printed on the
+#     label, different on every router, and not something the radio gives away.
+#
+# Fresh install or update? The marker below is kept across updates
+# (etc/sysupgrade.conf). Without it, a network that already has encryption
+# set was configured by someone and is left alone.
+START=99
+
+MARK=/etc/.miwrt_wifi_defaults
+SSID=MiWRT
+# Only a unit whose serial cannot be read gets this shared password. It is in
+# the instructions; change it.
+FALLBACK_KEY=miwrt-ac2100
+
+default_key() {
+	local sn part
+	sn="$(fw_printenv -n SN 2>/dev/null | tr -cd 'A-Za-z0-9')"
+	if [ -z "$sn" ]; then
+		part="$(grep -i '"bdata"' /proc/mtd | cut -d: -f1 | head -1)"
+		[ -n "$part" ] && sn="$(strings "/dev/${part}ro" 2>/dev/null | sed -n 's/^SN=//p' | head -1 | tr -cd 'A-Za-z0-9')"
+	fi
+	if [ "${#sn}" -ge 8 ] && [ "${#sn}" -le 63 ]; then echo "$sn"; return 0; fi
+	echo "$FALLBACK_KEY"
+}
+
+configured() {
+	local s enc
+	for s in $(uci -q show wireless | sed -n 's/^wireless\.\([^.]*\)=wifi-iface$/\1/p'); do
+		enc="$(uci -q get wireless.$s.encryption)"
+		[ -n "$enc" ] && [ "$enc" != "none" ] && return 0
+	done
+	return 1
+}
+
+radio_settings() {
+	local r s dev
+	for r in $(uci -q show wireless | sed -n 's/^wireless\.\([^.]*\)=wifi-device$/\1/p'); do
+		[ -n "$(uci -q get wireless.$r.country)" ] || uci -q set wireless.$r.country='GB'
+	done
+	for s in $(uci -q show wireless | sed -n 's/^wireless\.\([^.]*\)=wifi-iface$/\1/p'); do
+		dev="$(uci -q get wireless.$s.device)" || continue
+		[ "$(uci -q get wireless.$dev.band)" = 5g ] || continue
+		[ -n "$(uci -q get wireless.$s.wpa_group_rekey)" ] || uci -q set wireless.$s.wpa_group_rekey='0'
+	done
+}
+
+boot() {
+	[ -e "$MARK" ] && return 0
+	(
+		i=0
+		while [ $i -lt 120 ]; do
+			uci -q get wireless.radio0 >/dev/null && uci -q get wireless.radio1 >/dev/null && break
+			i=$((i+1)); sleep 1
+		done
+		uci -q get wireless.radio0 >/dev/null || { logger -t miwrt-wifi-defaults "no radios after 120 s, giving up for this boot"; exit 0; }
+		radio_settings
+		if configured; then
+			uci commit wireless
+			touch "$MARK"
+			logger -t miwrt-wifi-defaults "wireless already configured, left as is"
+			wifi reload
+			exit 0
+		fi
+		KEY="$(default_key)"
+		for r in 0 1; do
+			uci -q get wireless.radio$r >/dev/null || continue
+			uci -q set wireless.radio$r.disabled=0
+			uci -q set wireless.default_radio$r.disabled=0
+			uci -q set wireless.default_radio$r.ssid="$SSID"
+			uci -q set wireless.default_radio$r.encryption=psk2
+			uci -q set wireless.default_radio$r.key="$KEY"
+		done
+		uci commit wireless
+		touch "$MARK"
+		if [ "$KEY" = "$FALLBACK_KEY" ]; then
+			logger -t miwrt-wifi-defaults "fresh install: Wi-Fi $SSID enabled on both bands, serial not readable, shared default password in use: change it"
+		else
+			logger -t miwrt-wifi-defaults "fresh install: Wi-Fi $SSID enabled on both bands, password is the serial number"
+		fi
+		wifi reload
+	) </dev/null >/dev/null 2>&1 &
+}
+
+start() { :; }
+stop() { :; }

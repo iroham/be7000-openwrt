@@ -1,0 +1,47 @@
+# Packages added to the OpenWrt ImageBuilder's defaults for the Redmi AC2100
+# MiWRT image. One per line, comments allowed. Everything here comes from the
+# official OpenWrt feeds for mipsel_24kc; MiWRT's own files are copied in as
+# plain files by scripts/ac2100/assemble-files.sh, not as packages.
+#
+# The device profile already brings kmod-mt7603, kmod-mt7615-firmware,
+# wpad-basic-mbedtls and uboot-envtools.
+
+# web interface, with TLS (the app talks to uhttpd over https)
+luci
+luci-ssl
+luci-i18n-base-ru
+luci-i18n-base-zh-cn
+luci-i18n-firewall-ru
+luci-i18n-firewall-zh-cn
+luci-i18n-package-manager-ru
+luci-i18n-package-manager-zh-cn
+
+# what the app service runs on
+ucode
+ucode-mod-digest
+ucode-mod-fs
+ucode-mod-ubus
+ucode-mod-uci
+lua
+luci-lib-nixio
+rpcd-mod-iwinfo
+rpcd-mod-luci
+rpcd-mod-ucode
+ip-tiny
+openssl-util
+ca-bundle
+curl
+umdns
+
+# per-device traffic accounting, traffic shaping (installed, off until chosen)
+nlbwmon
+luci-app-nlbwmon
+sqm-scripts
+luci-app-sqm
+
+# diagnostics
+tcpdump-mini
+
+# Not in this image, on purpose: banip (128 MB of RAM is too little for the
+# usual block lists; it installs from the official feed when wanted), Docker,
+# anything USB (the router has no port), the BE7000 slot and radio tools.

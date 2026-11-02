@@ -214,6 +214,10 @@ Coming from Beam WRT: install the MiWRT `sysupgrade.bin` over it. Package feed a
 
 Never write to the bootloader partitions `0:APPSBL` and `0:APPSBL_1`.
 
+## Other routers
+
+A MiWRT image for the Xiaomi Redmi Router AC2100 is being prepared: the `ac2100 image` workflow builds it with the official OpenWrt ImageBuilder from `overlay-ac2100/` and the shared MiWRT files, and nothing in the BE7000 build changes for it. It is not released and has not been flashed on a router yet; the plan and its gates are in [docs/plans/redmi-ac2100.md](docs/plans/redmi-ac2100.md).
+
 ## Building
 
 GitHub Actions builds everything: a tag `v*` produces the images, the signed package feed on this repository's GitHub Pages, and a release. The workflow needs one secret, `APK_SIGNING_KEY` (an EC P-256 private key in PEM); images trust its public key. Details in [docs/building.en.md](docs/building.en.md).
