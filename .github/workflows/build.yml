@@ -29,10 +29,18 @@ on:
         description: "Only warm the compiler cache for debug-* builds (image as a debug build does, no feed, no release)"
         type: boolean
         default: false
+      release_tag:
+        description: "Build and publish a release under this tag (v1.2.3 or debug-...); the tag is created on the built commit if it does not exist. Empty: as before"
+        type: string
+        default: ""
   push:
     tags: ["v*", "debug-*"]
 
 env:
+  # The tag this build is for: the pushed tag, or the release_tag input of a
+  # manual run (then the release step creates the tag on the built commit).
+  # A plain manual run has the branch name here and releases nothing.
+  REL_TAG: ${{ inputs.release_tag || github.ref_name }}
   # Upstream OpenWrt at the commit patches/port/BASE names; the BE7000 port
   # itself is the series in patches/port/ (a step below checks the two agree).
   OWRT_REPO: https://github.com/openwrt/openwrt.git
@@ -69,6 +77,13 @@ jobs:
 
       # The OpenWrt tree plus a toolchain does not fit next to the preinstalled
       # SDKs the runner image ships.
+      - name: Check the release tag
+        if: inputs.release_tag != ''
+        run: |
+          printf '%s\n' "$REL_TAG" | grep -Eq '^v[0-9]+\.[0-9]+(\.[0-9]+)*$|^debug-[0-9A-Za-z.-]+$' ||
+            { echo "::error::release_tag must look like v1.5.4.1 or debug-20261102-name, got '$REL_TAG'"; exit 1; }
+          echo "releasing $REL_TAG from ${{ github.sha }}"
+
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -115,7 +130,7 @@ jobs:
           mkdir -p files
           cp -a ../repo/overlay-files/. files/
           # a debug-* tag ships extra diagnostics and experiments on top
-          case "${{ github.ref_name }}" in
+          case "$REL_TAG" in
             debug-*) cp -a ../repo/overlay-files-debug/. files/; echo "debug overlay added" ;;
           esac
           cp -a ../repo/awg-feed .
@@ -202,14 +217,14 @@ jobs:
           # defconfig silently drops the option and nothing is ever cached.
           echo "CONFIG_DEVEL=y" >> .config
           echo "CONFIG_CCACHE=y" >> .config
-          case "${{ github.ref_name }}:${{ inputs.warm }}" in
+          case "$REL_TAG:${{ inputs.warm }}" in
             debug-*|*:true) echo "CONFIG_PACKAGE_tcpdump-mini=y" >> .config ;;
           esac
           # the version LuCI, /etc/openwrt_release and the banner show:
           # "MiWRT 1.3.1 r20260623-790d036a" instead of "OpenWrt SNAPSHOT".
           # Image file names stay openwrt-... (tree 009), the installer and
           # be7000-update look the assets up by name.
-          TAG="${{ github.ref_name }}"
+          TAG="$REL_TAG"
           case "$TAG" in
             v*) REL="${TAG#v}" ;;
             debug-*) REL="$TAG" ;;
@@ -241,7 +256,7 @@ jobs:
           # kmod-* stay =m: selected kmods feed the kernel config, so dropping
           # them would change the kernel hash (vermagic) and the debug image
           # could no longer install modules from the release feed.
-          case "${{ github.ref_name }}:${{ inputs.warm }}" in
+          case "$REL_TAG:${{ inputs.warm }}" in
             debug-*|*:true)
               sed -i '/^CONFIG_PACKAGE_kmod-/!s/^\(CONFIG_PACKAGE_[^=]*\)=m$/# \1 is not set/' .config
               make defconfig
@@ -299,7 +314,7 @@ jobs:
           sed -i "s|feed/$ARCH/|feed/$FEED_BASE/$ARCH/|" "$f"
           grep "feed/" "$f"
           # what be7000-update and the LuCI page report as the installed version
-          TAG="${{ github.ref_name }}"
+          TAG="$REL_TAG"
           case "$TAG" in v*) VER="${TAG#v}"; VER="${VER%%-*}" ;; debug-*) VER="$TAG" ;; *) VER=dev ;; esac
           {
             echo "VERSION=$VER"
@@ -332,7 +347,7 @@ jobs:
           # a stray personal file or a debug service would ship to everyone
           ! grep -rlE "hfdbg|HFDBG|192\.168\.11\." build_dir/target-*/root-qualcommbe/etc || {
             echo "personal or debug files in the rootfs" >&2; exit 1; }
-          case "${{ github.ref_name }}" in
+          case "$REL_TAG" in
             debug-*) test -e build_dir/target-*/root-qualcommbe/etc/be7000-debug ;;
             *) ! test -e build_dir/target-*/root-qualcommbe/etc/be7000-debug ;;
           esac
@@ -341,7 +356,7 @@ jobs:
           ! test -e build_dir/target-*/root-qualcommbe/etc/be7000-test
 
       - name: Publish the feed
-        if: "!startsWith(github.ref, 'refs/tags/debug-') && !inputs.warm"
+        if: "!startsWith(env.REL_TAG, 'debug-') && !inputs.warm"
         run: |
           git clone --branch gh-pages --single-branch \
             "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" pages
@@ -363,7 +378,7 @@ jobs:
           else
             n=$(find "feed/$FEED_BASE/$ARCH" -name '*.apk' | wc -l)
             k=$(find "feed/targets/$TARGET/$VERMAGIC" -name '*.apk' | wc -l)
-            git commit -q -m "feed: $n userspace packages and $k kernel modules for $VERMAGIC (${{ github.ref_name }})"
+            git commit -q -m "feed: $n userspace packages and $k kernel modules for $VERMAGIC ($REL_TAG)"
             # the hybrid-failover feed job may have pushed meanwhile, its
             # directory never overlaps ours, so a rebase is always clean
             for i in 1 2 3 4 5; do
@@ -375,9 +390,9 @@ jobs:
           fi
 
       - name: Package the release
-        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/debug-')
+        if: startsWith(env.REL_TAG, 'v') || startsWith(env.REL_TAG, 'debug-')
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="$REL_TAG"
           case "$TAG" in
             debug-*) VER="$TAG"; ZIP="be7000-openwrt-$TAG.zip" ;;
             *) VER="${TAG#v}"; VER="${VER%%-*}"; ZIP="be7000-openwrt-v$VER.zip" ;;
@@ -402,12 +417,12 @@ jobs:
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
       - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/debug-')
+        if: startsWith(env.REL_TAG, 'v') || startsWith(env.REL_TAG, 'debug-')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd out
-          notes=../repo/docs/release-notes/${{ github.ref_name }}.md
+          notes=../repo/docs/release-notes/$REL_TAG.md
           if [ -f "$notes" ]; then
             printf '\n\nSHA-256 of %s\n%s\n' "$ZIP" "$(sha256sum "$ZIP" | cut -d' ' -f1)" >> "$notes"
             args=(--notes-file "$notes")
@@ -418,13 +433,14 @@ jobs:
                   "$DEVICE-squashfs-sysupgrade.bin" "$DEVICE.manifest" sha256sums.txt sha256sums.txt.sig)
           # A release for this tag may already exist (created by hand, or a
           # rerun): then just replace its files rather than fail at the end.
-          if gh release view "${{ github.ref_name }}" -R "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload "${{ github.ref_name }}" -R "${{ github.repository }}" --clobber "${assets[@]}"
+          if gh release view "$REL_TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$REL_TAG" -R "${{ github.repository }}" --clobber "${assets[@]}"
           else
-            case "${{ github.ref_name }}" in
-              debug-*) gh release create "${{ github.ref_name }}" -R "${{ github.repository }}" --prerelease \
-                         --title "MiWRT, debug build ${{ github.ref_name }}" "${args[@]}" "${assets[@]}" ;;
-              *) gh release create "${{ github.ref_name }}" -R "${{ github.repository }}" --latest \
+            case "$REL_TAG" in
+              # --target creates the tag on the built commit when it does not exist yet
+              debug-*) gh release create "$REL_TAG" -R "${{ github.repository }}" --prerelease --target "${{ github.sha }}" \
+                         --title "MiWRT, debug build $REL_TAG" "${args[@]}" "${assets[@]}" ;;
+              *) gh release create "$REL_TAG" -R "${{ github.repository }}" --latest --target "${{ github.sha }}" \
                    --title "MiWRT $VER" "${args[@]}" "${assets[@]}" ;;
             esac
           fi
@@ -434,7 +450,7 @@ jobs:
       # Pages host that already serves the package feed usually is not. Keep
       # the three newest releases there.
       - name: Mirror the image on GitHub Pages
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(env.REL_TAG, 'v')
         run: |
           git clone --filter=blob:none --no-checkout --depth 1 --branch gh-pages \
             "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" mirror
@@ -442,7 +458,7 @@ jobs:
           git sparse-checkout set --no-cone /firmware/
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          tag="${{ github.ref_name }}"
+          tag="$REL_TAG"
           for i in 1 2 3 4 5; do
             git fetch -q --filter=blob:none --depth 1 origin gh-pages
             git checkout -q -B gh-pages FETCH_HEAD
