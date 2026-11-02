@@ -64,6 +64,8 @@ jobs:
           else
             echo "::notice::ImageBuilder $ib sha256 $have (pin it with the imagebuilder_sha256 input)"
           fi
+          echo "imagebuilder sha256 $have  $ib"
+          echo "IB_HASH=$have" >> "$GITHUB_ENV"
           mkdir ib
           tar --zstd -xf "$ib" -C ib --strip-components=1
           ls ib
@@ -101,18 +103,52 @@ jobs:
           done
           cp "$src"/profiles.json out/ 2>/dev/null || true
           cp make-image.log out/
+          # provenance: what this image was built from
+          {
+            echo "openwrt=$OPENWRT"
+            echo "imagebuilder_sha256=$IB_HASH"
+            echo "profile=$PROFILE"
+            echo "repository=${{ github.repository }}"
+            echo "commit=${{ github.sha }}"
+            echo "ref=${{ github.ref_name }}"
+            echo "run=${{ github.run_id }}"
+          } > out/build-metadata.txt
+          cat out/build-metadata.txt
           (cd out && sha256sum openwrt-* > sha256sums)
           ls -la out
 
       - name: Verify the image
         run: scripts/ac2100/verify-image.sh out
 
-      - name: Package list
+      - name: What is in the image
         run: |
-          echo "## Redmi AC2100 image, OpenWrt $OPENWRT" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          (cd out && ls -la openwrt-* && echo && wc -l < "$DEVICE.manifest" && echo "packages") >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          set -u
+          cd out
+          echo "### packages ($(wc -l < "$DEVICE.manifest"))"
+          cat "$DEVICE.manifest"
+          echo "### sysupgrade CONTROL"
+          tar -xOf "$DEVICE-squashfs-sysupgrade.bin" --wildcards 'sysupgrade-*/CONTROL' 2>/dev/null || true
+          echo "### sysupgrade metadata"
+          tail -c 2048 "$DEVICE-squashfs-sysupgrade.bin" | strings | grep -o '{.*}' | head -c 1500; echo
+          echo "### MiWRT files inside the root filesystem"
+          tar -xOf "$DEVICE-squashfs-sysupgrade.bin" --wildcards 'sysupgrade-*/root' > root.squashfs 2>/dev/null || true
+          us=$(ls ../ib/staging_dir/host/bin/unsquashfs* 2>/dev/null | head -1)
+          if [ -s root.squashfs ] && [ -n "$us" ]; then
+            "$us" -d '' -ls root.squashfs 2>/dev/null | grep -E 'miwrt|nimbus|be7000-update|uci-defaults/|openwrt_release|banner$' | sort
+          else
+            echo "(no unsquashfs in the ImageBuilder, listing skipped)"
+          fi
+          rm -f root.squashfs
+          {
+            echo "## Redmi AC2100 image, OpenWrt $OPENWRT"
+            echo '```'
+            ls -la openwrt-*
+            echo
+            cat build-metadata.txt
+            echo
+            echo "$(wc -l < "$DEVICE.manifest") packages"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
