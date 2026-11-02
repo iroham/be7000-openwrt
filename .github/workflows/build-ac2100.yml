@@ -21,6 +21,9 @@ on:
       imagebuilder_sha256:
         description: "Expected SHA-256 of the ImageBuilder archive (empty: trust downloads.openwrt.org's sha256sums and print the hash to pin)"
         default: ""
+      release_tag:
+        description: "Publish a pre-release under this tag (ac2100-vX.Y.Z); the tag is created on the built commit if it does not exist. Empty: build only"
+        default: ""
   push:
     branches: [ miwrt ]
     paths:
@@ -36,6 +39,9 @@ concurrency:
 env:
   OPENWRT: ${{ inputs.openwrt || '25.12.6' }}
   IB_SHA256: ${{ inputs.imagebuilder_sha256 || '' }}
+  # the release tag: from a pushed ac2100-v* tag, or from the dispatch input
+  # (the tag is then created by the release step on the commit that was built)
+  RELEASE_TAG: ${{ inputs.release_tag || (startsWith(github.ref, 'refs/tags/ac2100-v') && github.ref_name) || '' }}
   TARGET: ramips/mt7621
   PROFILE: xiaomi_redmi-router-ac2100
   DEVICE: openwrt-ramips-mt7621-xiaomi_redmi-router-ac2100
@@ -84,8 +90,13 @@ jobs:
       - name: Assemble the MiWRT files
         run: |
           set -eu
-          TAG="${{ github.ref_name }}"
-          case "$TAG" in ac2100-v*) VER="${TAG#ac2100-v}"; VER="${VER%%-*}" ;; *) VER=dev; TAG= ;; esac
+          TAG="$RELEASE_TAG"
+          if [ -n "$TAG" ]; then
+            printf '%s\n' "$TAG" | grep -Eq '^ac2100-v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::release tag must look like ac2100-v1.0.0, got '$TAG'"; exit 1; }
+            VER="${TAG#ac2100-v}"
+          else
+            VER=dev
+          fi
           scripts/ac2100/assemble-files.sh ib/files "$VER" "$TAG" "${{ github.run_id }}" "$OPENWRT"
           echo "VER=$VER" >> "$GITHUB_ENV"
           echo "--- /etc/miwrt-release"; cat ib/files/etc/miwrt-release
@@ -192,7 +203,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Package the release
-        if: startsWith(github.ref, 'refs/tags/ac2100-v')
+        if: env.RELEASE_TAG != ''
         run: |
           set -eu
           [ "${SIGNED:-0}" = 1 ] || { echo "::error::a release needs the signing key"; exit 1; }
@@ -208,13 +219,13 @@ jobs:
           sha256sum "out/$ZIP"
 
       - name: Publish the pre-release
-        if: startsWith(github.ref, 'refs/tags/ac2100-v')
+        if: env.RELEASE_TAG != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
           cd out
-          notes=../docs/release-notes/${{ github.ref_name }}.md
+          notes=../docs/release-notes/$RELEASE_TAG.md
           if [ -f "$notes" ]; then
             printf '\n\nSHA-256 of %s\n%s\n' "$ZIP" "$(sha256sum "$ZIP" | cut -d' ' -f1)" >> "$notes"
             args=(--notes-file "$notes")
@@ -223,10 +234,11 @@ jobs:
           fi
           assets=("$ZIP" "$DEVICE-squashfs-kernel1.bin" "$DEVICE-squashfs-rootfs0.bin" "$DEVICE-squashfs-sysupgrade.bin" \
                   "$DEVICE.manifest" build-metadata.txt sha256sums.txt sha256sums.txt.sig)
-          if gh release view "${{ github.ref_name }}" -R "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload "${{ github.ref_name }}" -R "${{ github.repository }}" --clobber "${assets[@]}"
+          if gh release view "$RELEASE_TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" -R "${{ github.repository }}" --clobber "${assets[@]}"
           else
-            gh release create "${{ github.ref_name }}" -R "${{ github.repository }}" --prerelease \
+            # --target creates the tag on the built commit when it does not exist yet
+            gh release create "$RELEASE_TAG" -R "${{ github.repository }}" --prerelease --target "${{ github.sha }}" \
               --title "MiWRT $VER for the Redmi AC2100" "${args[@]}" "${assets[@]}"
           fi
 
@@ -234,7 +246,7 @@ jobs:
       # Same layout as the BE7000 mirror in build.yml; the three newest
       # AC2100 tags are kept, the BE7000 ones are not touched.
       - name: Mirror the image on GitHub Pages
-        if: startsWith(github.ref, 'refs/tags/ac2100-v')
+        if: env.RELEASE_TAG != ''
         run: |
           set -eu
           git clone --filter=blob:none --no-checkout --depth 1 --branch gh-pages \
@@ -243,7 +255,7 @@ jobs:
           git sparse-checkout set --no-cone /firmware/
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          tag="${{ github.ref_name }}"
+          tag="$RELEASE_TAG"
           for i in 1 2 3 4 5; do
             git fetch -q --filter=blob:none --depth 1 origin gh-pages
             git checkout -q -B gh-pages FETCH_HEAD
