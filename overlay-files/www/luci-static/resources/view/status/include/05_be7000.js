@@ -12,6 +12,18 @@ var callSystemBoard = rpc.declare({ object: 'system', method: 'board' });
 // the MiWRT mark, same as the theme's logo.svg
 var LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"> <rect width="64" height="64" rx="15" fill="#4b3bff"/> <g fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"> <path d="M14.5 43V31.8L25.5 22.4l9.6 11.3c1.9 2.2 5 2.5 6.9.7 1.8-1.7 1.7-4.6-.3-6.1-1.5-1.1-3.5-.9-4.6.4"/> <path d="M38.9 21.2a9.6 9.6 0 0 1 9.4 9.9"/> <path d="M38.6 15.6a15.2 15.2 0 0 1 15.3 15.8"/> </g> </svg>';
 
+// what the card says under the name, per router model (system board "model")
+var MODELS = [
+	{ match: /Redmi Router AC2100/i, prefix: 'ac2100-v',
+	  sub: { ru: 'Прошивка и приложение для телефона для Xiaomi Redmi Router AC2100 на базе OpenWrt 25.12',
+	         en: 'Firmware and phone app for the Xiaomi Redmi Router AC2100, based on OpenWrt 25.12',
+	         zh: '基于 OpenWrt 25.12 的小米 Redmi Router AC2100 固件与手机应用' } },
+	{ match: /./, prefix: 'v',
+	  sub: { ru: 'Прошивка и приложение для телефона для Xiaomi BE7000 на базе OpenWrt, ядро 6.18',
+	         en: 'Firmware and phone app for the Xiaomi BE7000, based on OpenWrt, kernel 6.18',
+	         zh: '基于 OpenWrt 的小米 BE7000 固件与手机应用，内核 6.18' } }
+];
+
 var TEXT = {
 	ru: {
 		sub: 'Прошивка и приложение для телефона для Xiaomi BE7000 на базе OpenWrt, ядро 6.18',
@@ -123,6 +135,7 @@ return baseclass.extend({
 		var ver = (L.isObject(board.release) ? board.release.description : '') || '';
 
 		ver = ver.replace(/^(BE7000|Beam WRT|MiWRT|OpenWrt)\s+/, '').split(' ')[0];
+		var model = MODELS.filter(function(m) { return m.match.test(board.model || ''); })[0] || MODELS[MODELS.length - 1];
 
 		if (!document.getElementById('be7k-css'))
 			document.head.appendChild(E('style', { 'id': 'be7k-css' }, CSS));
@@ -131,13 +144,13 @@ return baseclass.extend({
 			E('div', { 'class': 'be7k-logo', 'aria-hidden': 'true' }),
 			E('div', { 'class': 'be7k-head' }, [
 				E('a', { 'class': 'be7k-name', 'href': REPO, 'target': '_blank', 'rel': 'noopener' }, 'MiWRT'),
-				E('div', { 'class': 'be7k-sub' }, tx.sub),
+				E('div', { 'class': 'be7k-sub' }, model.sub[lang()] || tx.sub),
 				ver ? E('span', { 'class': 'be7k-ver' }, tx.version + ' ' + ver) : ''
 			]),
 			E('div', { 'class': 'be7k-links' }, [
 				link(REPO, 'code', tx.github, 'be7k-main'),
 				link(REPO + '/releases', 'tag', tx.releases),
-				link(REPO + '/blob/miwrt/docs/release-notes/v' + ver.replace(/\s.*$/, '') + '.md', 'notes', tx.notes),
+				link(REPO + '/blob/miwrt/docs/release-notes/' + model.prefix + ver.replace(/\s.*$/, '') + '.md', 'notes', tx.notes),
 				link(REPO + '/issues', 'bug', tx.issues),
 				link(REPO + '/blob/miwrt/PRIVACY.md', 'lock', tx.privacy),
 				link(L.url('admin/system/be7000-update'), 'update', tx.update),
