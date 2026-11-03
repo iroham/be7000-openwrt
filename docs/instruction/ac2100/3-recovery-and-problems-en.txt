@@ -1,8 +1,9 @@
 MiWRT 1.0.0 for the Xiaomi Redmi Router AC2100: recovery and problems
 
-STATUS: TESTING. No recovery path below has been exercised by the MiWRT
-project yet. Compare with the OpenWrt wiki page for the Redmi Router AC2100
-and with the Breed documentation before relying on any of it.
+STATUS: TESTING. The MiWRT project has not exercised these paths on a router.
+The TFTP recovery below is the one OpenWrt's own support commit for this
+device describes; compare with the current OpenWrt wiki page before relying
+on it.
 
 The router does not come up after flashing
   - Wait three minutes on the first boot; UBI formatting takes time.
@@ -11,16 +12,21 @@ The router does not come up after flashing
     partition or boot flags not set. Recovery is below.
 
 Serial console
-  ttyS1 inside the case, 115200 8n1, 3.3 V. It shows the bootloader and the
-  kernel messages and is the surest way to see what is wrong. The stock
-  environment has it enabled.
+  On the board near the Ethernet ports, opposite the power jack, 115200 8n1,
+  3.3 V. OpenWrt uses ttyS0 (the device tree sets console=ttyS0,115200n8);
+  stock used ttyS1. It shows the bootloader and the kernel messages and is the
+  surest way to see what is wrong.
 
 Recovery with the stock bootloader (TFTP)
-  The stock U-Boot can load a firmware over TFTP when the reset button is held
-  while the power is connected. The expected file name, the server address
-  (usually 192.168.31.100) and what the bootloader accepts (a stock image or
-  an OpenWrt kernel1/rootfs0 pair) are on the wiki; this has not been checked
-  here.
+  The stock U-Boot has a TFTP recovery, as OpenWrt's support commit describes:
+    1. set up a PXE/TFTP server on the LAN serving a stock firmware image
+       (dnsmasq's dhcp-boot option points the router at it);
+    2. hold the reset button down before powering the router on, and wait for
+       the flashing amber status LED;
+    3. release the reset button;
+    4. wait until the status LED changes from flashing amber to white.
+  The exact file name the bootloader asks for is on the OpenWrt wiki page; this
+  has not been checked by the MiWRT project.
 
 Recovery with Breed
   Breed is a replacement bootloader for MT7621 routers with a web recovery

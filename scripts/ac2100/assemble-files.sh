@@ -45,6 +45,28 @@ for f in ctl discovery-relay hubd mdns-reflector push tuya upload wol; do
 	take overlay-files/usr/sbin/miwrt-$f                 usr/sbin/miwrt-$f
 done
 
+# --- the rest of what MiWRT adds to LuCI and the system on every router ---
+# Overview card with the version and links (model-aware), the credits page,
+# the "State" LED trigger with its watcher, the network-restart offer after a
+# package adds a netifd protocol, and the SSH greeting with the credits
+take overlay-files/www/luci-static/resources/view/status/include/05_be7000.js   www/luci-static/resources/view/status/include/05_be7000.js
+take overlay-files/www/luci-static/resources/view/be7000-credits/credits.js     www/luci-static/resources/view/be7000-credits/credits.js
+take overlay-files/www/luci-static/resources/be7000-credits/credits.json         www/luci-static/resources/be7000-credits/credits.json
+take overlay-files/usr/share/luci/menu.d/luci-app-be7000-credits.json            usr/share/luci/menu.d/luci-app-be7000-credits.json
+take overlay-files/usr/share/rpcd/acl.d/luci-app-be7000-credits.json             usr/share/rpcd/acl.d/luci-app-be7000-credits.json
+take overlay-files/usr/libexec/led-trigger/be7000-state                          usr/libexec/led-trigger/be7000-state
+take overlay-files/www/luci-static/resources/view/system/led-trigger/be7000-state.js www/luci-static/resources/view/system/led-trigger/be7000-state.js
+take overlay-files/usr/libexec/be7000-leds                                       usr/libexec/be7000-leds
+take overlay-files/etc/init.d/be7000-leds                                        etc/init.d/be7000-leds
+take overlay-files/etc/rc.d/S97be7000-leds                                       etc/rc.d/S97be7000-leds
+take overlay-files/etc/apk/commit_hooks.d/be7000-netifd-proto                    etc/apk/commit_hooks.d/be7000-netifd-proto
+take overlay-files/usr/libexec/be7000-netifd                                     usr/libexec/be7000-netifd
+take overlay-files/usr/share/rpcd/ucode/be7000-netifd                            usr/share/rpcd/ucode/be7000-netifd
+take overlay-files/usr/share/rpcd/acl.d/luci-app-be7000-netifd.json              usr/share/rpcd/acl.d/luci-app-be7000-netifd.json
+take overlay-files/usr/libexec/be7000-banner                                     usr/libexec/be7000-banner
+take overlay-files/etc/init.d/be7000-banner                                      etc/init.d/be7000-banner
+take overlay-files/etc/rc.d/S96be7000-banner                                     etc/rc.d/S96be7000-banner
+
 # --- the LuCI translations of every MiWRT page (the sources are Russian) ---
 for l in en zh-cn; do
 	take overlay-files/usr/lib/lua/luci/i18n/be7000.$l.lmo usr/lib/lua/luci/i18n/be7000.$l.lmo
@@ -88,7 +110,7 @@ mkdir -p "$OUT/etc"
 } > "$OUT/etc/miwrt-release"
 
 # the shared scripts expect to be executable and the app's state directory to be private
-chmod 755 "$OUT"/etc/init.d/* "$OUT"/etc/uci-defaults/* "$OUT"/usr/sbin/* "$OUT"/www/cgi-bin/miwrt
+chmod 755 "$OUT"/etc/init.d/* "$OUT"/etc/uci-defaults/* "$OUT"/usr/sbin/* "$OUT"/www/cgi-bin/miwrt "$OUT"/usr/libexec/be7000-* "$OUT"/etc/apk/commit_hooks.d/*
 chmod 700 "$OUT/etc/miwrt"
 
 echo "assembled $(find "$OUT" -type f | wc -l) files and $(find "$OUT" -type l | wc -l) links into $OUT"
