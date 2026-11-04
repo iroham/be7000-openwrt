@@ -74,7 +74,7 @@ The service was checked file by file. It has exactly one BE7000 dependency and a
 | Memory | hubd keeps device history in RAM and `/etc/miwrt` | measure on the device; cap history length when `MemTotal` is under 256 MB |
 | `oui.txt` (870 KB) | shipped in the image | fine for flash; it is read, not loaded |
 
-Packages the service needs, all present in the official 25.12 mipsel_24kc feed: `uhttpd` with TLS (`luci-ssl`), `rpcd`, `ucode` with `ucode-mod-lua`, `ucode-mod-uci`, `ucode-mod-ubus`, `ucode-mod-fs`, `luci-lib-nixio`, `umdns`, `nlbwmon`, `curl`, `openssl-util`, `ca-bundle`, `libustream-mbedtls`, `uclient-fetch`, `etherwake` or the built-in WOL sender, `dropbear` for the laptop power keys.
+Packages the service needs, all present in the official 25.12 mipsel_24kc feed (plus `coreutils-timeout`: 25.12's BusyBox has no `timeout` applet, unlike main's, and `power.uc` runs `dbclient` and the Tuya tool under it): `uhttpd` with TLS (`luci-ssl`), `rpcd`, `ucode` with `ucode-mod-lua`, `ucode-mod-uci`, `ucode-mod-ubus`, `ucode-mod-fs`, `luci-lib-nixio`, `umdns`, `nlbwmon`, `curl`, `openssl-util`, `ca-bundle`, `libustream-mbedtls`, `uclient-fetch`, `etherwake` or the built-in WOL sender, `dropbear` for the laptop power keys.
 
 ## 6. The updater
 

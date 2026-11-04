@@ -28,6 +28,11 @@ rpcd-mod-iwinfo
 rpcd-mod-luci
 rpcd-mod-ucode
 ip-tiny
+# OpenWrt 25.12's BusyBox has no "timeout" applet (main's does); the app's
+# laptop power and Tuya code runs commands under it
+coreutils-timeout
+# the iwinfo command for the hardware report and for people at the shell
+iwinfo
 openssl-util
 ca-bundle
 curl
