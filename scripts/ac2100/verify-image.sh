@@ -45,7 +45,7 @@ fi
 
 # packages that must be there, and the ones that must not
 if [ -s "$DEVICE.manifest" ]; then
-	for p in luci luci-ssl uhttpd rpcd rpcd-mod-ucode ucode ucode-mod-digest lua luci-lib-nixio umdns nlbwmon sqm-scripts curl openssl-util ca-bundle kmod-mt7603 kmod-mt7615-firmware wpad-basic-mbedtls; do
+	for p in luci luci-ssl uhttpd rpcd rpcd-mod-ucode ucode ucode-mod-digest lua luci-lib-nixio umdns nlbwmon sqm-scripts curl openssl-util ca-bundle coreutils-timeout iwinfo dropbear kmod-mt7603 kmod-mt7615-firmware wpad-basic-mbedtls; do
 		grep -q "^$p " "$DEVICE.manifest" && ok "manifest has $p" || bad "manifest lacks $p"
 	done
 	for p in banip docker dockerd kmod-usb-storage kmod-usb3 luci-app-be7000-slots; do
